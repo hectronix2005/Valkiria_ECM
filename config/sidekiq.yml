@@ -1,0 +1,17 @@
+---
+:concurrency: <%= ENV.fetch("SIDEKIQ_CONCURRENCY", 5) %>
+:timeout: 25
+:max_retries: 3
+
+:queues:
+  - [critical, 6]
+  - [high, 4]
+  - [default, 3]
+  - [low, 2]
+  - [mailers, 1]
+
+production:
+  :concurrency: <%= ENV.fetch("SIDEKIQ_CONCURRENCY", 10) %>
+
+staging:
+  :concurrency: 5

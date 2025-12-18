@@ -1,0 +1,76 @@
+development:
+  clients:
+    default:
+      database: valkyria_ecm_development
+      hosts:
+        - localhost:27017
+      options:
+        read:
+          mode: :primary
+        write:
+          w: majority
+        max_pool_size: 10
+        min_pool_size: 2
+        connect_timeout: 10
+        socket_timeout: 30
+
+  options:
+    # Validate belongs_to associations
+    belongs_to_required_by_default: true
+    # Raise when document not found
+    raise_not_found_error: true
+    # Use UTC for stored times
+    use_utc: true
+    # Immutable IDs (security)
+    immutable_ids: true
+    # Log level for development
+    log_level: :debug
+    # App name for MongoDB logs
+    app_name: valkyria_ecm
+
+test:
+  clients:
+    default:
+      database: valkyria_ecm_test
+      hosts:
+        - localhost:27017
+      options:
+        read:
+          mode: :primary
+        max_pool_size: 5
+        min_pool_size: 1
+
+  options:
+    belongs_to_required_by_default: true
+    raise_not_found_error: true
+    use_utc: true
+    immutable_ids: true
+    log_level: :warn
+    app_name: valkyria_ecm_test
+
+production:
+  clients:
+    default:
+      uri: <%= ENV['MONGODB_URI'] %>
+      options:
+        read:
+          mode: :primary
+        write:
+          w: majority
+          j: true
+          wtimeout: 5000
+        max_pool_size: 50
+        min_pool_size: 5
+        connect_timeout: 10
+        socket_timeout: 30
+        server_selection_timeout: 30
+        # Enable TLS in production
+        ssl: true
+
+  options:
+    belongs_to_required_by_default: true
+    raise_not_found_error: true
+    use_utc: true
+    immutable_ids: true
+    log_level: :info
+    app_name: valkyria_ecm

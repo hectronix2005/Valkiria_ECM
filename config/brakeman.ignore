@@ -1,0 +1,10 @@
+{
+  "ignored_warnings": [
+    {
+      "fingerprint": "dcbfb3972c18884d6627151d042d873148ee33656bd1053d14e384c6eb3dcb52",
+      "note": "False positive - This is MongoDB, not SQL. The key is sanitized to only allow alphanumeric and underscore characters before interpolation."
+    }
+  ],
+  "updated": "2025-12-12 04:32:00 +0000",
+  "brakeman_version": "7.1.1"
+}

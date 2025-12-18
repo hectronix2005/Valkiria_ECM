@@ -1,0 +1,170 @@
+plugins:
+  - rubocop-rails
+  - rubocop-rspec
+  - rubocop-performance
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.4
+  SuggestExtensions: false
+  Exclude:
+    - "bin/**/*"
+    - "db/**/*"
+    - "config/**/*"
+    - "vendor/**/*"
+    - "node_modules/**/*"
+    - "tmp/**/*"
+    - "log/**/*"
+
+# Layout
+Layout/LineLength:
+  Max: 120
+  AllowedPatterns: ['(\A|\s)#']
+
+Layout/MultilineMethodCallIndentation:
+  EnforcedStyle: indented
+
+Layout/FirstArrayElementIndentation:
+  EnforcedStyle: consistent
+
+Layout/FirstHashElementIndentation:
+  EnforcedStyle: consistent
+
+# Metrics
+Metrics/ClassLength:
+  Max: 150
+  Exclude:
+    - "spec/**/*"
+
+Metrics/ModuleLength:
+  Max: 150
+  Exclude:
+    - "spec/**/*"
+
+Metrics/MethodLength:
+  Max: 20
+  Exclude:
+    - "spec/**/*"
+  AllowedMethods:
+    - default_permissions
+    - default_roles
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+    - "config/**/*"
+    - "lib/tasks/**/*"
+
+Metrics/AbcSize:
+  Max: 25
+  Exclude:
+    - "spec/**/*"
+
+Metrics/ParameterLists:
+  Max: 7
+
+# Style
+Style/Documentation:
+  Enabled: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+  EnforcedStyle: always
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+Style/SymbolArray:
+  EnforcedStyle: brackets
+
+Style/WordArray:
+  EnforcedStyle: brackets
+
+Style/TrailingCommaInArrayLiteral:
+  EnforcedStyleForMultiline: no_comma
+
+Style/TrailingCommaInHashLiteral:
+  EnforcedStyleForMultiline: no_comma
+
+Style/HashSyntax:
+  EnforcedShorthandSyntax: either
+
+# Naming
+Naming/PredicatePrefix:
+  AllowedMethods:
+    - has_permission?
+    - has_role?
+
+# Rails
+Rails/UnknownEnv:
+  Environments:
+    - production
+    - development
+    - test
+    - staging
+
+Rails/SkipsModelValidations:
+  Enabled: false
+
+Rails/HasManyOrHasOneDependent:
+  Enabled: false
+
+Rails/DynamicFindBy:
+  Enabled: false
+
+Rails/HasAndBelongsToMany:
+  Enabled: false
+
+Rails/I18nLocaleTexts:
+  Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+
+# RSpec
+RSpec/ExampleLength:
+  Max: 20
+
+RSpec/MultipleExpectations:
+  Max: 10
+
+RSpec/NestedGroups:
+  Max: 4
+
+RSpec/DescribeClass:
+  Exclude:
+    - "spec/requests/**/*"
+    - "spec/system/**/*"
+    - "spec/features/**/*"
+
+RSpec/MultipleMemoizedHelpers:
+  Max: 20
+
+RSpec/VerifiedDoubles:
+  Enabled: false
+
+RSpec/IndexedLet:
+  Enabled: false
+
+RSpec/ContextWording:
+  Enabled: false
+
+RSpec/ExpectActual:
+  Enabled: false
+
+RSpec/LetSetup:
+  Enabled: false
+
+Rails/TimeZoneAssignment:
+  Exclude:
+    - "spec/**/*"
+
+# Performance
+Performance/DeletePrefix:
+  Enabled: true
+
+Performance/DeleteSuffix:
+  Enabled: true
