@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
+import { approvalService } from '../services/api'
 import {
   Home,
   FileText,
@@ -42,6 +44,9 @@ const hrAdminNavigation = [
 
 const adminNavigation = [
   { name: 'Configuración', href: '/admin/settings', icon: Settings },
+  { name: 'Templates', href: '/admin/templates', icon: FileText },
+  { name: 'Variables', href: '/admin/variable-mappings', icon: Settings },
+  { name: 'Firmantes', href: '/admin/signatory-types', icon: Users },
 ]
 
 export default function Layout({ children }) {
@@ -50,6 +55,16 @@ export default function Layout({ children }) {
   const { user, logout, isAdmin, isHR, isSupervisor } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+
+  // Fetch pending approvals count for badge
+  const { data: approvalsData } = useQuery({
+    queryKey: ['approvals-count'],
+    queryFn: () => approvalService.list(),
+    enabled: isSupervisor || isHR,
+    refetchInterval: 60000, // Refresh every minute
+  })
+
+  const pendingApprovalsCount = approvalsData?.data?.meta?.total_pending || 0
 
   const handleLogout = async () => {
     await logout()
@@ -69,9 +84,9 @@ export default function Layout({ children }) {
       >
         <item.icon className="w-5 h-5" />
         {item.name}
-        {item.badge && (
+        {item.badge && pendingApprovalsCount > 0 && (
           <span className="ml-auto bg-danger-500 text-white text-xs px-2 py-0.5 rounded-full">
-            3
+            {pendingApprovalsCount}
           </span>
         )}
       </Link>

@@ -5,7 +5,7 @@ module Api
     module Hr
       # Employee information (read-only for most users)
       class EmployeesController < BaseController
-        before_action :set_employee, only: [:show, :update, :subordinates, :vacation_balance]
+        before_action :set_employee, only: [:show, :update, :subordinates, :vacation_balance, :create_account, :generate_document]
 
         # GET /api/v1/hr/employees
         def index
@@ -71,6 +71,94 @@ module Api
           }
         end
 
+        # POST /api/v1/hr/employees
+        def create
+          authorize ::Hr::Employee
+
+          @employee = ::Hr::Employee.new(employee_create_params)
+          @employee.organization = current_organization
+
+          if @employee.save
+            render json: {
+              data: employee_json(@employee, detailed: true),
+              message: "Empleado creado exitosamente"
+            }, status: :created
+          else
+            render json: {
+              error: @employee.errors.full_messages.join(", ")
+            }, status: :unprocessable_content
+          end
+        end
+
+        # POST /api/v1/hr/employees/:id/create_account
+        def create_account
+          authorize @employee, :create_account?
+
+          service = ::Hr::EmployeeAccountService.new(@employee)
+
+          if service.has_account?
+            return render json: {
+              error: "El empleado ya tiene una cuenta de usuario"
+            }, status: :unprocessable_content
+          end
+
+          user = service.create_account!
+
+          if user
+            render json: {
+              data: employee_json(@employee.reload, detailed: true),
+              user: {
+                id: user.uuid,
+                email: user.email,
+                must_change_password: user.must_change_password
+              },
+              message: "Cuenta de usuario creada exitosamente. El usuario debe cambiar su contraseña en el primer inicio de sesión."
+            }
+          else
+            render json: {
+              error: service.errors.join(", ")
+            }, status: :unprocessable_content
+          end
+        end
+
+        # POST /api/v1/hr/employees/:id/generate_document
+        def generate_document
+          authorize @employee, :update?
+
+          template = ::Templates::Template.find_by!(uuid: params[:template_id])
+
+          unless template.active?
+            return render json: { error: "El template no está activo" }, status: :unprocessable_content
+          end
+
+          context = {
+            employee: @employee,
+            organization: current_organization,
+            user: current_user
+          }
+
+          begin
+            # Use robust service for better variable replacement and formatting
+            service = ::Templates::RobustDocumentGeneratorService.new(template, context)
+            generated_doc = service.generate!
+
+            render json: {
+              data: {
+                id: generated_doc.uuid,
+                name: generated_doc.name,
+                status: generated_doc.status,
+                created_at: generated_doc.created_at.iso8601
+              },
+              message: "Documento generado exitosamente"
+            }, status: :created
+          rescue ::Templates::RobustDocumentGeneratorService::GenerationError => e
+            render json: { error: e.message }, status: :unprocessable_content
+          rescue StandardError => e
+            Rails.logger.error "Error generating document: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+            render json: { error: "Error al generar el documento" }, status: :internal_server_error
+          end
+        end
+
         private
 
         def set_employee
@@ -92,7 +180,75 @@ module Api
             :date_of_birth,
             :emergency_contact_name,
             :emergency_contact_phone,
-            :supervisor_id
+            :supervisor_id,
+            # Contract fields
+            :contract_type,
+            :contract_template_id,
+            :contract_start_date,
+            :contract_end_date,
+            :contract_duration_value,
+            :contract_duration_unit,
+            :trial_period_days,
+            # Compensation fields
+            :salary,
+            :food_allowance,
+            :transport_allowance,
+            # Personal identification
+            :identification_type,
+            :identification_number,
+            :place_of_birth,
+            :nationality,
+            :address,
+            :phone,
+            :personal_email
+          )
+
+          # Convert supervisor_id from UUID to internal ID
+          if permitted[:supervisor_id].present?
+            supervisor = ::Hr::Employee.find_by(uuid: permitted[:supervisor_id])
+            permitted[:supervisor_id] = supervisor&.id
+          end
+
+          permitted
+        end
+
+        # Params for creating a new employee (includes name fields)
+        def employee_create_params
+          permitted = params.require(:employee).permit(
+            :first_name,
+            :last_name,
+            :employee_number,
+            :employment_status,
+            :employment_type,
+            :hire_date,
+            :termination_date,
+            :job_title,
+            :department,
+            :cost_center,
+            :date_of_birth,
+            :emergency_contact_name,
+            :emergency_contact_phone,
+            :supervisor_id,
+            # Contract fields
+            :contract_type,
+            :contract_template_id,
+            :contract_start_date,
+            :contract_end_date,
+            :contract_duration_value,
+            :contract_duration_unit,
+            :trial_period_days,
+            # Compensation fields
+            :salary,
+            :food_allowance,
+            :transport_allowance,
+            # Personal identification
+            :identification_type,
+            :identification_number,
+            :place_of_birth,
+            :nationality,
+            :address,
+            :phone,
+            :personal_email
           )
 
           # Convert supervisor_id from UUID to internal ID
@@ -152,7 +308,31 @@ module Api
               is_supervisor: employee.supervisor?,
               is_hr_staff: employee.hr_staff?,
               is_hr_manager: employee.hr_manager?,
-              vacation_balance_days: can_view_balance?(employee) ? employee.vacation_balance_days : nil
+              vacation_balance_days: can_view_balance?(employee) ? employee.vacation_balance_days : nil,
+              # Contract fields
+              contract_type: employee.contract_type,
+              contract_template_id: employee.contract_template_id,
+              contract_template_name: employee.contract_template&.name,
+              contract_start_date: employee.contract_start_date&.iso8601,
+              contract_end_date: employee.contract_end_date&.iso8601,
+              contract_duration_value: employee.contract_duration_value,
+              contract_duration_unit: employee.contract_duration_unit,
+              trial_period_days: employee.trial_period_days,
+              # Compensation fields
+              salary: employee.salary&.to_f,
+              food_allowance: employee.food_allowance&.to_f,
+              transport_allowance: employee.transport_allowance&.to_f,
+              # Personal identification
+              identification_type: employee.identification_type,
+              identification_number: employee.identification_number,
+              place_of_birth: employee.place_of_birth,
+              nationality: employee.nationality,
+              address: employee.address,
+              phone: employee.phone,
+              personal_email: employee.personal_email,
+              # Account status
+              has_account: employee.user_id.present?,
+              user_email: employee.user&.email
             )
           end
 

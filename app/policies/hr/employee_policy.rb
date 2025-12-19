@@ -10,7 +10,15 @@ module Hr
       owner? || hr_staff? || supervisor_of_record?
     end
 
+    def create?
+      hr_staff? || admin?
+    end
+
     def update?
+      hr_staff? || admin?
+    end
+
+    def create_account?
       hr_staff? || admin?
     end
 

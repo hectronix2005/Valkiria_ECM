@@ -2,15 +2,23 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import ForceChangePassword from './pages/ForceChangePassword'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Vacations from './pages/hr/Vacations'
 import Approvals from './pages/hr/Approvals'
 import Employees from './pages/hr/Employees'
+import Certifications from './pages/hr/Certifications'
+import Templates from './pages/admin/Templates'
+import TemplateEdit from './pages/admin/TemplateEdit'
+import VariableMappings from './pages/admin/VariableMappings'
+import SignatoryTypes from './pages/admin/SignatoryTypes'
+import Documents from './pages/Documents'
+import Folders from './pages/Folders'
 
 // Protected Route wrapper
-function ProtectedRoute({ children, requireHR = false, requireApprover = false }) {
-  const { isAuthenticated, loading, isHR, isSupervisor } = useAuth()
+function ProtectedRoute({ children, requireHR = false, requireApprover = false, requireAdmin = false }) {
+  const { isAuthenticated, loading, isHR, isSupervisor, isAdmin } = useAuth()
 
   if (loading) {
     return (
@@ -22,6 +30,10 @@ function ProtectedRoute({ children, requireHR = false, requireApprover = false }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  if (requireAdmin && !isAdmin && !isHR) {
+    return <Navigate to="/" replace />
   }
 
   if (requireHR && !isHR) {
@@ -68,6 +80,12 @@ export default function App() {
         element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
       />
 
+      {/* Force change password route */}
+      <Route
+        path="/change-password"
+        element={isAuthenticated ? <ForceChangePassword /> : <Navigate to="/login" replace />}
+      />
+
       {/* Protected routes */}
       <Route
         path="/"
@@ -101,7 +119,7 @@ export default function App() {
         path="/hr/certifications"
         element={
           <ProtectedRoute>
-            <ComingSoon title="Certificaciones" />
+            <Certifications />
           </ProtectedRoute>
         }
       />
@@ -141,7 +159,7 @@ export default function App() {
         path="/documents"
         element={
           <ProtectedRoute>
-            <ComingSoon title="Documentos" />
+            <Documents />
           </ProtectedRoute>
         }
       />
@@ -151,7 +169,7 @@ export default function App() {
         path="/folders"
         element={
           <ProtectedRoute>
-            <ComingSoon title="Carpetas" />
+            <Folders />
           </ProtectedRoute>
         }
       />
@@ -172,6 +190,44 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ComingSoon title="Configuración" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Templates */}
+      <Route
+        path="/admin/templates"
+        element={
+          <ProtectedRoute requireAdmin>
+            <Templates />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/templates/:id"
+        element={
+          <ProtectedRoute requireAdmin>
+            <TemplateEdit />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Variable Mappings */}
+      <Route
+        path="/admin/variable-mappings"
+        element={
+          <ProtectedRoute requireAdmin>
+            <VariableMappings />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Signatory Types */}
+      <Route
+        path="/admin/signatory-types"
+        element={
+          <ProtectedRoute requireAdmin>
+            <SignatoryTypes />
           </ProtectedRoute>
         }
       />

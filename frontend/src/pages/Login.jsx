@@ -38,8 +38,13 @@ export default function Login() {
     setLoading(true)
 
     try {
-      await login(email, password)
-      navigate(from, { replace: true })
+      const userData = await login(email, password)
+      // Check if user must change password on first login
+      if (userData.must_change_password) {
+        navigate('/change-password', { replace: true })
+      } else {
+        navigate(from, { replace: true })
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'Error al iniciar sesión')
     } finally {

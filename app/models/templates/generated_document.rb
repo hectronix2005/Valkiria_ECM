@@ -1,0 +1,233 @@
+# frozen_string_literal: true
+
+module Templates
+  class GeneratedDocument
+    include Mongoid::Document
+    include Mongoid::Timestamps
+    include UuidIdentifiable
+
+    store_in collection: "generated_documents"
+
+    # Status values
+    DRAFT = "draft"
+    PENDING_SIGNATURES = "pending_signatures"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    STATUSES = [DRAFT, PENDING_SIGNATURES, COMPLETED, CANCELLED].freeze
+
+    # Fields
+    field :name, type: String
+    field :status, type: String, default: DRAFT
+
+    # PDF file storage (GridFS)
+    field :draft_file_id, type: BSON::ObjectId  # Initial generated PDF
+    field :final_file_id, type: BSON::ObjectId  # PDF with all signatures
+    field :file_name, type: String
+
+    # Variable values used for generation
+    field :variable_values, type: Hash, default: {}
+
+    # Reference to the source request (certification, vacation, etc.)
+    field :source_type, type: String  # "Hr::EmploymentCertificationRequest", "Hr::VacationRequest"
+    field :source_id, type: BSON::ObjectId
+
+    # Signature tracking
+    field :signatures, type: Array, default: []
+    # Each signature entry: { signatory_id, user_id, signed_at, signature_id, status }
+
+    field :completed_at, type: Time
+    field :expires_at, type: Time
+
+    # Direct employee reference (for documents generated directly for an employee)
+    field :employee_id, type: BSON::ObjectId
+
+    # Associations
+    belongs_to :template, class_name: "Templates::Template", optional: true
+    belongs_to :organization, class_name: "Identity::Organization"
+    belongs_to :requested_by, class_name: "Identity::User"
+    belongs_to :employee, class_name: "Hr::Employee", optional: true
+
+    # Indexes
+    index({ organization_id: 1 })
+    index({ template_id: 1 })
+    index({ status: 1 })
+    index({ source_type: 1, source_id: 1 })
+    index({ requested_by_id: 1 })
+    index({ employee_id: 1 })
+    index({ created_at: -1 })
+
+    # Validations
+    validates :name, presence: true, length: { maximum: 255 }
+    validates :status, presence: true, inclusion: { in: STATUSES }
+
+    # Scopes
+    scope :draft, -> { where(status: DRAFT) }
+    scope :pending_signatures, -> { where(status: PENDING_SIGNATURES) }
+    scope :completed, -> { where(status: COMPLETED) }
+    scope :cancelled, -> { where(status: CANCELLED) }
+    scope :for_user, ->(user) { where(requested_by_id: user.id) }
+    scope :pending_signature_by, lambda { |user|
+      where(
+        status: PENDING_SIGNATURES,
+        "signatures.user_id" => user.id.to_s,
+        "signatures.status" => "pending"
+      )
+    }
+
+    # Instance methods
+    def draft?
+      status == DRAFT
+    end
+
+    def pending_signatures?
+      status == PENDING_SIGNATURES
+    end
+
+    def completed?
+      status == COMPLETED
+    end
+
+    def cancelled?
+      status == CANCELLED
+    end
+
+    def source
+      return nil unless source_type && source_id
+
+      source_type.constantize.find(source_id)
+    rescue Mongoid::Errors::DocumentNotFound
+      nil
+    end
+
+    def source=(record)
+      return if record.nil?
+
+      self.source_type = record.class.name
+      self.source_id = record.id
+    end
+
+    # Initialize signature tracking from template signatories
+    def initialize_signatures!
+      return unless template
+
+      self.signatures = template.signatories.by_position.map do |sig|
+        user = sig.find_signatory_for(signature_context)
+
+        {
+          "signatory_id" => sig.uuid,
+          "signatory_role" => sig.role,
+          "signatory_label" => sig.label,
+          "user_id" => user&.id&.to_s,
+          "user_name" => user&.full_name,
+          "required" => sig.required,
+          "status" => "pending",
+          "signature_id" => nil,
+          "signed_at" => nil
+        }
+      end
+
+      update!(status: PENDING_SIGNATURES) if signatures.any?
+    end
+
+    # Apply a user's signature
+    def sign!(user:, signature:)
+      sig_entry = find_pending_signature_for(user)
+
+      raise SignatureError, "No hay firma pendiente para este usuario" unless sig_entry
+      raise SignatureError, "Usuario no tiene firma digital configurada" unless signature
+
+      sig_entry["signature_id"] = signature.uuid
+      sig_entry["signed_at"] = Time.current.iso8601
+      sig_entry["status"] = "signed"
+
+      save!
+
+      # Check if all required signatures are complete
+      check_completion!
+    end
+
+    def pending_signatures_count
+      signatures.count { |s| s["status"] == "pending" && s["required"] }
+    end
+
+    def completed_signatures_count
+      signatures.count { |s| s["status"] == "signed" }
+    end
+
+    def total_required_signatures
+      signatures.count { |s| s["required"] }
+    end
+
+    def all_required_signed?
+      signatures.select { |s| s["required"] }.all? { |s| s["status"] == "signed" }
+    end
+
+    def can_be_signed_by?(user)
+      signatures.any? do |s|
+        s["user_id"] == user.id.to_s && s["status"] == "pending"
+      end
+    end
+
+    def pending_signatories
+      signatures.select { |s| s["status"] == "pending" }
+    end
+
+    def signed_signatories
+      signatures.select { |s| s["status"] == "signed" }
+    end
+
+    # Get the current file (final if completed, draft otherwise)
+    def current_file_id
+      completed? && final_file_id ? final_file_id : draft_file_id
+    end
+
+    def file_content
+      file_id = current_file_id
+      return nil unless file_id
+
+      file = Mongoid::GridFs.get(file_id)
+      file.data
+    rescue StandardError => e
+      Rails.logger.error "Error reading generated document from GridFS: #{e.message}"
+      nil
+    end
+
+    def cancel!(reason: nil)
+      update!(
+        status: CANCELLED,
+        variable_values: variable_values.merge("cancellation_reason" => reason)
+      )
+    end
+
+    private
+
+    def signature_context
+      src = source
+      # Use direct employee reference if available, otherwise try to get from source
+      emp = employee || (src.respond_to?(:employee) ? src.employee : nil)
+
+      {
+        employee: emp,
+        organization: organization,
+        request: src
+      }
+    end
+
+    def find_pending_signature_for(user)
+      signatures.find do |s|
+        s["user_id"] == user.id.to_s && s["status"] == "pending"
+      end
+    end
+
+    def check_completion!
+      return unless all_required_signed?
+
+      # Generate final PDF with all signatures
+      Templates::PdfSignatureService.new(self).apply_all_signatures!
+
+      update!(status: COMPLETED, completed_at: Time.current)
+    end
+
+    class SignatureError < StandardError; end
+  end
+end

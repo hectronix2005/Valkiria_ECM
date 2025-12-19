@@ -11,6 +11,7 @@ gem "rails", "~> 7.2.3"
 
 # MongoDB ODM
 gem "mongoid", "~> 9.0"
+gem "mongoid-grid_fs", "~> 2.5"  # GridFS for file storage
 
 # Authentication & Authorization
 gem "devise", "~> 4.9"
@@ -35,6 +36,13 @@ gem "bcrypt", "~> 3.1.7"
 # Utilities
 gem "oj", "~> 3.16" # Fast JSON parsing
 gem "tzinfo-data", platforms: [:windows, :jruby]
+
+# Document Processing & PDF Generation
+gem "docx", "~> 0.8"           # Read/write Word documents
+gem "prawn", "~> 2.4"          # PDF generation
+gem "prawn-table", "~> 0.2"    # PDF tables
+gem "combine_pdf", "~> 1.0"    # PDF manipulation
+gem "mini_magick", "~> 4.12"   # Image processing for signatures
 
 group :development, :test do
   gem "brakeman", require: false

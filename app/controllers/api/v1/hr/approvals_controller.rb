@@ -10,18 +10,31 @@ module Api
         before_action :set_approvable, only: [:show, :approve, :reject]
 
         # GET /api/v1/hr/approvals
+        # Params: status=pending (default) or status=history
         def index
-          @approvals = fetch_pending_approvals
-
-          render json: {
-            data: {
-              vacation_requests: @approvals[:vacations].map { |v| vacation_json(v) },
-              certification_requests: @approvals[:certifications].map { |c| certification_json(c) }
-            },
-            meta: {
-              total_pending: @approvals[:vacations].count + @approvals[:certifications].count
+          if params[:status] == "history"
+            @approvals = fetch_history_approvals
+            render json: {
+              data: {
+                vacation_requests: @approvals[:vacations].map { |v| vacation_json(v) },
+                certification_requests: @approvals[:certifications].map { |c| certification_json(c) }
+              },
+              meta: {
+                total: @approvals[:vacations].count + @approvals[:certifications].count
+              }
             }
-          }
+          else
+            @approvals = fetch_pending_approvals
+            render json: {
+              data: {
+                vacation_requests: @approvals[:vacations].map { |v| vacation_json(v) },
+                certification_requests: @approvals[:certifications].map { |c| certification_json(c) }
+              },
+              meta: {
+                total_pending: @approvals[:vacations].count + @approvals[:certifications].count
+              }
+            }
+          end
         end
 
         # GET /api/v1/hr/approvals/:id
@@ -35,7 +48,9 @@ module Api
           when ::Hr::VacationRequest
             @approvable.approve!(actor: current_employee, reason: params[:reason])
           when ::Hr::EmploymentCertificationRequest
-            @approvable.complete!(actor: current_employee, document_uuid: params[:document_uuid])
+            # Certifications need to go through processing first
+            @approvable.start_processing!(actor: current_employee) if @approvable.pending?
+            @approvable.complete!(actor: current_employee, document_uuid: params[:document_uuid] || SecureRandom.uuid)
           end
 
           render json: {
@@ -77,8 +92,8 @@ module Api
         end
 
         def find_approvable(uuid)
-          ::Hr::VacationRequest.find_by(uuid: uuid) ||
-            ::Hr::EmploymentCertificationRequest.find_by(uuid: uuid)
+          ::Hr::VacationRequest.where(uuid: uuid).first ||
+            ::Hr::EmploymentCertificationRequest.where(uuid: uuid).first
         end
 
         def fetch_pending_approvals
@@ -88,12 +103,33 @@ module Api
           }
         end
 
+        def fetch_history_approvals
+          {
+            vacations: history_vacations_scope,
+            certifications: history_certifications_scope
+          }
+        end
+
         def pending_vacations_scope
           base_scope(::Hr::VacationRequest).pending.order(submitted_at: :asc)
         end
 
         def pending_certifications_scope
           base_scope(::Hr::EmploymentCertificationRequest).pending.order(submitted_at: :asc)
+        end
+
+        def history_vacations_scope
+          base_scope(::Hr::VacationRequest)
+            .where(:status.in => %w[approved rejected cancelled])
+            .order(decided_at: :desc)
+            .limit(50)
+        end
+
+        def history_certifications_scope
+          base_scope(::Hr::EmploymentCertificationRequest)
+            .where(:status.in => %w[completed rejected cancelled])
+            .order(completed_at: :desc)
+            .limit(50)
         end
 
         def base_scope(klass)
@@ -191,10 +227,16 @@ module Api
         end
 
         def handle_approval_error(error)
-          status = error_status_for(error)
-          raise error unless status
+          Rails.logger.error "Approval error: #{error.class} - #{error.message}"
+          Rails.logger.error error.backtrace.first(10).join("\n")
 
-          render json: { error: error.message }, status: status
+          status = error_status_for(error)
+
+          if status
+            render json: { error: error.message }, status: status
+          else
+            render json: { error: "Error processing approval: #{error.message}" }, status: :internal_server_error
+          end
         end
 
         def error_status_for(error)

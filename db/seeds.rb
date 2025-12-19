@@ -287,6 +287,137 @@ Hr::VacationRequest.create!(
 )
 puts "    ✓ Created approved vacation request for #{employee3[:user].email}"
 
+# ============================================
+# Create sample certification requests
+# ============================================
+puts "  Creating sample certification requests..."
+
+# Pending certification request from employee1 - Basic employment for bank
+Hr::EmploymentCertificationRequest.create!(
+  employee: employee1[:employee],
+  organization: organization,
+  certification_type: Hr::EmploymentCertificationRequest::TYPE_EMPLOYMENT,
+  purpose: Hr::EmploymentCertificationRequest::PURPOSE_BANK,
+  purpose_details: "Solicitud de crédito de vivienda",
+  addressee: "Banco Davivienda",
+  language: "es",
+  delivery_method: "digital",
+  include_salary: false,
+  include_position: true,
+  include_start_date: true,
+  include_department: false,
+  status: Hr::EmploymentCertificationRequest::STATUS_PENDING,
+  submitted_at: 2.days.ago
+)
+puts "    ✓ Created pending certification request for #{employee1[:user].email} (Banco)"
+
+# Processing certification request from employee2 - Salary certificate for visa
+cert_processing = Hr::EmploymentCertificationRequest.create!(
+  employee: employee2[:employee],
+  organization: organization,
+  certification_type: Hr::EmploymentCertificationRequest::TYPE_SALARY,
+  purpose: Hr::EmploymentCertificationRequest::PURPOSE_VISA,
+  purpose_details: "Visa de turismo Estados Unidos",
+  addressee: "Embajada de Estados Unidos",
+  language: "en",
+  delivery_method: "both",
+  include_salary: true,
+  include_position: true,
+  include_start_date: true,
+  include_department: true,
+  status: Hr::EmploymentCertificationRequest::STATUS_PROCESSING,
+  submitted_at: 5.days.ago,
+  processed_at: 2.days.ago,
+  processed_by: hr_staff[:employee]
+)
+puts "    ✓ Created processing certification request for #{employee2[:user].email} (Visa)"
+
+# Completed certification from employee3 - Full certification for rental
+Hr::EmploymentCertificationRequest.create!(
+  employee: employee3[:employee],
+  organization: organization,
+  certification_type: Hr::EmploymentCertificationRequest::TYPE_FULL,
+  purpose: Hr::EmploymentCertificationRequest::PURPOSE_RENTAL,
+  purpose_details: "Arrendamiento apartamento en Bogotá",
+  addressee: "Inmobiliaria Coninsa Ramón H.",
+  language: "es",
+  delivery_method: "digital",
+  include_salary: true,
+  include_position: true,
+  include_start_date: true,
+  include_department: true,
+  status: Hr::EmploymentCertificationRequest::STATUS_COMPLETED,
+  submitted_at: 2.weeks.ago,
+  processed_at: 12.days.ago,
+  completed_at: 10.days.ago,
+  processed_by: hr_manager[:employee],
+  document_uuid: SecureRandom.uuid
+)
+puts "    ✓ Created completed certification request for #{employee3[:user].email} (Arrendamiento)"
+
+# Pending certification from supervisor - Position certificate for legal
+Hr::EmploymentCertificationRequest.create!(
+  employee: supervisor[:employee],
+  organization: organization,
+  certification_type: Hr::EmploymentCertificationRequest::TYPE_POSITION,
+  purpose: Hr::EmploymentCertificationRequest::PURPOSE_LEGAL,
+  purpose_details: "Proceso de sucesión",
+  addressee: "Juzgado 12 Civil del Circuito",
+  language: "es",
+  delivery_method: "physical",
+  include_salary: false,
+  include_position: true,
+  include_start_date: true,
+  include_department: true,
+  special_instructions: "Se requiere sello húmedo y firma autógrafa",
+  status: Hr::EmploymentCertificationRequest::STATUS_PENDING,
+  submitted_at: 1.day.ago
+)
+puts "    ✓ Created pending certification request for #{supervisor[:user].email} (Legal)"
+
+# Rejected certification from employee1 - Custom certificate (incomplete info)
+Hr::EmploymentCertificationRequest.create!(
+  employee: employee1[:employee],
+  organization: organization,
+  certification_type: Hr::EmploymentCertificationRequest::TYPE_CUSTOM,
+  purpose: Hr::EmploymentCertificationRequest::PURPOSE_GOVERNMENT,
+  purpose_details: "Trámite en DIAN",
+  addressee: "DIAN - Dirección de Impuestos",
+  language: "es",
+  delivery_method: "digital",
+  include_salary: false,
+  include_position: true,
+  include_start_date: true,
+  include_department: false,
+  special_instructions: "Incluir información de retención en la fuente",
+  status: Hr::EmploymentCertificationRequest::STATUS_REJECTED,
+  submitted_at: 1.month.ago,
+  processed_at: 3.weeks.ago,
+  completed_at: 3.weeks.ago,
+  processed_by: hr_staff[:employee],
+  rejection_reason: "La información solicitada de retención en la fuente debe tramitarse a través del área de Contabilidad, no de Recursos Humanos."
+)
+puts "    ✓ Created rejected certification request for #{employee1[:user].email} (Gobierno)"
+
+# Pending certification from legal user - Bank certificate
+Hr::EmploymentCertificationRequest.create!(
+  employee: legal[:employee],
+  organization: organization,
+  certification_type: Hr::EmploymentCertificationRequest::TYPE_SALARY,
+  purpose: Hr::EmploymentCertificationRequest::PURPOSE_BANK,
+  purpose_details: "Solicitud tarjeta de crédito",
+  addressee: "Banco de Bogotá",
+  language: "es",
+  delivery_method: "digital",
+  include_salary: true,
+  include_position: true,
+  include_start_date: true,
+  include_department: false,
+  status: Hr::EmploymentCertificationRequest::STATUS_PENDING,
+  submitted_at: 3.hours.ago
+)
+puts "    ✓ Created pending certification request for #{legal[:user].email} (Banco)"
+
 puts ""
 puts "=" * 60
 puts "✅ SEED DATA CREATED SUCCESSFULLY"

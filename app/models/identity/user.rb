@@ -51,6 +51,10 @@ module Identity
     field :unlock_token, type: String
     field :locked_at, type: Time
 
+    # Password change required (for new users created from contracts)
+    field :must_change_password, type: Boolean, default: false
+    field :password_changed_at, type: Time
+
     # Indexes
     index({ email: 1 }, { unique: true })
     index({ employee_id: 1 }, { sparse: true })
@@ -63,6 +67,7 @@ module Identity
     # Associations
     belongs_to :organization, class_name: "Identity::Organization", inverse_of: :users, optional: true
     has_and_belongs_to_many :roles, class_name: "Identity::Role", inverse_of: :users
+    has_many :signatures, class_name: "Identity::UserSignature", inverse_of: :user, dependent: :destroy
 
     # Validations
     validates :email, presence: true, uniqueness: true
@@ -143,14 +148,28 @@ module Identity
       roles.delete(role)
     end
 
+    def default_signature
+      signatures.default_signature.first || signatures.first
+    end
+
+    def has_signature?
+      signatures.any?
+    end
+
     # JWT payload customization
     def jwt_payload
       {
         "user_id" => id.to_s,
         "email" => email,
         "roles" => role_names,
-        "organization_id" => organization_id&.to_s
+        "organization_id" => organization_id&.to_s,
+        "must_change_password" => must_change_password
       }
+    end
+
+    # Mark password as changed
+    def password_changed!
+      update!(must_change_password: false, password_changed_at: Time.current)
     end
 
     private

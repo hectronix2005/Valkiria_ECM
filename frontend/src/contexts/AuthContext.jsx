@@ -65,6 +65,12 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.roles?.includes('admin')
   const isHR = user?.is_hr || hasRole('hr') || hasRole('hr_manager')
   const isSupervisor = user?.is_supervisor || false
+  const mustChangePassword = user?.must_change_password || false
+
+  const updateUser = useCallback((userData) => {
+    setUser(userData)
+    localStorage.setItem('user', JSON.stringify(userData))
+  }, [])
 
   const value = {
     user,
@@ -77,6 +83,8 @@ export function AuthProvider({ children }) {
     isHR,
     isSupervisor,
     isAuthenticated: !!user,
+    mustChangePassword,
+    updateUser,
   }
 
   return (

@@ -5,7 +5,7 @@ module Api
     module Hr
       # Employment certification requests management
       class CertificationsController < BaseController
-        before_action :set_certification, only: [:show, :update, :cancel]
+        before_action :set_certification, only: [:show, :update, :cancel, :generate_document, :download_document]
 
         # GET /api/v1/hr/certifications
         def index
@@ -72,6 +72,71 @@ module Api
           render json: { error: e.message }, status: :unprocessable_content
         rescue ::Hr::EmploymentCertificationRequest::AuthorizationError => e
           render json: { error: e.message }, status: :forbidden
+        end
+
+        # POST /api/v1/hr/certifications/:id/generate_document
+        def generate_document
+          authorize @certification, :generate_document?
+
+          # Find appropriate template
+          template = find_template_for_certification
+          unless template
+            return render json: {
+              error: "No hay template activo para este tipo de certificación"
+            }, status: :unprocessable_content
+          end
+
+          # Build context for variable resolution
+          context = {
+            employee: @certification.employee,
+            organization: current_organization,
+            request: @certification,
+            user: current_user
+          }
+
+          # Generate document using robust service for better formatting
+          generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
+          generated_doc = generator.generate!
+
+          # Link document to certification
+          @certification.update!(
+            document_uuid: generated_doc.uuid,
+            status: "processing"
+          )
+
+          render json: {
+            data: {
+              certification: certification_json(@certification, detailed: true),
+              document: generated_document_json(generated_doc)
+            },
+            message: "Documento generado exitosamente"
+          }
+        rescue ::Templates::RobustDocumentGeneratorService::GenerationError => e
+          render json: { error: e.message }, status: :unprocessable_content
+        end
+
+        # GET /api/v1/hr/certifications/:id/download_document
+        def download_document
+          authorize @certification, :show?
+
+          unless @certification.document_uuid
+            return render json: { error: "No hay documento generado" }, status: :not_found
+          end
+
+          generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @certification.document_uuid)
+          unless generated_doc
+            return render json: { error: "Documento no encontrado" }, status: :not_found
+          end
+
+          file_content = generated_doc.file_content
+          unless file_content
+            return render json: { error: "Error al leer el archivo" }, status: :internal_server_error
+          end
+
+          send_data file_content,
+                    filename: generated_doc.file_name || "certificacion.pdf",
+                    type: "application/pdf",
+                    disposition: "inline"
         end
 
         private
@@ -153,6 +218,27 @@ module Api
               hire_date: Date.current,
               vacation_balance_days: 15.0
             )
+        end
+
+        def find_template_for_certification
+          # Find active template for certification category
+          ::Templates::Template
+            .for_organization(current_organization)
+            .active
+            .where(category: "certification")
+            .first
+        end
+
+        def generated_document_json(doc)
+          {
+            id: doc.uuid,
+            name: doc.name,
+            status: doc.status,
+            file_name: doc.file_name,
+            pending_signatures: doc.pending_signatures_count,
+            total_signatures: doc.total_required_signatures,
+            created_at: doc.created_at.iso8601
+          }
         end
       end
     end

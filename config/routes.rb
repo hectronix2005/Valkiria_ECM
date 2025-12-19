@@ -23,6 +23,32 @@ Rails.application.routes.draw do
         get "me", to: "sessions#show"
         patch "profile", to: "profiles#update"
         patch "password", to: "passwords#update"
+        post "password/force_change", to: "passwords#force_change"
+
+        # Digital signatures
+        resources :signatures, except: [:edit, :new] do
+          member do
+            post :set_default
+          end
+          collection do
+            get :fonts
+          end
+        end
+      end
+
+      # Documents (generated from templates)
+      resources :documents, only: [:index, :show, :destroy] do
+        member do
+          get :download
+        end
+      end
+
+      # Folders
+      resources :folders do
+        member do
+          post :add_document, path: "documents"
+          delete "documents/:document_id", action: :remove_document, as: :remove_document
+        end
       end
 
       # Protected resources
@@ -30,6 +56,58 @@ Rails.application.routes.draw do
 
       namespace :admin do
         resource :settings, only: [:show, :update]
+
+        # Variable mappings management
+        resources :variable_mappings do
+          member do
+            post :toggle_active
+            delete :remove_alias
+          end
+          collection do
+            get :grouped
+            get :pending_variables
+            get :aliases
+            post :seed_system
+            post :reorder
+            post :merge
+            post :create_alias
+            post :auto_assign
+            post :create_and_assign
+          end
+        end
+
+        # Signatory types management
+        resources :signatory_types do
+          member do
+            post :toggle_active
+          end
+          collection do
+            post :seed_system
+            post :reorder
+          end
+        end
+
+        # Template management
+        resources :templates do
+          member do
+            post :activate
+            post :archive
+            post :duplicate
+            post :upload
+            post :reassign_mappings
+            get :download
+            get :preview
+          end
+          collection do
+            get :categories
+            get :variable_mappings
+          end
+          resources :signatories, controller: "template_signatories" do
+            collection do
+              post :reorder
+            end
+          end
+        end
       end
 
       # Search
@@ -48,6 +126,8 @@ Rails.application.routes.draw do
         resources :certifications, except: [:destroy] do
           member do
             post :cancel
+            post :generate_document
+            get :download_document
           end
         end
 
@@ -60,10 +140,12 @@ Rails.application.routes.draw do
         end
 
         # Employee info (read-only for most, editable by HR/Admin)
-        resources :employees, only: [:index, :show, :update] do
+        resources :employees, only: [:index, :show, :create, :update] do
           member do
             get :subordinates
             get :vacation_balance
+            post :create_account
+            post :generate_document
           end
         end
 

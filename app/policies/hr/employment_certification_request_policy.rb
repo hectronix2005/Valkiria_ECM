@@ -24,6 +24,10 @@ module Hr
       hr_staff? || owner?
     end
 
+    def generate_document?
+      hr_staff? # Only HR can generate documents
+    end
+
     class Scope < ApplicationPolicy::Scope
       def resolve
         if user_employee.hr_staff? || user_employee.hr_manager?

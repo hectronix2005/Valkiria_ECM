@@ -53,8 +53,8 @@ module Api
         }
       end
 
-      def render_error(message, status: :bad_request)
-        render json: { error: message }, status: status
+      def render_error(message, status: :bad_request, errors: [])
+        render json: { error: message, errors: Array(errors) }, status: status
       end
 
       private

@@ -1,11 +1,13 @@
-import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useState, useCallback } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { authService } from '../services/api'
+import { authService, signatureService } from '../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Badge from '../components/ui/Badge'
+import SignaturePad from '../components/SignaturePad'
+import StyledSignature from '../components/StyledSignature'
 import {
   User,
   Mail,
@@ -24,7 +26,12 @@ import {
   Award,
   TrendingUp,
   CalendarDays,
-  AlertTriangle
+  AlertTriangle,
+  PenTool,
+  Trash2,
+  Star,
+  Plus,
+  Type
 } from 'lucide-react'
 
 function InfoRow({ icon: Icon, label, value }) {
@@ -293,6 +300,274 @@ function ChangePasswordModal({ isOpen, onClose }) {
   )
 }
 
+function SignatureSection() {
+  const queryClient = useQueryClient()
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [signatureType, setSignatureType] = useState('drawn') // 'drawn' or 'styled'
+  const [signatureName, setSignatureName] = useState('')
+  const [drawnData, setDrawnData] = useState(null)
+  const [styledData, setStyledData] = useState(null)
+  const [error, setError] = useState('')
+
+  const { data: signaturesData, isLoading } = useQuery({
+    queryKey: ['signatures'],
+    queryFn: () => signatureService.list()
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => signatureService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['signatures'])
+      handleCloseModal()
+    },
+    onError: (err) => {
+      setError(err.response?.data?.error || 'Error al crear la firma')
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => signatureService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['signatures'])
+    }
+  })
+
+  const setDefaultMutation = useMutation({
+    mutationFn: (id) => signatureService.setDefault(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['signatures'])
+    }
+  })
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false)
+    setSignatureType('drawn')
+    setSignatureName('')
+    setDrawnData(null)
+    setStyledData(null)
+    setError('')
+  }
+
+  const handleCreateSignature = () => {
+    if (!signatureName.trim()) {
+      setError('El nombre de la firma es requerido')
+      return
+    }
+
+    if (signatureType === 'drawn' && !drawnData) {
+      setError('Por favor dibuje su firma')
+      return
+    }
+
+    if (signatureType === 'styled' && (!styledData?.styled_text)) {
+      setError('Por favor ingrese el texto de su firma')
+      return
+    }
+
+    const payload = {
+      name: signatureName,
+      signature_type: signatureType,
+      ...(signatureType === 'drawn' ? { image_data: drawnData } : styledData)
+    }
+
+    createMutation.mutate(payload)
+  }
+
+  const signatures = signaturesData?.data?.data || []
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <PenTool className="w-5 h-5 text-primary-600" />
+            Firma Digital
+          </CardTitle>
+          <Button size="sm" onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4" />
+            Nueva Firma
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500" />
+          </div>
+        ) : signatures.length === 0 ? (
+          <div className="text-center py-8">
+            <PenTool className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 mb-4">No tienes firmas digitales configuradas</p>
+            <Button variant="secondary" onClick={() => setShowCreateModal(true)}>
+              <Plus className="w-4 h-4" />
+              Crear mi primera firma
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {signatures.map((sig) => (
+              <div
+                key={sig.id}
+                className={`flex items-center gap-4 p-4 border rounded-lg ${
+                  sig.is_default ? 'border-primary-300 bg-primary-50' : 'border-gray-200'
+                }`}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-medium">{sig.name}</span>
+                    {sig.is_default && (
+                      <Badge status="approved" className="text-xs">
+                        <Star className="w-3 h-3 mr-1" />
+                        Predeterminada
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="text-xs">
+                      {sig.signature_type === 'drawn' ? (
+                        <><PenTool className="w-3 h-3 mr-1" /> Dibujada</>
+                      ) : (
+                        <><Type className="w-3 h-3 mr-1" /> Estilizada</>
+                      )}
+                    </Badge>
+                  </div>
+                  {sig.signature_type === 'styled' && (
+                    <p
+                      className="text-2xl"
+                      style={{
+                        fontFamily: `"${sig.font_family}", cursive`,
+                        color: sig.font_color
+                      }}
+                    >
+                      {sig.styled_text}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {!sig.is_default && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setDefaultMutation.mutate(sig.id)}
+                      disabled={setDefaultMutation.isPending}
+                    >
+                      <Star className="w-4 h-4" />
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => {
+                      if (confirm('¿Está seguro de eliminar esta firma?')) {
+                        deleteMutation.mutate(sig.id)
+                      }
+                    }}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Create Signature Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+                <h3 className="text-lg font-semibold">Nueva Firma Digital</h3>
+                <button onClick={handleCloseModal} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {error && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">{error}</span>
+                  </div>
+                )}
+
+                <Input
+                  label="Nombre de la firma"
+                  value={signatureName}
+                  onChange={(e) => setSignatureName(e.target.value)}
+                  placeholder="Ej: Firma formal, Iniciales, etc."
+                />
+
+                {/* Signature Type Tabs */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de firma
+                  </label>
+                  <div className="flex border rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setSignatureType('drawn')}
+                      className={`flex-1 px-4 py-2 text-sm font-medium flex items-center justify-center gap-2 ${
+                        signatureType === 'drawn'
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <PenTool className="w-4 h-4" />
+                      Dibujar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSignatureType('styled')}
+                      className={`flex-1 px-4 py-2 text-sm font-medium flex items-center justify-center gap-2 ${
+                        signatureType === 'styled'
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Type className="w-4 h-4" />
+                      Estilizada
+                    </button>
+                  </div>
+                </div>
+
+                {/* Signature Input */}
+                {signatureType === 'drawn' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Dibuje su firma
+                    </label>
+                    <SignaturePad
+                      onSave={setDrawnData}
+                      width={400}
+                      height={150}
+                    />
+                  </div>
+                ) : (
+                  <StyledSignature
+                    onChange={setStyledData}
+                  />
+                )}
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button type="button" variant="secondary" onClick={handleCloseModal}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleCreateSignature}
+                    loading={createMutation.isPending}
+                  >
+                    <Save className="w-4 h-4" />
+                    Guardar Firma
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function formatDate(dateString) {
   if (!dateString) return '-'
   const date = new Date(dateString)
@@ -443,6 +718,9 @@ export default function Profile() {
               <InfoRow icon={Clock} label="Zona Horaria" value={user?.time_zone || 'UTC'} />
             </div>
           </ProfileSection>
+
+          {/* Digital Signature */}
+          <SignatureSection />
         </div>
 
         {/* Sidebar */}
