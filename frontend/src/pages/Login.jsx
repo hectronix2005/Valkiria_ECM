@@ -117,30 +117,32 @@ export default function Login() {
           </form>
         </div>
 
-        {/* Test Users Panel */}
-        <div className="mt-6 bg-white/10 backdrop-blur rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Users className="w-4 h-4 text-primary-200" />
-            <span className="text-sm font-medium text-primary-100">Usuarios de Prueba</span>
+        {/* Test Users Panel - Solo visible en localhost */}
+        {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+          <div className="mt-6 bg-white/10 backdrop-blur rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-4 h-4 text-primary-200" />
+              <span className="text-sm font-medium text-primary-100">Usuarios de Prueba</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {TEST_USERS.map((user) => (
+                <button
+                  key={user.email}
+                  onClick={() => fillTestUser(user)}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-left"
+                >
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${user.color}`}>
+                    {user.role}
+                  </span>
+                  <span className="text-xs text-white truncate">{user.email.split('@')[0]}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-primary-300 mt-2 text-center">
+              Click para autocompletar credenciales
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {TEST_USERS.map((user) => (
-              <button
-                key={user.email}
-                onClick={() => fillTestUser(user)}
-                className="flex items-center gap-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-left"
-              >
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${user.color}`}>
-                  {user.role}
-                </span>
-                <span className="text-xs text-white truncate">{user.email.split('@')[0]}</span>
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-primary-300 mt-2 text-center">
-            Click para autocompletar credenciales
-          </p>
-        </div>
+        )}
 
         {/* Footer */}
         <p className="text-center text-primary-200 text-sm mt-6">
