@@ -14,9 +14,9 @@ module Api
           @employees = policy_scope(::Hr::Employee)
             .where(organization_id: current_organization.id)
             .active
-            .order(last_name: :asc, first_name: :asc)
 
           @employees = apply_filters(@employees)
+          @employees = apply_sorting(@employees)
           @employees = paginate(@employees)
 
           render json: {
@@ -281,6 +281,30 @@ module Api
           scope.or({ first_name: query }, { last_name: query }, { employee_number: query })
         end
 
+        def apply_sorting(scope)
+          sort_column = params[:sort_by].presence || "last_name"
+          sort_direction = params[:sort_direction]&.downcase == "desc" ? :desc : :asc
+
+          # Map frontend column names to database fields
+          column_map = {
+            "full_name" => :last_name,
+            "job_title" => :job_title,
+            "department" => :department,
+            "employment_status" => :employment_status,
+            "hire_date" => :hire_date,
+            "available_vacation_days" => :hire_date # Sort by hire_date as proxy for vacation days
+          }
+
+          db_column = column_map[sort_column] || :last_name
+
+          # For full_name, add secondary sort by first_name
+          if sort_column == "full_name"
+            scope.order(last_name: sort_direction, first_name: sort_direction)
+          else
+            scope.order(db_column => sort_direction, last_name: :asc)
+          end
+        end
+
         def employee_json(employee, detailed: false) # rubocop:disable Metrics/MethodLength
           json = {
             id: employee.uuid,
@@ -291,13 +315,14 @@ module Api
             email: employee.user&.email,
             department: employee.department,
             job_title: employee.job_title,
-            employment_status: employee.employment_status
+            employment_status: employee.employment_status,
+            hire_date: employee.hire_date&.iso8601,
+            available_vacation_days: employee.available_vacation_days&.floor
           }
 
           if detailed
             json.merge!(
               employment_type: employee.employment_type,
-              hire_date: employee.hire_date&.iso8601,
               termination_date: employee.termination_date&.iso8601,
               cost_center: employee.cost_center,
               date_of_birth: employee.date_of_birth&.iso8601,

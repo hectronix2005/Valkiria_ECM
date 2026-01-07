@@ -6,6 +6,7 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [employeeMode, setEmployeeMode] = useState(false)
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
@@ -53,19 +54,35 @@ export function AuthProvider({ children }) {
 
   const hasRole = useCallback((role) => {
     if (!user?.roles) return false
+    // In employee mode, only allow 'employee' role
+    if (employeeMode && role !== 'employee') return false
     return user.roles.includes(role) || user.roles.includes('admin')
-  }, [user])
+  }, [user, employeeMode])
 
   const hasPermission = useCallback((permission) => {
     if (!user?.permissions) return false
+    // In employee mode, deny elevated permissions
+    if (employeeMode) return false
     if (user.permissions.includes('*')) return true
     return user.permissions.includes(permission)
-  }, [user])
+  }, [user, employeeMode])
 
-  const isAdmin = user?.roles?.includes('admin')
-  const isHR = user?.is_hr || hasRole('hr') || hasRole('hr_manager')
-  const isSupervisor = user?.is_supervisor || false
+  // Real roles (unaffected by employee mode) - for toggle visibility
+  const realIsAdmin = user?.roles?.includes('admin')
+  const realIsHR = user?.is_hr || user?.roles?.includes('hr') || user?.roles?.includes('hr_manager')
+  const realIsSupervisor = user?.is_supervisor || false
+  const hasElevatedRole = realIsAdmin || realIsHR || realIsSupervisor
+
+  // Effective roles (affected by employee mode) - for permission checks
+  const isAdmin = employeeMode ? false : realIsAdmin
+  const isHR = employeeMode ? false : realIsHR
+  const isSupervisor = employeeMode ? false : realIsSupervisor
   const mustChangePassword = user?.must_change_password || false
+
+  // Toggle employee mode
+  const toggleEmployeeMode = useCallback(() => {
+    setEmployeeMode(prev => !prev)
+  }, [])
 
   const updateUser = useCallback((userData) => {
     setUser(userData)
@@ -85,6 +102,10 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user,
     mustChangePassword,
     updateUser,
+    // Employee mode
+    employeeMode,
+    toggleEmployeeMode,
+    hasElevatedRole,
   }
 
   return (

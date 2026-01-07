@@ -6,6 +6,8 @@ module Templates
       @employee = context[:employee]
       @organization = context[:organization]
       @request = context[:request]
+      @third_party = context[:third_party]
+      @contract = context[:contract]
       @custom_values = context[:custom_values] || {}
     end
 
@@ -24,8 +26,14 @@ module Templates
         resolve_organization_field(field)
       when "request"
         resolve_request_field(field)
+      when "third_party"
+        resolve_third_party_field(field)
+      when "contract"
+        resolve_contract_field(field)
       when "system"
         resolve_system_field(field)
+      when "custom"
+        resolve_custom_field(field)
       else
         nil
       end
@@ -93,11 +101,18 @@ module Templates
         number_to_words(@employee.salary)
       when "food_allowance"
         format_currency(@employee.food_allowance)
+      when "food_allowance_text"
+        number_to_words(@employee.food_allowance)
       when "transport_allowance"
         format_currency(@employee.transport_allowance)
+      when "transport_allowance_text"
+        number_to_words(@employee.transport_allowance)
       when "total_compensation"
         total = (@employee.salary || 0) + (@employee.food_allowance || 0) + (@employee.transport_allowance || 0)
         format_currency(total)
+      when "total_compensation_text"
+        total = (@employee.salary || 0) + (@employee.food_allowance || 0) + (@employee.transport_allowance || 0)
+        number_to_words(total)
       # Contract fields
       when "contract_type"
         format_contract_type(@employee.contract_type)
@@ -144,6 +159,104 @@ module Templates
       end
     end
 
+    def resolve_third_party_field(field)
+      return nil unless @third_party
+
+      case field
+      when "display_name", "name"
+        @third_party.display_name
+      when "business_name"
+        @third_party.business_name
+      when "trade_name"
+        @third_party.trade_name
+      when "code"
+        @third_party.code
+      when "identification_number"
+        @third_party.identification_number
+      when "identification_type"
+        @third_party.identification_type
+      when "full_identification"
+        "#{@third_party.identification_type} #{@third_party.identification_number}"
+      when "third_party_type", "type"
+        @third_party.type_label
+      when "person_type"
+        @third_party.person_type == "natural" ? "Persona Natural" : "Persona Jurídica"
+      when "email"
+        @third_party.email
+      when "phone"
+        @third_party.phone
+      when "address"
+        @third_party.address
+      when "city"
+        @third_party.city
+      when "country"
+        @third_party.country
+      when "legal_rep_name"
+        @third_party.legal_rep_name
+      when "legal_rep_id"
+        @third_party.legal_rep_id_number
+      when "legal_rep_email"
+        @third_party.legal_rep_email
+      when "bank_name"
+        @third_party.bank_name
+      when "bank_account_type"
+        @third_party.bank_account_type == "savings" ? "Ahorros" : "Corriente"
+      when "bank_account_number"
+        @third_party.bank_account_number
+      when "industry"
+        @third_party.industry
+      else
+        @third_party.try(field)
+      end
+    end
+
+    def resolve_contract_field(field)
+      return nil unless @contract
+
+      case field
+      when "contract_number", "number"
+        @contract.contract_number
+      when "title"
+        @contract.title
+      when "description"
+        @contract.description
+      when "contract_type", "type"
+        @contract.type_label
+      when "status"
+        @contract.status_label
+      when "amount"
+        format_currency(@contract.amount)
+      when "amount_text"
+        number_to_words(@contract.amount)
+      when "currency"
+        @contract.currency
+      when "start_date"
+        format_date(@contract.start_date)
+      when "start_date_text"
+        format_date_text(@contract.start_date)
+      when "end_date"
+        format_date(@contract.end_date)
+      when "end_date_text"
+        format_date_text(@contract.end_date)
+      when "duration_days"
+        @contract.duration_days.to_s
+      when "duration_text"
+        format_contract_duration_from_days(@contract.duration_days)
+      when "payment_terms"
+        @contract.payment_terms
+      when "payment_frequency"
+        format_payment_frequency(@contract.payment_frequency)
+      when "approval_level"
+        @contract.approval_level_label
+      when "approved_at"
+        format_date(@contract.approved_at)
+      when "approved_at_text"
+        format_date_text(@contract.approved_at)
+      else
+        @contract.try(field)
+      end
+    end
+
     def resolve_request_field(field)
       return nil unless @request
 
@@ -183,6 +296,29 @@ module Templates
         I18n.l(Date.current, format: "%B")
       when "current_month_year"
         I18n.l(Date.current, format: "%B de %Y")
+      else
+        nil
+      end
+    end
+
+    # Custom variables that map to employee/organization data with transformations
+    def resolve_custom_field(field)
+      return nil unless @employee
+
+      case field
+      # Auxilio de alimentación en letras (toma de employee.food_allowance)
+      when "auxilio_alimentacion_en_letras_y_pesos", "auxilio_de_alimentacion_en_letras"
+        number_to_words(@employee.food_allowance)
+      # Salario en letras (toma de employee.salary)
+      when "salario_letras_y_pesos", "salario_en_letras"
+        number_to_words(@employee.salary)
+      # Auxilio de transporte en letras
+      when "auxilio_transporte_en_letras_y_pesos", "auxilio_de_transporte_en_letras"
+        number_to_words(@employee.transport_allowance)
+      # Compensación total en letras
+      when "compensacion_total_en_letras"
+        total = (@employee.salary || 0) + (@employee.food_allowance || 0) + (@employee.transport_allowance || 0)
+        number_to_words(total)
       else
         nil
       end
@@ -388,6 +524,41 @@ module Templates
 
     def format_duration_years(years)
       "#{years} #{years == 1 ? 'año' : 'años'}"
+    end
+
+    def format_contract_duration_from_days(days)
+      return nil unless days
+
+      if days >= 365
+        years = days / 365
+        remaining_days = days % 365
+        months = remaining_days / 30
+        if months.positive?
+          "#{years} #{years == 1 ? 'año' : 'años'} y #{months} #{months == 1 ? 'mes' : 'meses'}"
+        else
+          "#{years} #{years == 1 ? 'año' : 'años'}"
+        end
+      elsif days >= 30
+        months = days / 30
+        "#{months} #{months == 1 ? 'mes' : 'meses'}"
+      else
+        "#{days} #{days == 1 ? 'día' : 'días'}"
+      end
+    end
+
+    def format_payment_frequency(frequency)
+      return nil unless frequency
+
+      frequencies = {
+        "monthly" => "Mensual",
+        "biweekly" => "Quincenal",
+        "weekly" => "Semanal",
+        "one_time" => "Pago Único",
+        "milestone" => "Por Hitos",
+        "upon_delivery" => "Contra Entrega"
+      }
+
+      frequencies[frequency] || frequency
     end
   end
 end

@@ -28,6 +28,11 @@ module Hr
       hr_manager? || (owner? && can_employee_cancel?)
     end
 
+    def destroy?
+      # Admin/HR can delete any request, owner can delete their own (with restrictions in controller)
+      admin? || hr_manager? || owner?
+    end
+
     class Scope < ApplicationPolicy::Scope
       def resolve
         if user_employee.hr_staff? || user_employee.hr_manager?

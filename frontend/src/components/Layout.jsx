@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { approvalService } from '../services/api'
+import { approvalService, contractApprovalService } from '../services/api'
 import {
   Home,
   FileText,
@@ -19,7 +19,14 @@ import {
   X,
   LogOut,
   ChevronDown,
-  User
+  ChevronRight,
+  User,
+  Shield,
+  UserCircle,
+  Scale,
+  Building2,
+  FileCheck,
+  Variable
 } from 'lucide-react'
 
 const navigation = [
@@ -33,46 +40,85 @@ const hrNavigation = [
   { name: 'Mis Certificaciones', href: '/hr/certifications', icon: Award },
 ]
 
-const approverNavigation = [
-  { name: 'Aprobaciones', href: '/hr/approvals', icon: CheckSquare, badge: true },
-]
-
 const hrAdminNavigation = [
+  { name: 'Aprobaciones', href: '/hr/approvals', icon: CheckSquare, badge: true },
   { name: 'Empleados', href: '/hr/employees', icon: Users },
+  { name: 'Variables', href: '/hr/variables', icon: Variable },
   { name: 'Dashboard HR', href: '/hr/dashboard', icon: BarChart3 },
 ]
+
+// Combined HR navigation based on user role
+const getHrNavigation = (isSupervisor, isHR, employeeMode) => {
+  if (employeeMode || (!isSupervisor && !isHR)) {
+    return hrNavigation
+  }
+  return [...hrNavigation, ...hrAdminNavigation]
+}
 
 const adminNavigation = [
   { name: 'Configuración', href: '/admin/settings', icon: Settings },
   { name: 'Templates', href: '/admin/templates', icon: FileText },
-  { name: 'Variables', href: '/admin/variable-mappings', icon: Settings },
   { name: 'Firmantes', href: '/admin/signatory-types', icon: Users },
+]
+
+const legalNavigation = [
+  { name: 'Terceros', href: '/legal/third-parties', icon: Building2 },
+  { name: 'Contratos', href: '/legal/contracts', icon: FileText },
+  { name: 'Aprobaciones', href: '/legal/approvals', icon: FileCheck, badge: true },
+  { name: 'Variables', href: '/legal/variables', icon: Variable },
 ]
 
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const { user, logout, isAdmin, isHR, isSupervisor } = useAuth()
+  const [expandedSections, setExpandedSections] = useState([])
+  const { user, logout, isAdmin, isHR, isSupervisor, employeeMode, toggleEmployeeMode, hasElevatedRole } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Fetch pending approvals count for badge
-  const { data: approvalsData } = useQuery({
-    queryKey: ['approvals-count'],
+  // Fetch pending HR approvals count for badge
+  const { data: hrApprovalsData } = useQuery({
+    queryKey: ['hr-approvals-count'],
     queryFn: () => approvalService.list(),
     enabled: isSupervisor || isHR,
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 60000,
   })
 
-  const pendingApprovalsCount = approvalsData?.data?.meta?.total_pending || 0
+  // Fetch pending Legal approvals count for badge
+  const { data: legalApprovalsData } = useQuery({
+    queryKey: ['legal-approvals-count'],
+    queryFn: () => contractApprovalService.list(),
+    enabled: isAdmin || user?.roles?.includes('legal'),
+    refetchInterval: 60000,
+  })
+
+  const pendingHRApprovalsCount = hrApprovalsData?.data?.meta?.total_pending || 0
+  const pendingLegalApprovalsCount = legalApprovalsData?.data?.meta?.total_pending || 0
 
   const handleLogout = async () => {
     await logout()
     navigate('/login')
   }
 
+  const toggleSection = (sectionId) => {
+    setExpandedSections(prev =>
+      prev.includes(sectionId)
+        ? prev.filter(id => id !== sectionId)
+        : [...prev, sectionId]
+    )
+  }
+
   const NavLink = ({ item }) => {
     const isActive = location.pathname === item.href
+    // Determine badge count based on route
+    const getBadgeCount = () => {
+      if (!item.badge) return 0
+      if (item.href === '/hr/approvals') return pendingHRApprovalsCount
+      if (item.href === '/legal/approvals') return pendingLegalApprovalsCount
+      return 0
+    }
+    const badgeCount = getBadgeCount()
+
     return (
       <Link
         to={item.href}
@@ -84,27 +130,52 @@ export default function Layout({ children }) {
       >
         <item.icon className="w-5 h-5" />
         {item.name}
-        {item.badge && pendingApprovalsCount > 0 && (
+        {badgeCount > 0 && (
           <span className="ml-auto bg-danger-500 text-white text-xs px-2 py-0.5 rounded-full">
-            {pendingApprovalsCount}
+            {badgeCount}
           </span>
         )}
       </Link>
     )
   }
 
-  const NavSection = ({ title, items }) => (
-    <div className="mb-6">
-      <h3 className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-        {title}
-      </h3>
-      <nav className="space-y-1">
-        {items.map((item) => (
-          <NavLink key={item.href} item={item} />
-        ))}
-      </nav>
-    </div>
-  )
+  const CollapsibleSection = ({ id, title, items, icon: Icon }) => {
+    const isExpanded = expandedSections.includes(id)
+    const hasActiveItem = items.some(item => location.pathname === item.href)
+
+    return (
+      <div className="mb-2">
+        <button
+          onClick={() => toggleSection(id)}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            hasActiveItem
+              ? 'text-primary-700 bg-primary-50/50'
+              : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {Icon && <Icon className="w-4 h-4" />}
+            <span className="uppercase tracking-wider text-xs">{title}</span>
+          </div>
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4" />
+          ) : (
+            <ChevronRight className="w-4 h-4" />
+          )}
+        </button>
+
+        <div className={`overflow-hidden transition-all duration-200 ${
+          isExpanded ? 'max-h-96 opacity-100 mt-1' : 'max-h-0 opacity-0'
+        }`}>
+          <nav className="space-y-1 pl-2">
+            {items.map((item) => (
+              <NavLink key={item.href} item={item} />
+            ))}
+          </nav>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -125,10 +196,15 @@ export default function Layout({ children }) {
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-              <FileText className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-full overflow-hidden">
+              <img src="/Valkiria.png" alt="Valkyria" className="w-full h-full object-cover scale-[1.15]" />
             </div>
-            <span className="font-bold text-gray-900">VALKYRIA</span>
+            <div className="flex flex-col">
+              <span className="font-bold text-gray-900 leading-tight">
+                <span className="text-primary-600">VAL</span>KYRIA
+              </span>
+              <span className="text-[9px] text-gray-400 tracking-wider">ECM</span>
+            </div>
           </Link>
           <button
             className="lg:hidden p-1 rounded hover:bg-gray-100"
@@ -140,19 +216,68 @@ export default function Layout({ children }) {
 
         {/* Navigation */}
         <div className="p-4 overflow-y-auto h-[calc(100%-4rem)]">
-          <NavSection title="General" items={navigation} />
-          <NavSection title="Recursos Humanos" items={hrNavigation} />
-
-          {(isSupervisor || isHR) && (
-            <NavSection title="Aprobaciones" items={approverNavigation} />
+          {/* Mode Toggle for users with elevated roles */}
+          {hasElevatedRole && (
+            <div className="mb-4 p-2 bg-gray-50 rounded-lg">
+              <button
+                onClick={toggleEmployeeMode}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  employeeMode
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {employeeMode ? (
+                  <>
+                    <UserCircle className="w-4 h-4" />
+                    <span>Modo Empleado</span>
+                    <span className="ml-auto text-xs bg-primary-200 px-2 py-0.5 rounded">Activo</span>
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4" />
+                    <span>Cambiar a Empleado</span>
+                  </>
+                )}
+              </button>
+            </div>
           )}
 
-          {isHR && (
-            <NavSection title="Administración HR" items={hrAdminNavigation} />
-          )}
+          <CollapsibleSection
+            id="general"
+            title="General"
+            items={navigation}
+            icon={Home}
+          />
 
-          {isAdmin && (
-            <NavSection title="Sistema" items={adminNavigation} />
+          <CollapsibleSection
+            id="hr"
+            title="Recursos Humanos"
+            items={getHrNavigation(isSupervisor, isHR, employeeMode)}
+            icon={Users}
+          />
+
+          {/* Only show elevated sections when NOT in employee mode */}
+          {!employeeMode && (
+            <>
+              {(isAdmin || isHR) && (
+                <CollapsibleSection
+                  id="legal"
+                  title="Gestión Legal"
+                  items={legalNavigation}
+                  icon={Scale}
+                />
+              )}
+
+              {isAdmin && (
+                <CollapsibleSection
+                  id="system"
+                  title="Sistema"
+                  items={adminNavigation}
+                  icon={Settings}
+                />
+              )}
+            </>
           )}
         </div>
       </aside>

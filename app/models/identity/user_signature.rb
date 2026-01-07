@@ -26,6 +26,7 @@ module Identity
     field :name, type: String                    # Name for this signature (e.g., "Formal", "Initials")
     field :signature_type, type: String          # drawn or styled
     field :is_default, type: Boolean, default: false
+    field :active, type: Boolean, default: true  # Can be disabled instead of deleted if in use
 
     # For drawn signatures - stored as base64 PNG
     field :image_data, type: String              # Base64 encoded PNG image
@@ -57,9 +58,12 @@ module Identity
     scope :drawn, -> { where(signature_type: DRAWN) }
     scope :styled, -> { where(signature_type: STYLED) }
     scope :default_signature, -> { where(is_default: true) }
+    scope :active, -> { where(active: true) }
+    scope :inactive, -> { where(active: false) }
 
     # Callbacks
     before_save :ensure_single_default
+    before_destroy :prevent_destroy_if_in_use
     after_destroy :ensure_default_exists
 
     # Instance methods
@@ -74,6 +78,39 @@ module Identity
     def set_as_default!
       user.signatures.update_all(is_default: false)
       update!(is_default: true)
+    end
+
+    # Check if this signature is used in any generated document
+    def in_use?
+      documents_using_count > 0
+    end
+
+    # Count documents using this signature
+    def documents_using_count
+      ::Templates::GeneratedDocument.where("signatures.signature_id" => uuid).count
+    end
+
+    # Get documents using this signature
+    def documents_using
+      ::Templates::GeneratedDocument.where("signatures.signature_id" => uuid)
+    end
+
+    # Disable signature (soft delete alternative)
+    def disable!
+      update!(active: false, is_default: false)
+    end
+
+    # Enable signature
+    def enable!
+      update!(active: true)
+    end
+
+    def active?
+      active == true
+    end
+
+    def inactive?
+      !active?
     end
 
     # Returns the signature as a renderable format for PDF
@@ -116,6 +153,13 @@ module Identity
 
       # Set the first remaining signature as default
       user.signatures.first.update!(is_default: true)
+    end
+
+    def prevent_destroy_if_in_use
+      return unless in_use?
+
+      errors.add(:base, "No se puede eliminar una firma que está siendo utilizada en documentos. Desactívela en su lugar.")
+      throw(:abort)
     end
   end
 end

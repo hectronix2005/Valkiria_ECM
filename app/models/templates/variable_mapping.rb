@@ -13,6 +13,8 @@ module Templates
       "employee" => "Empleado",
       "organization" => "Organización",
       "request" => "Solicitud",
+      "third_party" => "Tercero",
+      "contract" => "Contrato",
       "system" => "Sistema",
       "custom" => "Personalizado"
     }.freeze
@@ -30,6 +32,7 @@ module Templates
     field :is_system, type: Boolean, default: false  # System mappings can't be deleted
     field :active, type: Boolean, default: true
     field :position, type: Integer, default: 0
+    field :aliases, type: Array, default: [] # Alternative names that map to the same key
 
     # For custom mappings that pull from specific model fields
     field :source_model, type: String   # e.g., "Hr::Employee"
@@ -93,6 +96,37 @@ module Templates
       update!(active: !active)
     end
 
+    # Add an alias to this mapping
+    def add_alias(alias_name)
+      normalized = VariableNormalizer.normalize(alias_name)
+      return false if normalized == name || aliases.include?(normalized)
+
+      self.aliases = (aliases + [normalized]).uniq
+      save!
+    end
+
+    # Remove an alias
+    def remove_alias(alias_name)
+      normalized = VariableNormalizer.normalize(alias_name)
+      return false unless aliases.include?(normalized)
+
+      self.aliases = aliases - [normalized]
+      save!
+    end
+
+    # Check if a name matches this mapping (name or any alias)
+    def matches_name?(search_name)
+      normalized_search = VariableNormalizer.comparison_key(search_name)
+      return true if VariableNormalizer.comparison_key(name) == normalized_search
+
+      aliases.any? { |a| VariableNormalizer.comparison_key(a) == normalized_search }
+    end
+
+    # All names (primary + aliases)
+    def all_names
+      [name] + (aliases || [])
+    end
+
     # Resolve the value for this mapping given a context
     def resolve_value(context)
       return nil unless active?
@@ -124,14 +158,25 @@ module Templates
         available_for(organization).group_by(&:category)
       end
 
+      # Find mapping by name or alias (case/accent insensitive)
+      def find_by_name_or_alias(search_name, organization = nil)
+        mappings = organization ? available_for(organization) : active.ordered
+        normalized_search = VariableNormalizer.comparison_key(search_name)
+
+        mappings.find do |m|
+          m.matches_name?(search_name)
+        end
+      end
+
       # Seed system mappings
       def seed_system_mappings!
         system_mappings_data.each do |data|
           normalized_name = VariableNormalizer.normalize(data[:name])
-          # Use name as unique identifier to allow multiple names pointing to same key
+
+          # Use name as unique identifier (allows multiple names for same key)
           mapping = where(name: normalized_name, is_system: true).first
           if mapping
-            mapping.update!(data.merge(is_system: true))
+            mapping.update!(data.merge(is_system: true, name: normalized_name))
           else
             create!(data.merge(is_system: true, name: normalized_name))
           end
@@ -144,13 +189,14 @@ module Templates
         [
           # Employee mappings - Personal info
           { name: "Nombre Completo", key: "employee.full_name", category: "employee", description: "Nombre y apellido del empleado" },
+          { name: "Nombre del Trabajador", key: "employee.full_name", category: "employee", description: "Nombre completo del trabajador" },
           { name: "Primer Nombre", key: "employee.first_name", category: "employee", description: "Primer nombre del empleado" },
           { name: "Apellido", key: "employee.last_name", category: "employee", description: "Apellido del empleado" },
-          { name: "Nombre del Trabajador", key: "employee.full_name", category: "employee", description: "Nombre completo del trabajador" },
           { name: "Numero de Empleado", key: "employee.employee_number", category: "employee", description: "Código único del empleado" },
           { name: "Cargo", key: "employee.job_title", category: "employee", description: "Cargo o posición del empleado" },
           { name: "Nombre del Cargo", key: "employee.job_title", category: "employee", description: "Cargo o posición" },
           { name: "Departamento", key: "employee.department", category: "employee", description: "Departamento donde trabaja" },
+          { name: "Numero de Identificacion", key: "employee.identification_number", category: "employee", description: "Número de cédula o documento" },
           { name: "Cedula", key: "employee.identification_number", category: "employee", description: "Número de cédula" },
           { name: "Cc del Trabajador", key: "employee.identification_number", category: "employee", description: "Cédula de ciudadanía del trabajador" },
           { name: "Tipo de Identificacion", key: "employee.identification_type", category: "employee", description: "Tipo de documento (CC, CE, etc.)" },
@@ -174,8 +220,11 @@ module Templates
           { name: "Salario", key: "employee.salary", category: "employee", data_type: "number", description: "Salario mensual del empleado" },
           { name: "Salario en Letras", key: "employee.salary_text", category: "employee", description: "Salario en palabras" },
           { name: "Auxilio de Transporte", key: "employee.transport_allowance", category: "employee", data_type: "number", description: "Auxilio de transporte mensual" },
+          { name: "Auxilio de Transporte en Letras", key: "employee.transport_allowance_text", category: "employee", description: "Auxilio de transporte en palabras" },
           { name: "Auxilio de Alimentacion", key: "employee.food_allowance", category: "employee", data_type: "number", description: "Auxilio de alimentación mensual" },
+          { name: "Auxilio de Alimentacion en Letras", key: "employee.food_allowance_text", category: "employee", description: "Auxilio de alimentación en palabras" },
           { name: "Compensacion Total", key: "employee.total_compensation", category: "employee", data_type: "number", description: "Total salario + auxilios" },
+          { name: "Compensacion Total en Letras", key: "employee.total_compensation_text", category: "employee", description: "Total salario + auxilios en palabras" },
 
           # Organization mappings
           { name: "Nombre de Empresa", key: "organization.name", category: "organization", description: "Razón social de la empresa" },
@@ -197,7 +246,57 @@ module Templates
           { name: "Proposito", key: "request.purpose", category: "request", description: "Propósito de la solicitud" },
           { name: "Fecha de Inicio de Vacaciones", key: "request.start_date", category: "request", data_type: "date", description: "Fecha de inicio de vacaciones" },
           { name: "Fecha de Fin de Vacaciones", key: "request.end_date", category: "request", data_type: "date", description: "Fecha de fin de vacaciones" },
-          { name: "Dias Solicitados", key: "request.days_requested", category: "request", data_type: "number", description: "Cantidad de días solicitados" }
+          { name: "Dias Solicitados", key: "request.days_requested", category: "request", data_type: "number", description: "Cantidad de días solicitados" },
+
+          # Custom mappings - Text conversions (valores tomados del empleado y convertidos a texto)
+          { name: "Salario Letras y Pesos", key: "custom.salario_letras_y_pesos", category: "custom", description: "Salario en palabras (toma de employee.salary)" },
+          { name: "Auxilio Alimentacion en Letras y Pesos", key: "custom.auxilio_alimentacion_en_letras_y_pesos", category: "custom", description: "Auxilio alimentación en palabras (toma de employee.food_allowance)" },
+          { name: "Auxilio Transporte en Letras y Pesos", key: "custom.auxilio_transporte_en_letras_y_pesos", category: "custom", description: "Auxilio transporte en palabras (toma de employee.transport_allowance)" },
+          { name: "Compensacion Total en Letras", key: "custom.compensacion_total_en_letras", category: "custom", description: "Compensación total en palabras (salario + auxilios)" },
+
+          # Third Party mappings (Terceros - Módulo Legal)
+          { name: "Nombre del Tercero", key: "third_party.display_name", category: "third_party", description: "Nombre o razón social del tercero" },
+          { name: "Razon Social", key: "third_party.business_name", category: "third_party", description: "Razón social de persona jurídica" },
+          { name: "Nombre Comercial", key: "third_party.trade_name", category: "third_party", description: "Nombre comercial del tercero" },
+          { name: "Codigo del Tercero", key: "third_party.code", category: "third_party", description: "Código único del tercero (TER-YYYY-NNNNN)" },
+          { name: "Identificacion del Tercero", key: "third_party.identification_number", category: "third_party", description: "Número de identificación (NIT, CC, etc.)" },
+          { name: "Tipo de Identificacion del Tercero", key: "third_party.identification_type", category: "third_party", description: "Tipo de documento del tercero" },
+          { name: "Identificacion Completa del Tercero", key: "third_party.full_identification", category: "third_party", description: "Tipo y número de identificación" },
+          { name: "Tipo de Tercero", key: "third_party.third_party_type", category: "third_party", description: "Proveedor, cliente, contratista, etc." },
+          { name: "Tipo de Persona", key: "third_party.person_type", category: "third_party", description: "Natural o Jurídica" },
+          { name: "Email del Tercero", key: "third_party.email", category: "third_party", description: "Correo electrónico del tercero" },
+          { name: "Telefono del Tercero", key: "third_party.phone", category: "third_party", description: "Teléfono de contacto" },
+          { name: "Direccion del Tercero", key: "third_party.address", category: "third_party", description: "Dirección del tercero" },
+          { name: "Ciudad del Tercero", key: "third_party.city", category: "third_party", description: "Ciudad de ubicación" },
+          { name: "Pais del Tercero", key: "third_party.country", category: "third_party", description: "País de ubicación" },
+          { name: "Representante Legal", key: "third_party.legal_rep_name", category: "third_party", description: "Nombre del representante legal" },
+          { name: "Cedula Representante Legal", key: "third_party.legal_rep_id", category: "third_party", description: "Cédula del representante legal" },
+          { name: "Email Representante Legal", key: "third_party.legal_rep_email", category: "third_party", description: "Email del representante legal" },
+          { name: "Banco del Tercero", key: "third_party.bank_name", category: "third_party", description: "Nombre del banco" },
+          { name: "Tipo de Cuenta Bancaria", key: "third_party.bank_account_type", category: "third_party", description: "Ahorros o Corriente" },
+          { name: "Numero de Cuenta Bancaria", key: "third_party.bank_account_number", category: "third_party", description: "Número de cuenta" },
+          { name: "Industria del Tercero", key: "third_party.industry", category: "third_party", description: "Sector o industria" },
+
+          # Contract mappings (Contratos - Módulo Legal)
+          { name: "Numero de Contrato", key: "contract.contract_number", category: "contract", description: "Número único del contrato (CON-YYYY-NNNNN)" },
+          { name: "Titulo del Contrato", key: "contract.title", category: "contract", description: "Título o nombre del contrato" },
+          { name: "Descripcion del Contrato", key: "contract.description", category: "contract", description: "Descripción del objeto del contrato" },
+          { name: "Tipo de Contrato Comercial", key: "contract.contract_type", category: "contract", description: "Servicios, compraventa, NDA, etc." },
+          { name: "Estado del Contrato", key: "contract.status", category: "contract", description: "Estado actual del contrato" },
+          { name: "Monto del Contrato", key: "contract.amount", category: "contract", data_type: "number", description: "Valor monetario del contrato" },
+          { name: "Monto en Letras", key: "contract.amount_text", category: "contract", description: "Monto del contrato en palabras" },
+          { name: "Moneda del Contrato", key: "contract.currency", category: "contract", description: "Moneda (COP, USD, EUR)" },
+          { name: "Fecha de Inicio del Contrato", key: "contract.start_date", category: "contract", data_type: "date", description: "Fecha de inicio de vigencia" },
+          { name: "Fecha de Inicio en Texto", key: "contract.start_date_text", category: "contract", description: "Fecha de inicio en formato largo" },
+          { name: "Fecha de Fin del Contrato", key: "contract.end_date", category: "contract", data_type: "date", description: "Fecha de terminación del contrato" },
+          { name: "Fecha de Fin en Texto", key: "contract.end_date_text", category: "contract", description: "Fecha de fin en formato largo" },
+          { name: "Duracion del Contrato en Dias", key: "contract.duration_days", category: "contract", data_type: "number", description: "Días de duración" },
+          { name: "Duracion del Contrato", key: "contract.duration_text", category: "contract", description: "Duración en texto (meses, años)" },
+          { name: "Condiciones de Pago", key: "contract.payment_terms", category: "contract", description: "Términos de pago acordados" },
+          { name: "Frecuencia de Pago", key: "contract.payment_frequency", category: "contract", description: "Mensual, quincenal, único, etc." },
+          { name: "Nivel de Aprobacion", key: "contract.approval_level", category: "contract", description: "Nivel requerido de aprobación" },
+          { name: "Fecha de Aprobacion", key: "contract.approved_at", category: "contract", data_type: "date", description: "Fecha en que fue aprobado" },
+          { name: "Fecha de Aprobacion en Texto", key: "contract.approved_at_text", category: "contract", description: "Fecha de aprobación en formato largo" }
         ]
       end
     end

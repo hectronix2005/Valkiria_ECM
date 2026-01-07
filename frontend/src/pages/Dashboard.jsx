@@ -131,11 +131,11 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Días de vacaciones"
-          value={user?.vacation?.days_available ?? 0}
+          value={Math.floor(user?.vacation?.days_available ?? 0)}
           icon={Calendar}
           color="blue"
           subtitle={user?.vacation?.days_pending > user?.vacation?.days_available
-            ? `${user?.vacation?.days_pending} pendientes (máx. acumulable: ${user?.vacation?.max_accumulation_days})`
+            ? `${Math.floor(user?.vacation?.days_pending)} pendientes (máx. acumulable: ${user?.vacation?.max_accumulation_days})`
             : "Disponibles"
           }
         />

@@ -23,8 +23,16 @@ module Templates
     def generate!
       validate_template!
       resolve_variables!
+      validate_required_variables!
       log_variables_to_replace
       generate_document!
+    end
+
+    # Validate variables without generating - returns hash with missing info
+    def validate_variables
+      validate_template!
+      resolve_variables!
+      find_missing_variables
     end
 
     private
@@ -37,6 +45,132 @@ module Templates
     def resolve_variables!
       resolver = VariableResolverService.new(context)
       @variable_values = resolver.resolve_for_template(template)
+    end
+
+    def validate_required_variables!
+      missing = find_missing_variables
+      return if missing[:variables].empty?
+
+      error_message = build_missing_variables_error(missing)
+      raise MissingVariablesError.new(error_message, missing)
+    end
+
+    def find_missing_variables
+      missing_vars = []
+
+      template.variables.each do |var_name|
+        path = template.variable_mappings[var_name]
+        value = @variable_values[var_name]
+
+        # Variable sin mapeo
+        if path.nil? || path.empty?
+          missing_vars << {
+            variable: var_name,
+            path: nil,
+            reason: "sin_mapeo",
+            source: nil,
+            field: nil
+          }
+          next
+        end
+
+        # Variable con valor vacío o nulo
+        if value.nil? || value.to_s.strip.empty?
+          parts = path.split(".")
+          source = parts.first
+          field = parts[1..].join(".")
+
+          missing_vars << {
+            variable: var_name,
+            path: path,
+            reason: "sin_valor",
+            source: source,
+            field: field,
+            field_label: humanize_field(field)
+          }
+        end
+      end
+
+      {
+        variables: missing_vars,
+        by_source: group_by_source(missing_vars),
+        employee_id: context[:employee]&.uuid,
+        employee_name: context[:employee]&.full_name
+      }
+    end
+
+    def group_by_source(missing_vars)
+      missing_vars.group_by { |v| v[:source] }.transform_values do |vars|
+        vars.map { |v| { variable: v[:variable], field: v[:field], field_label: v[:field_label] } }
+      end
+    end
+
+    def humanize_field(field)
+      translations = {
+        "full_name" => "Nombre Completo",
+        "identification_number" => "Número de Identificación",
+        "identification_type" => "Tipo de Documento",
+        "job_title" => "Cargo",
+        "department" => "Departamento",
+        "hire_date" => "Fecha de Ingreso",
+        "salary" => "Salario",
+        "food_allowance" => "Auxilio de Alimentación",
+        "transport_allowance" => "Auxilio de Transporte",
+        "contract_type" => "Tipo de Contrato",
+        "contract_start_date" => "Fecha Inicio Contrato",
+        "contract_end_date" => "Fecha Fin Contrato",
+        "address" => "Dirección",
+        "phone" => "Teléfono",
+        "email" => "Correo Electrónico",
+        "place_of_birth" => "Lugar de Nacimiento",
+        "nationality" => "Nacionalidad",
+        "date_of_birth" => "Fecha de Nacimiento",
+        "name" => "Nombre",
+        "tax_id" => "NIT",
+        "nit" => "NIT",
+        "city" => "Ciudad"
+      }
+      translations[field] || field.humanize
+    end
+
+    def build_missing_variables_error(missing)
+      vars = missing[:variables]
+
+      by_source = vars.group_by { |v| v[:source] }
+
+      messages = []
+
+      if by_source["employee"]&.any?
+        fields = by_source["employee"].map { |v| v[:field_label] || v[:field] }.join(", ")
+        messages << "Datos del empleado faltantes: #{fields}"
+      end
+
+      if by_source["organization"]&.any?
+        fields = by_source["organization"].map { |v| v[:field_label] || v[:field] }.join(", ")
+        messages << "Datos de la organización faltantes: #{fields}"
+      end
+
+      if by_source["third_party"]&.any?
+        fields = by_source["third_party"].map { |v| v[:field_label] || v[:field] }.join(", ")
+        messages << "Datos del tercero faltantes: #{fields}"
+      end
+
+      if by_source["contract"]&.any?
+        fields = by_source["contract"].map { |v| v[:field_label] || v[:field] }.join(", ")
+        messages << "Datos del contrato faltantes: #{fields}"
+      end
+
+      if by_source[nil]&.any?
+        vars_list = by_source[nil].map { |v| v[:variable] }.join(", ")
+        messages << "Variables sin mapeo: #{vars_list}"
+      end
+
+      if by_source["custom"]&.any?
+        vars_list = by_source["custom"].map { |v| v[:variable] }.join(", ")
+        messages << "Variables personalizadas sin valor: #{vars_list}"
+      end
+
+      messages.join(". ")
     end
 
     def log_variables_to_replace
@@ -422,5 +556,15 @@ module Templates
     end
 
     class GenerationError < StandardError; end
+
+    # Custom error for missing variables with detailed info
+    class MissingVariablesError < StandardError
+      attr_reader :missing_data
+
+      def initialize(message, missing_data)
+        super(message)
+        @missing_data = missing_data
+      end
+    end
   end
 end

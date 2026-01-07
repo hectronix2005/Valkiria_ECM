@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80">
+  <defs>
+    <linearGradient id="hBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#312E81"/>
+      <stop offset="50%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="hGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FCD34D"/>
+      <stop offset="50%" style="stop-color:#F59E0B"/>
+      <stop offset="100%" style="stop-color:#D97706"/>
+    </linearGradient>
+    <linearGradient id="hSilver" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F8FAFC"/>
+      <stop offset="100%" style="stop-color:#CBD5E1"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+    <filter id="hGlow">
+      <feGaussianBlur stdDeviation="1" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Icono -->
+  <g transform="translate(8, 8)">
+    <!-- Fondo con borde dorado -->
+    <rect width="64" height="64" rx="14" fill="url(#hBgGrad)"/>
+    <rect x="2" y="2" width="60" height="60" rx="12" fill="none" stroke="url(#hGold)" stroke-width="1" opacity="0.4"/>
+
+    <!-- Alas estilizadas -->
+    <path d="M32 18 Q22 20 14 28 Q10 34 12 40 Q14 46 22 47 Q28 46 31 42 L32 18 Z" fill="url(#hSilver)" opacity="0.9"/>
+    <path d="M32 18 Q42 20 50 28 Q54 34 52 40 Q50 46 42 47 Q36 46 33 42 L32 18 Z" fill="url(#hSilver)" opacity="0.9"/>
+
+    <!-- Detalles de plumas -->
+    <path d="M26 24 Q18 30 15 36" stroke="#94A3B8" stroke-width="0.8" fill="none"/>
+    <path d="M24 30 Q17 35 14 42" stroke="#94A3B8" stroke-width="0.8" fill="none"/>
+    <path d="M38 24 Q46 30 49 36" stroke="#94A3B8" stroke-width="0.8" fill="none"/>
+    <path d="M40 30 Q47 35 50 42" stroke="#94A3B8" stroke-width="0.8" fill="none"/>
+
+    <!-- Silueta de Valkiria -->
+    <g filter="url(#hGlow)">
+      <ellipse cx="32" cy="26" rx="7" ry="8" fill="url(#hGold)"/>
+      <path d="M32 19 L32 30" stroke="#B45309" stroke-width="1"/>
+      <path d="M25 24 Q21 21 18 18 Q20 21 22 24 Q23 26 25 26" fill="url(#hGold)"/>
+      <path d="M39 24 Q43 21 46 18 Q44 21 42 24 Q41 26 39 26" fill="url(#hGold)"/>
+      <ellipse cx="32" cy="34" rx="5" ry="6" fill="url(#hSilver)"/>
+      <path d="M26 40 Q24 46 24 52 L26 54 Q30 56 32 56 Q34 56 38 54 L40 52 Q40 46 38 40 Q35 38 32 37 Q29 38 26 40 Z" fill="url(#hGold)"/>
+      <path d="M32 40 L32 54" stroke="#B45309" stroke-width="1"/>
+      <circle cx="32" cy="46" r="2.5" fill="#312E81"/>
+      <circle cx="32" cy="46" r="1.5" fill="#818CF8"/>
+    </g>
+  </g>
+
+  <!-- Texto VALKYRIA -->
+  <text x="88" y="38" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="700" letter-spacing="2">
+    <tspan fill="url(#textGrad)">VAL</tspan><tspan fill="#1F2937">KYRIA</tspan>
+  </text>
+
+  <!-- Subtítulo elegante -->
+  <text x="90" y="56" font-family="system-ui, sans-serif" font-size="10" font-weight="500" fill="#9CA3AF" letter-spacing="4">
+    ENTERPRISE CONTENT MANAGEMENT
+  </text>
+
+  <!-- Línea decorativa -->
+  <line x1="88" y1="62" x2="340" y2="62" stroke="url(#hGold)" stroke-width="0.5" opacity="0.5"/>
+</svg>

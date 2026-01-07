@@ -21,7 +21,7 @@ module Hr
       return nil if errors.any?
 
       # Check if user already exists with this email
-      existing_user = Identity::User.find_by(email: employee.personal_email)
+      existing_user = Identity::User.where(email: employee.personal_email).first
       if existing_user
         @errors << "Ya existe un usuario con el correo #{employee.personal_email}"
         return nil
@@ -99,7 +99,7 @@ module Hr
     end
 
     def assign_employee_role(user)
-      employee_role = Identity::Role.find_by(name: Identity::Role::EMPLOYEE)
+      employee_role = Identity::Role.where(name: Identity::Role::EMPLOYEE).first
       user.roles << employee_role if employee_role && !user.roles.include?(employee_role)
     end
 

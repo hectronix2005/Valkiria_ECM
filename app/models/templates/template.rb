@@ -8,15 +8,45 @@ module Templates
 
     store_in collection: "templates"
 
-    # Categories for templates
-    CATEGORIES = {
-      "certification" => "Certificaciones",
-      "vacation" => "Vacaciones",
-      "contract" => "Contratos",
-      "memo" => "Memorandos",
-      "letter" => "Cartas",
-      "other" => "Otros"
+    # Modules (which system module this template belongs to)
+    MODULES = {
+      "hr" => { label: "Recursos Humanos", icon: "users" },
+      "legal" => { label: "Gestión Legal", icon: "scale" },
+      "admin" => { label: "Administración", icon: "settings" }
     }.freeze
+
+    # Mapping from main_category to default module
+    CATEGORY_TO_MODULE = {
+      "laboral" => "hr",
+      "comercial" => "legal",
+      "administrativo" => "admin"
+    }.freeze
+
+    # Main categories (top level)
+    MAIN_CATEGORIES = {
+      "laboral" => "Laboral",
+      "comercial" => "Comercial",
+      "administrativo" => "Administrativo"
+    }.freeze
+
+    # Subcategories for templates (grouped by main category)
+    SUBCATEGORIES = {
+      "certification" => { label: "Certificaciones", main: "laboral" },
+      "vacation" => { label: "Vacaciones", main: "laboral" },
+      "contract" => { label: "Contratos", main: "laboral" },
+      "termination" => { label: "Terminación", main: "laboral" },
+      "memo" => { label: "Memorandos", main: "administrativo" },
+      "letter" => { label: "Cartas", main: "administrativo" },
+      "policy" => { label: "Políticas", main: "administrativo" },
+      "commercial_contract" => { label: "Contratos Comerciales", main: "comercial" },
+      "proposal" => { label: "Propuestas", main: "comercial" },
+      "agreement" => { label: "Acuerdos", main: "comercial" },
+      "nda" => { label: "NDA/Confidencialidad", main: "comercial" },
+      "other" => { label: "Otros", main: "administrativo" }
+    }.freeze
+
+    # Legacy alias for backward compatibility
+    CATEGORIES = SUBCATEGORIES.transform_values { |v| v[:label] }.freeze
 
     # Status values
     DRAFT = "draft"
@@ -27,7 +57,9 @@ module Templates
     # Fields
     field :name, type: String
     field :description, type: String
-    field :category, type: String, default: "other"
+    field :module_type, type: String, default: "hr" # hr, legal, admin
+    field :main_category, type: String, default: "laboral"
+    field :category, type: String, default: "other" # This is now the subcategory
     field :status, type: String, default: DRAFT
     field :version, type: Integer, default: 1
 
@@ -51,22 +83,35 @@ module Templates
 
     # Indexes
     index({ organization_id: 1 })
+    index({ module_type: 1 })
+    index({ main_category: 1 })
     index({ category: 1 })
     index({ status: 1 })
     index({ name: 1 })
-    index({ organization_id: 1, category: 1, status: 1 })
+    index({ organization_id: 1, module_type: 1, main_category: 1, category: 1, status: 1 })
 
     # Validations
     validates :name, presence: true, length: { maximum: 200 }
-    validates :category, presence: true, inclusion: { in: CATEGORIES.keys }
+    validates :module_type, presence: true, inclusion: { in: MODULES.keys }
+    validates :main_category, presence: true, inclusion: { in: MAIN_CATEGORIES.keys }
+    validates :category, presence: true, inclusion: { in: SUBCATEGORIES.keys }
     validates :status, presence: true, inclusion: { in: STATUSES }
     validates :file_id, presence: true, if: -> { active? }
+
+    # Callbacks
+    before_validation :infer_module_from_category, if: -> { main_category_changed? && module_type.blank? }
 
     # Scopes
     scope :draft, -> { where(status: DRAFT) }
     scope :active, -> { where(status: ACTIVE) }
     scope :archived, -> { where(status: ARCHIVED) }
+    scope :by_module, ->(mod) { where(module_type: mod) }
+    scope :for_hr, -> { where(module_type: "hr") }
+    scope :for_legal, -> { where(module_type: "legal") }
+    scope :for_admin, -> { where(module_type: "admin") }
+    scope :by_main_category, ->(main_cat) { where(main_category: main_cat) }
     scope :by_category, ->(category) { where(category: category) }
+    scope :by_subcategory, ->(subcategory) { where(category: subcategory) }
     scope :for_organization, ->(org) { where(organization_id: org.id) }
 
     # Instance methods
@@ -114,8 +159,36 @@ module Templates
       end
     end
 
+    def module_type_label
+      MODULES.dig(module_type, :label) || module_type
+    end
+
+    def module_type_icon
+      MODULES.dig(module_type, :icon) || "file"
+    end
+
+    def main_category_label
+      MAIN_CATEGORIES[main_category] || main_category
+    end
+
     def category_label
-      CATEGORIES[category] || category
+      SUBCATEGORIES.dig(category, :label) || category
+    end
+
+    # Alias for clarity
+    def subcategory_label
+      category_label
+    end
+
+    # Infer module_type from main_category
+    def infer_module_from_category
+      self.module_type = CATEGORY_TO_MODULE[main_category] || "admin"
+    end
+
+    # Infer main_category from subcategory if not set
+    def infer_main_category!
+      return if main_category.present?
+      self.main_category = SUBCATEGORIES.dig(category, :main) || "administrativo"
     end
 
     def required_signatories

@@ -33,6 +33,7 @@ import {
   ArrowDown
 } from 'lucide-react'
 
+// Solo categorías de Recursos Humanos
 const CATEGORIES = {
   employee: 'Empleado',
   organization: 'Organización',
@@ -40,6 +41,9 @@ const CATEGORIES = {
   system: 'Sistema',
   custom: 'Personalizado'
 }
+
+// Lista de categorías HR para filtrar
+const HR_CATEGORIES = ['employee', 'organization', 'request', 'system', 'custom']
 
 const DATA_TYPES = [
   { value: 'string', label: 'Texto' },
@@ -325,8 +329,8 @@ function PendingVariablesModal({ isOpen, onClose }) {
   const [newMappingData, setNewMappingData] = useState({})
 
   const { data: pendingData, isLoading, refetch } = useQuery({
-    queryKey: ['pending-variables'],
-    queryFn: () => variableMappingService.pendingVariables(),
+    queryKey: ['pending-variables-hr'],
+    queryFn: () => variableMappingService.pendingVariables({ module_type: 'hr' }),
     enabled: isOpen
   })
 
@@ -674,102 +678,37 @@ function PendingVariablesModal({ isOpen, onClose }) {
 }
 
 function AliasModal({ isOpen, onClose, mappings }) {
-  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
-  const [pendingChanges, setPendingChanges] = useState({}) // {variableId: targetKeyId}
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
-  // Group mappings by key to identify which are "primary" (first one)
+  // Group mappings by key to show shared keys
   const keyGroups = mappings.reduce((acc, m) => {
     if (!acc[m.key]) acc[m.key] = []
     acc[m.key].push(m)
     return acc
   }, {})
 
-  // Get unique keys with their "primary" name (first mapping with that key)
-  const uniqueKeys = Object.entries(keyGroups).map(([key, vars]) => ({
-    key,
-    primaryName: vars[0].name,
-    count: vars.length
-  }))
-
-  // Filter mappings based on search
-  const filteredMappings = mappings.filter(m =>
-    m.name.toLowerCase().includes(search.toLowerCase()) ||
-    m.key.toLowerCase().includes(search.toLowerCase())
+  // Filter groups based on search
+  const filteredGroups = Object.entries(keyGroups).filter(([key, vars]) =>
+    key.toLowerCase().includes(search.toLowerCase()) ||
+    vars.some(v => v.name.toLowerCase().includes(search.toLowerCase()))
   )
+
+  // Only show groups with multiple variables (shared keys)
+  const sharedKeyGroups = filteredGroups.filter(([_, vars]) => vars.length > 1)
+
+  // Count totals
+  const totalSharedKeys = Object.values(keyGroups).filter(vars => vars.length > 1).length
+  const totalAliasVariables = Object.values(keyGroups)
+    .filter(vars => vars.length > 1)
+    .reduce((sum, vars) => sum + vars.length, 0)
 
   useEffect(() => {
     if (isOpen) {
       setSearch('')
-      setPendingChanges({})
-      setError('')
-      setSuccess('')
     }
   }, [isOpen])
 
-  const linkMutation = useMutation({
-    mutationFn: ({ primaryId, aliasIds }) => variableMappingService.merge(primaryId, aliasIds),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries(['variable-mappings'])
-      // Remove from pending changes
-      setPendingChanges(prev => {
-        const next = { ...prev }
-        variables.aliasIds.forEach(id => delete next[id])
-        return next
-      })
-      setSuccess('Alias configurado exitosamente')
-      setTimeout(() => setSuccess(''), 3000)
-    },
-    onError: (err) => {
-      setError(err.response?.data?.error || 'Error al configurar alias')
-    }
-  })
-
-  const handleChangeSource = (variableId, newKeyId) => {
-    const variable = mappings.find(m => m.id === variableId)
-    const targetKey = mappings.find(m => m.id === newKeyId)
-
-    if (!variable || !targetKey) return
-    if (variable.key === targetKey.key) {
-      // Already same key, remove from pending
-      setPendingChanges(prev => {
-        const next = { ...prev }
-        delete next[variableId]
-        return next
-      })
-      return
-    }
-
-    setPendingChanges(prev => ({
-      ...prev,
-      [variableId]: newKeyId
-    }))
-  }
-
-  const handleApplyChange = (variableId) => {
-    const targetKeyId = pendingChanges[variableId]
-    if (!targetKeyId) return
-
-    setError('')
-    linkMutation.mutate({ primaryId: targetKeyId, aliasIds: [variableId] })
-  }
-
-  const handleApplyAll = () => {
-    const changes = Object.entries(pendingChanges)
-    if (changes.length === 0) return
-
-    setError('')
-    // Apply changes one by one (could be optimized with batch endpoint)
-    changes.forEach(([variableId, targetKeyId]) => {
-      linkMutation.mutate({ primaryId: targetKeyId, aliasIds: [variableId] })
-    })
-  }
-
   if (!isOpen) return null
-
-  const pendingCount = Object.keys(pendingChanges).length
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -778,10 +717,10 @@ function AliasModal({ isOpen, onClose, mappings }) {
           <div>
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <Link2 className="w-5 h-5 text-primary-600" />
-              Gestionar Aliases
+              Variables con Clave Compartida
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Configura la fuente de datos para cada variable
+              Estas variables apuntan a la misma fuente de datos
             </p>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
@@ -790,146 +729,65 @@ function AliasModal({ isOpen, onClose, mappings }) {
         </div>
 
         <div className="p-4 border-b bg-gray-50">
-          <div className="flex items-center gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar variable..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            {pendingCount > 0 && (
-              <Button onClick={handleApplyAll} loading={linkMutation.isPending}>
-                <Save className="w-4 h-4" />
-                Aplicar {pendingCount} cambio{pendingCount > 1 ? 's' : ''}
-              </Button>
-            )}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por clave o nombre..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-4 h-4" />
-              <span className="text-sm">{error}</span>
-              <button onClick={() => setError('')} className="ml-auto">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
-              <CheckCircle className="w-4 h-4" />
-              <span className="text-sm">{success}</span>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-gray-100 rounded-lg text-xs font-medium text-gray-600 uppercase">
-              <div className="col-span-4">Variable</div>
-              <div className="col-span-5">Fuente (Alias de)</div>
-              <div className="col-span-3 text-right">Accion</div>
-            </div>
-
-            {filteredMappings.map(mapping => {
-              const currentKey = mapping.key
-              const pendingTargetId = pendingChanges[mapping.id]
-              const pendingTarget = pendingTargetId ? mappings.find(m => m.id === pendingTargetId) : null
-              const hasChange = !!pendingTargetId
-              const aliasCount = keyGroups[currentKey]?.length || 1
-
-              return (
-                <div
-                  key={mapping.id}
-                  className={`grid grid-cols-12 gap-2 px-3 py-3 rounded-lg border ${
-                    hasChange ? 'border-amber-300 bg-amber-50' : 'border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="col-span-4">
-                    <div className="font-medium text-sm">{mapping.name}</div>
-                    <div className="text-xs text-gray-500 flex items-center gap-1">
-                      <Badge variant="secondary" className="text-xs">
-                        {CATEGORIES[mapping.category] || mapping.category}
-                      </Badge>
-                      {aliasCount > 1 && (
-                        <span className="text-green-600">
-                          ({aliasCount} aliases)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="col-span-5">
-                    <select
-                      value={pendingTargetId || mapping.id}
-                      onChange={(e) => handleChangeSource(mapping.id, e.target.value)}
-                      className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                        hasChange ? 'border-amber-400 bg-white' : 'border-gray-300'
-                      }`}
-                    >
-                      <option value={mapping.id}>
-                        {mapping.key} (actual)
-                      </option>
-                      {uniqueKeys
-                        .filter(uk => uk.key !== currentKey)
-                        .map(uk => (
-                          <option key={uk.key} value={keyGroups[uk.key][0].id}>
-                            {uk.key} → {uk.primaryName}
-                          </option>
-                        ))
-                      }
-                    </select>
-                    {hasChange && (
-                      <div className="mt-1 text-xs text-amber-600">
-                        Cambiara a: <code className="bg-white px-1 rounded">{pendingTarget?.key}</code>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="col-span-3 flex items-center justify-end gap-2">
-                    {hasChange && (
-                      <>
-                        <button
-                          onClick={() => setPendingChanges(prev => {
-                            const next = { ...prev }
-                            delete next[mapping.id]
-                            return next
-                          })}
-                          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
-                          title="Cancelar"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleApplyChange(mapping.id)}
-                          loading={linkMutation.isPending}
-                        >
-                          <CheckCircle className="w-3 h-3" />
-                          Aplicar
-                        </Button>
-                      </>
-                    )}
-                  </div>
+          <div className="space-y-4">
+            {sharedKeyGroups.map(([key, variables]) => (
+              <div
+                key={key}
+                className="p-4 rounded-lg border border-primary-200 bg-primary-50/30"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <code className="text-sm font-medium text-primary-700 bg-primary-100 px-2 py-1 rounded">
+                    {key}
+                  </code>
+                  <Badge variant="primary" className="text-xs">
+                    {variables.length} variables
+                  </Badge>
                 </div>
-              )
-            })}
+
+                <div className="space-y-2">
+                  {variables.map(v => (
+                    <div
+                      key={v.id}
+                      className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200"
+                    >
+                      {v.is_system && <Lock className="w-3 h-3 text-gray-400 flex-shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{v.name}</div>
+                        <div className="text-xs text-gray-500 truncate">{v.description}</div>
+                      </div>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">
+                        {CATEGORIES[v.category] || v.category}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
 
-          {filteredMappings.length === 0 && (
+          {sharedKeyGroups.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No se encontraron variables
+              {search ? 'No se encontraron coincidencias' : 'No hay variables con claves compartidas'}
             </div>
           )}
         </div>
 
         <div className="p-4 border-t bg-gray-50 flex justify-between">
           <div className="text-sm text-gray-500">
-            {mappings.length} variables · {uniqueKeys.length} fuentes unicas
+            {totalSharedKeys} claves compartidas · {totalAliasVariables} variables
           </div>
           <Button variant="secondary" onClick={onClose}>
             Cerrar
@@ -940,22 +798,34 @@ function AliasModal({ isOpen, onClose, mappings }) {
   )
 }
 
-function MappingRow({ mapping, onEdit, onToggle, onDelete, isAdmin }) {
+function MappingRow({ mapping, onEdit, onToggle, onDelete, isAdmin, siblingNames }) {
   const isSystem = mapping.is_system
+  const hasSiblings = siblingNames && siblingNames.length > 0
 
   return (
     <tr className={`${!mapping.active ? 'opacity-50 bg-gray-50' : ''}`}>
+      {/* Primera columna: Clave */}
+      <td className="px-4 py-3">
+        <code className="px-2 py-1 bg-gray-100 rounded text-xs font-medium">{mapping.key}</code>
+      </td>
+      {/* Segunda columna: Nombre(s) */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          {isSystem && <Lock className="w-3 h-3 text-gray-400" />}
+          {isSystem && <Lock className="w-3 h-3 text-gray-400 flex-shrink-0" />}
           <span className="font-medium">{mapping.name}</span>
         </div>
+        {hasSiblings && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {siblingNames.map(name => (
+              <span key={name} className="inline-flex items-center px-2 py-0.5 bg-primary-50 text-primary-700 text-xs rounded">
+                {name}
+              </span>
+            ))}
+          </div>
+        )}
         {mapping.description && (
           <p className="text-xs text-gray-500 mt-0.5">{mapping.description}</p>
         )}
-      </td>
-      <td className="px-4 py-3">
-        <code className="px-2 py-1 bg-gray-100 rounded text-xs">{mapping.key}</code>
       </td>
       <td className="px-4 py-3">
         <Badge variant="secondary" className="text-xs">
@@ -1005,8 +875,7 @@ function MappingRow({ mapping, onEdit, onToggle, onDelete, isAdmin }) {
 }
 
 export default function VariableMappings() {
-  const { user } = useAuth()
-  const isAdmin = user?.roles?.includes('admin')
+  const { isAdmin } = useAuth()
   const queryClient = useQueryClient()
   const [showModal, setShowModal] = useState(false)
   const [showPendingModal, setShowPendingModal] = useState(false)
@@ -1081,11 +950,14 @@ export default function VariableMappings() {
       : <ArrowDown className="w-3 h-3 text-primary-600" />
   }
 
-  const mappings = mappingsData?.data?.data || []
+  const allMappings = mappingsData?.data?.data || []
   const meta = mappingsData?.data?.meta || {}
 
+  // Filtrar solo variables de HR
+  const hrMappings = allMappings.filter(m => HR_CATEGORIES.includes(m.category))
+
   // Filter and sort
-  const filteredMappings = mappings
+  const filteredMappings = hrMappings
     .filter(m => {
       // Search filter
       if (searchQuery) {
@@ -1133,13 +1005,26 @@ export default function VariableMappings() {
       return 0
     })
 
+  // Group all mappings by key to find siblings (names sharing the same key)
+  const keyToNames = hrMappings.reduce((acc, m) => {
+    if (!acc[m.key]) acc[m.key] = []
+    acc[m.key].push(m.name)
+    return acc
+  }, {})
+
+  // Get sibling names for a mapping (other names with the same key, excluding itself)
+  const getSiblingNames = (mapping) => {
+    const allNames = keyToNames[mapping.key] || []
+    return allNames.filter(name => name !== mapping.name)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Mapeos de Variables</h1>
-          <p className="text-gray-500">Gestiona las variables disponibles para templates</p>
+          <h1 className="text-2xl font-bold text-gray-900">Variables de Recursos Humanos</h1>
+          <p className="text-gray-500">Variables para templates de empleados, certificaciones y solicitudes</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -1247,10 +1132,10 @@ export default function VariableMappings() {
             )}
           </div>
           {/* Results counter */}
-          {!isLoading && mappings.length > 0 && (
+          {!isLoading && hrMappings.length > 0 && (
             <div className="mt-3 flex items-center justify-between text-sm text-gray-500">
               <span>
-                Mostrando <strong>{filteredMappings.length}</strong> de <strong>{mappings.length}</strong> variables
+                Mostrando <strong>{filteredMappings.length}</strong> de <strong>{hrMappings.length}</strong> variables
                 {sortColumn && (
                   <span className="ml-2 text-gray-400">
                     · Ordenado por {sortColumn === 'name' ? 'nombre' : sortColumn === 'key' ? 'clave' : sortColumn === 'category' ? 'categoría' : sortColumn === 'data_type' ? 'tipo' : 'estado'} ({sortDirection === 'asc' ? 'A-Z' : 'Z-A'})
@@ -1276,12 +1161,12 @@ export default function VariableMappings() {
                 No hay mapeos
               </h3>
               <p className="text-gray-500 mb-4">
-                {mappings.length === 0
+                {hrMappings.length === 0
                   ? 'Inicializa los mapeos del sistema o crea uno personalizado'
                   : 'No se encontraron mapeos con los filtros aplicados'
                 }
               </p>
-              {mappings.length === 0 && (
+              {hrMappings.length === 0 && (
                 <Button onClick={() => seedMutation.mutate()} loading={seedMutation.isPending}>
                   <Database className="w-4 h-4" />
                   Inicializar Mapeos del Sistema
@@ -1294,21 +1179,21 @@ export default function VariableMappings() {
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th
-                      onClick={() => handleSort('name')}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none"
-                    >
-                      <div className="flex items-center gap-1">
-                        Nombre
-                        <SortIcon column="name" />
-                      </div>
-                    </th>
-                    <th
                       onClick={() => handleSort('key')}
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none"
                     >
                       <div className="flex items-center gap-1">
                         Clave
                         <SortIcon column="key" />
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort('name')}
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none"
+                    >
+                      <div className="flex items-center gap-1">
+                        Nombre(s)
+                        <SortIcon column="name" />
                       </div>
                     </th>
                     <th
@@ -1352,6 +1237,7 @@ export default function VariableMappings() {
                       onToggle={handleToggle}
                       onDelete={handleDelete}
                       isAdmin={isAdmin}
+                      siblingNames={getSiblingNames(mapping)}
                     />
                   ))}
                 </tbody>
@@ -1362,9 +1248,9 @@ export default function VariableMappings() {
       </Card>
 
       {/* Stats */}
-      {meta.total > 0 && (
+      {hrMappings.length > 0 && (
         <div className="text-sm text-gray-500 text-center">
-          Mostrando {filteredMappings.length} de {meta.total} mapeos
+          Mostrando {filteredMappings.length} de {hrMappings.length} variables de Recursos Humanos
         </div>
       )}
 
@@ -1385,7 +1271,7 @@ export default function VariableMappings() {
       <AliasModal
         isOpen={showAliasModal}
         onClose={() => setShowAliasModal(false)}
-        mappings={mappings}
+        mappings={hrMappings}
       />
     </div>
   )

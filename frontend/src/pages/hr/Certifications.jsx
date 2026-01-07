@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { certificationService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -7,7 +8,8 @@ import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
-import { FileText, Plus, X, Eye, Filter, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { FileText, Plus, X, Eye, Filter, Clock, CheckCircle, AlertCircle, Calendar, Download, FilePlus, Loader2, AlertTriangle, ExternalLink, Trash2, PenTool } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 const certificationTypes = [
   { value: 'employment', label: 'Certificación Laboral Básica' },
@@ -226,70 +228,29 @@ function CertificationForm({ onSubmit, onCancel, loading }) {
   )
 }
 
-function CertificationCard({ certification, onCancel, onView }) {
-  const statusIcons = {
-    pending: <Clock className="w-4 h-4 text-yellow-500" />,
-    processing: <Clock className="w-4 h-4 text-blue-500 animate-pulse" />,
-    completed: <CheckCircle className="w-4 h-4 text-green-500" />,
-    rejected: <AlertCircle className="w-4 h-4 text-red-500" />,
-    cancelled: <X className="w-4 h-4 text-gray-400" />,
-  }
-
-  return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-primary-50 rounded-lg">
-              <FileText className="w-5 h-5 text-primary-600" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-900">
-                {typeLabels[certification.certification_type] || certification.certification_type}
-              </p>
-              <p className="text-sm text-gray-500">
-                {certification.request_number}
-              </p>
-              <p className="text-sm text-gray-600 mt-1">
-                {purposeLabels[certification.purpose] || certification.purpose}
-              </p>
-              <div className="flex items-center gap-1 mt-1 text-sm text-gray-500">
-                <Clock className="w-3 h-3" />
-                <span>{certification.estimated_days} día{certification.estimated_days > 1 ? 's' : ''}</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {statusIcons[certification.status]}
-            <Badge status={certification.status} />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-          <Button variant="ghost" size="sm" onClick={() => onView(certification)}>
-            <Eye className="w-4 h-4" />
-            Ver
-          </Button>
-
-          {['pending', 'processing'].includes(certification.status) && (
-            <Button variant="danger" size="sm" onClick={() => onCancel(certification.id)}>
-              <X className="w-4 h-4" />
-              Cancelar
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  )
+const statusIcons = {
+  pending: <Clock className="w-4 h-4 text-yellow-500" />,
+  processing: <Clock className="w-4 h-4 text-blue-500 animate-pulse" />,
+  completed: <CheckCircle className="w-4 h-4 text-green-500" />,
+  rejected: <AlertCircle className="w-4 h-4 text-red-500" />,
+  cancelled: <X className="w-4 h-4 text-gray-400" />,
 }
 
 export default function Certifications() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [errorData, setErrorData] = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [selectedCertification, setSelectedCertification] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [generatingId, setGeneratingId] = useState(null)
+  const [downloadingId, setDownloadingId] = useState(null)
+  const [signingId, setSigningId] = useState(null)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const { isHR, isAdmin } = useAuth()
 
   const { data, isLoading } = useQuery({
     queryKey: ['certifications', { status: statusFilter, type: typeFilter }],
@@ -314,11 +275,99 @@ export default function Certifications() {
     },
   })
 
+  const generateMutation = useMutation({
+    mutationFn: (id) => certificationService.generateDocument(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['certifications'])
+      setGeneratingId(null)
+    },
+    onError: (error) => {
+      console.error('Error generating document:', error)
+      setGeneratingId(null)
+
+      const responseData = error.response?.data
+      if (responseData?.error_type === 'missing_variables') {
+        setErrorData({
+          message: responseData.error,
+          missingData: responseData.missing_data,
+          actions: responseData.action_required || []
+        })
+        setShowErrorModal(true)
+      } else {
+        alert(responseData?.error || 'Error al generar documento')
+      }
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => certificationService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['certifications'])
+      setDeleteConfirm(null)
+    },
+    onError: (error) => {
+      console.error('Error deleting certification:', error)
+      alert(error.response?.data?.error || 'Error al eliminar certificación')
+    },
+  })
+
+  const signMutation = useMutation({
+    mutationFn: (id) => certificationService.signDocument(id),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['certifications'])
+      setSigningId(null)
+      const doc = response.data.document
+      if (doc.all_signed) {
+        alert('Documento firmado y completado exitosamente')
+      } else {
+        alert(`Documento firmado. Firmas pendientes: ${doc.pending_signatures.join(', ')}`)
+      }
+    },
+    onError: (error) => {
+      console.error('Error signing document:', error)
+      setSigningId(null)
+      const errorData = error.response?.data
+      if (errorData?.action_required?.type === 'configure_signature') {
+        if (confirm('No tienes firma digital configurada. ¿Deseas configurarla ahora?')) {
+          navigate('/profile')
+        }
+      } else {
+        alert(errorData?.error || 'Error al firmar documento')
+      }
+    },
+  })
+
   const certifications = data?.data?.data || []
 
   const handleView = (certification) => {
     setSelectedCertification(certification)
     setShowDetailModal(true)
+  }
+
+  const handleGenerateDocument = async (id) => {
+    setGeneratingId(id)
+    generateMutation.mutate(id)
+  }
+
+  const handleDownloadDocument = async (certification) => {
+    try {
+      setDownloadingId(certification.id)
+      const response = await certificationService.downloadDocument(certification.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${certification.request_number}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading document:', error)
+      alert('Error al descargar documento')
+    } finally {
+      setDownloadingId(null)
+    }
   }
 
   return (
@@ -394,44 +443,204 @@ export default function Certifications() {
       </div>
 
       {/* Certification List */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-4">
-                <div className="h-24 bg-gray-100 rounded" />
-              </CardContent>
-            </Card>
-          ))}
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="w-[15%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Número
+                </th>
+                <th className="w-[18%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Tipo
+                </th>
+                <th className="w-[17%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Propósito
+                </th>
+                <th className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Estado
+                </th>
+                <th className="w-[10%] px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Días
+                </th>
+                <th className="w-[13%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Fecha
+                </th>
+                <th className="w-[15%] px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {isLoading ? (
+                [...Array(3)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-8 mx-auto"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-16 mx-auto"></div></td>
+                  </tr>
+                ))
+              ) : certifications.length > 0 ? (
+                certifications.map((certification) => (
+                  <tr key={certification.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <code className="text-sm font-mono text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
+                        {certification.request_number}
+                      </code>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-sm font-medium text-gray-900 truncate">
+                          {typeLabels[certification.certification_type] || certification.certification_type}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-gray-600 truncate block">
+                        {purposeLabels[certification.purpose] || certification.purpose}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        {statusIcons[certification.status]}
+                        <Badge status={certification.status} />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-sm text-gray-600">
+                        {certification.estimated_days}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 text-sm text-gray-500">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{new Date(certification.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handleView(certification)}
+                          className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                          title="Ver detalle"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {/* Botón generar documento (HR/Admin, cuando está pending y no tiene documento) */}
+                        {(isHR || isAdmin) && certification.status === 'pending' && !certification.document_uuid && (
+                          <button
+                            onClick={() => handleGenerateDocument(certification.id)}
+                            disabled={generatingId === certification.id}
+                            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
+                            title="Generar documento"
+                          >
+                            {generatingId === certification.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <FilePlus className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                        {/* Botón descargar (cuando hay documento y puede descargar) */}
+                        {certification.document_uuid && certification.document_info?.can_download && (
+                          <button
+                            onClick={() => handleDownloadDocument(certification)}
+                            disabled={downloadingId === certification.id}
+                            className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                            title="Descargar"
+                          >
+                            {downloadingId === certification.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Download className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                        {/* Botón firmar (HR/Admin cuando hay firmas pendientes) */}
+                        {certification.document_uuid && certification.document_info?.pending_signatures?.length > 0 && (isHR || isAdmin) && (
+                          <button
+                            onClick={() => {
+                              setSigningId(certification.id)
+                              signMutation.mutate(certification.id)
+                            }}
+                            disabled={signingId === certification.id}
+                            className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors disabled:opacity-50"
+                            title={`Firmar documento (Pendiente: ${certification.document_info?.pending_signatures?.join(', ')})`}
+                          >
+                            {signingId === certification.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <PenTool className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                        {/* Indicador de firmas pendientes (para empleados sin permisos de firma) */}
+                        {certification.document_uuid && !certification.document_info?.can_download && !(isHR || isAdmin) && (
+                          <span
+                            className="inline-flex items-center px-2 py-1 text-xs text-amber-700 bg-amber-50 rounded"
+                            title={`Pendiente: ${certification.document_info?.pending_signatures?.join(', ')}`}
+                          >
+                            <Clock className="w-3 h-3 mr-1" />
+                            Firma pendiente
+                          </span>
+                        )}
+                        {/* Botón cancelar (cuando está pendiente/procesando) */}
+                        {['pending', 'processing'].includes(certification.status) && !isAdmin && (
+                          <button
+                            onClick={() => cancelMutation.mutate(certification.id)}
+                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Cancelar"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                        {/* Botón eliminar (solo admin) */}
+                        {isAdmin && (
+                          <button
+                            onClick={() => setDeleteConfirm(certification)}
+                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center">
+                    <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                    <h3 className="text-base font-medium text-gray-900 mb-1">
+                      No tienes solicitudes de certificaciones
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Solicita una certificación laboral para tus trámites
+                    </p>
+                    <Button size="sm" onClick={() => setShowNewModal(true)}>
+                      <Plus className="w-4 h-4" />
+                      Nueva Solicitud
+                    </Button>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : certifications.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {certifications.map((certification) => (
-            <CertificationCard
-              key={certification.id}
-              certification={certification}
-              onCancel={(id) => cancelMutation.mutate(id)}
-              onView={handleView}
-            />
-          ))}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <FileText className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No tienes solicitudes de certificaciones
-            </h3>
-            <p className="text-gray-500 mb-4">
-              Solicita una certificación laboral para tus trámites
+        {certifications.length > 0 && (
+          <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+            <p className="text-sm text-gray-500">
+              {certifications.length} solicitud{certifications.length !== 1 ? 'es' : ''}
             </p>
-            <Button onClick={() => setShowNewModal(true)}>
-              <Plus className="w-4 h-4" />
-              Nueva Solicitud
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
+      </Card>
 
       {/* New Certification Modal */}
       <Modal
@@ -525,12 +734,145 @@ export default function Certifications() {
             {/* Download button for completed certifications */}
             {selectedCertification.status === 'completed' && selectedCertification.document_uuid && (
               <div className="pt-4 border-t">
-                <Button className="w-full" variant="primary">
+                <Button className="w-full" variant="primary" onClick={() => handleDownloadDocument(selectedCertification)}>
                   <FileText className="w-4 h-4" />
                   Descargar Certificación
                 </Button>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Error Modal - Missing Variables */}
+      <Modal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title="No se puede generar el documento"
+        size="md"
+      >
+        {errorData && (
+          <div className="space-y-4">
+            {/* Error message */}
+            <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-800">Información faltante</p>
+                <p className="text-sm text-red-700 mt-1">{errorData.message}</p>
+              </div>
+            </div>
+
+            {/* Missing fields by source */}
+            {errorData.missingData?.by_source?.employee?.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm font-medium text-amber-800 mb-2">
+                  Datos del empleado requeridos:
+                </p>
+                <ul className="list-disc list-inside text-sm text-amber-700 space-y-1">
+                  {errorData.missingData.by_source.employee.map((item, idx) => (
+                    <li key={idx}>{item.field_label || item.field}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {errorData.missingData?.by_source?.organization?.length > 0 && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm font-medium text-blue-800 mb-2">
+                  Datos de la organización requeridos:
+                </p>
+                <ul className="list-disc list-inside text-sm text-blue-700 space-y-1">
+                  {errorData.missingData.by_source.organization.map((item, idx) => (
+                    <li key={idx}>{item.field_label || item.field}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2 pt-4 border-t">
+              {errorData.actions?.map((action, idx) => (
+                <Button
+                  key={idx}
+                  variant={idx === 0 ? 'primary' : 'secondary'}
+                  className="w-full justify-center"
+                  onClick={() => {
+                    setShowErrorModal(false)
+                    if (action.type === 'edit_employee' && action.employee_id) {
+                      navigate(`/hr/employees?edit=${action.employee_id}`)
+                    } else if (action.type === 'edit_organization') {
+                      navigate('/admin/organization')
+                    } else if (action.type === 'configure_mappings') {
+                      navigate('/admin/variable-mappings')
+                    }
+                  }}
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {action.label}
+                  {action.employee_name && ` (${action.employee_name})`}
+                </Button>
+              ))}
+              <Button
+                variant="ghost"
+                className="w-full justify-center"
+                onClick={() => setShowErrorModal(false)}
+              >
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        title="Eliminar Certificación"
+        size="sm"
+      >
+        {deleteConfirm && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-800">¿Eliminar esta certificación?</p>
+                <p className="text-sm text-red-700 mt-1">
+                  Esta acción no se puede deshacer. Se eliminará permanentemente la solicitud{' '}
+                  <strong>{deleteConfirm.request_number}</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Tipo:</span>
+                <span className="font-medium">{typeLabels[deleteConfirm.certification_type]}</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-gray-500">Estado:</span>
+                <Badge status={deleteConfirm.status} />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setDeleteConfirm(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="danger"
+                className="flex-1"
+                loading={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(deleteConfirm.id)}
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar
+              </Button>
+            </div>
           </div>
         )}
       </Modal>

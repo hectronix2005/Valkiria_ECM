@@ -29,6 +29,7 @@ Rails.application.routes.draw do
         resources :signatures, except: [:edit, :new] do
           member do
             post :set_default
+            post :toggle_active
           end
           collection do
             get :fonts
@@ -61,7 +62,8 @@ Rails.application.routes.draw do
         resources :variable_mappings do
           member do
             post :toggle_active
-            delete :remove_alias
+            post :add_alias
+            post :remove_alias
           end
           collection do
             get :grouped
@@ -70,7 +72,6 @@ Rails.application.routes.draw do
             post :seed_system
             post :reorder
             post :merge
-            post :create_alias
             post :auto_assign
             post :create_and_assign
           end
@@ -116,17 +117,21 @@ Rails.application.routes.draw do
       # HR Module
       namespace :hr do
         # Employee's own requests
-        resources :vacations, except: [:destroy] do
+        resources :vacations do
           member do
             post :submit
             post :cancel
+            post :generate_document
+            post :sign_document
+            get :download_document
           end
         end
 
-        resources :certifications, except: [:destroy] do
+        resources :certifications do
           member do
             post :cancel
             post :generate_document
+            post :sign_document
             get :download_document
           end
         end
@@ -150,6 +155,41 @@ Rails.application.routes.draw do
         end
 
         # HR Dashboard stats
+        get "dashboard", to: "dashboard#show"
+      end
+
+      # Legal Module
+      namespace :legal do
+        # Third parties (providers, clients, contractors, etc.)
+        resources :third_parties do
+          member do
+            post :activate
+            post :deactivate
+            post :block
+          end
+        end
+
+        # Contracts with multi-level approval
+        resources :contracts do
+          member do
+            post :submit
+            post :activate
+            post :terminate
+            post :cancel
+            post :generate_document
+            get :download_document
+          end
+        end
+
+        # Contract approvals (for approvers)
+        resources :contract_approvals, only: [:index, :show] do
+          member do
+            post :approve
+            post :reject
+          end
+        end
+
+        # Legal Dashboard stats
         get "dashboard", to: "dashboard#show"
       end
 

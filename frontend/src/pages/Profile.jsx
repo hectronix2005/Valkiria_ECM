@@ -31,7 +31,9 @@ import {
   Trash2,
   Star,
   Plus,
-  Type
+  Type,
+  Power,
+  FileText
 } from 'lucide-react'
 
 function InfoRow({ icon: Icon, label, value }) {
@@ -329,6 +331,24 @@ function SignatureSection() {
     mutationFn: (id) => signatureService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries(['signatures'])
+    },
+    onError: (err) => {
+      const data = err.response?.data
+      if (data?.in_use) {
+        alert(`Esta firma está siendo utilizada en ${data.documents_count} documento(s). Desactívela en lugar de eliminarla.`)
+      } else {
+        alert(data?.error || 'Error al eliminar la firma')
+      }
+    }
+  })
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: (id) => signatureService.toggleActive(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['signatures'])
+    },
+    onError: (err) => {
+      alert(err.response?.data?.error || 'Error al cambiar estado de la firma')
     }
   })
 
@@ -409,13 +429,14 @@ function SignatureSection() {
               <div
                 key={sig.id}
                 className={`flex items-center gap-4 p-4 border rounded-lg ${
+                  !sig.active ? 'border-gray-200 bg-gray-50 opacity-60' :
                   sig.is_default ? 'border-primary-300 bg-primary-50' : 'border-gray-200'
                 }`}
               >
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-medium">{sig.name}</span>
-                    {sig.is_default && (
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className={`font-medium ${!sig.active ? 'text-gray-500' : ''}`}>{sig.name}</span>
+                    {sig.is_default && sig.active && (
                       <Badge status="approved" className="text-xs">
                         <Star className="w-3 h-3 mr-1" />
                         Predeterminada
@@ -428,10 +449,21 @@ function SignatureSection() {
                         <><Type className="w-3 h-3 mr-1" /> Estilizada</>
                       )}
                     </Badge>
+                    {!sig.active && (
+                      <Badge status="cancelled" className="text-xs">
+                        Desactivada
+                      </Badge>
+                    )}
+                    {sig.in_use && (
+                      <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700">
+                        <FileText className="w-3 h-3 mr-1" />
+                        En uso ({sig.documents_count})
+                      </Badge>
+                    )}
                   </div>
                   {sig.signature_type === 'styled' && (
                     <p
-                      className="text-2xl"
+                      className={`text-2xl ${!sig.active ? 'opacity-50' : ''}`}
                       style={{
                         fontFamily: `"${sig.font_family}", cursive`,
                         color: sig.font_color
@@ -442,25 +474,43 @@ function SignatureSection() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {!sig.is_default && (
+                  {/* Toggle Active */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => toggleActiveMutation.mutate(sig.id)}
+                    disabled={toggleActiveMutation.isPending}
+                    title={sig.active ? 'Desactivar firma' : 'Activar firma'}
+                  >
+                    <Power className={`w-4 h-4 ${sig.active ? 'text-green-600' : 'text-gray-400'}`} />
+                  </Button>
+                  {/* Set Default */}
+                  {!sig.is_default && sig.active && (
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={() => setDefaultMutation.mutate(sig.id)}
                       disabled={setDefaultMutation.isPending}
+                      title="Establecer como predeterminada"
                     >
                       <Star className="w-4 h-4" />
                     </Button>
                   )}
+                  {/* Delete - only if not in use */}
                   <Button
                     size="sm"
                     variant="danger"
                     onClick={() => {
+                      if (sig.in_use) {
+                        alert(`Esta firma está siendo utilizada en ${sig.documents_count} documento(s). Desactívela en lugar de eliminarla.`)
+                        return
+                      }
                       if (confirm('¿Está seguro de eliminar esta firma?')) {
                         deleteMutation.mutate(sig.id)
                       }
                     }}
-                    disabled={deleteMutation.isPending}
+                    disabled={deleteMutation.isPending || sig.in_use}
+                    title={sig.in_use ? 'No se puede eliminar, está en uso' : 'Eliminar firma'}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -737,7 +787,7 @@ export default function Profile() {
               {/* Main Balance */}
               <div className="text-center py-4 bg-primary-50 rounded-xl">
                 <p className="text-4xl font-bold text-primary-600">
-                  {vacation.days_available || 0}
+                  {Math.floor(vacation.days_available || 0)}
                 </p>
                 <p className="text-sm text-primary-700 mt-1">Días disponibles</p>
               </div>
@@ -754,15 +804,15 @@ export default function Profile() {
               <div className="space-y-3 pt-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Días causados (total)</span>
-                  <span className="font-medium">{vacation.days_accrued_total?.toFixed(1) || 0}</span>
+                  <span className="font-medium">{Math.floor(vacation.days_accrued_total || 0)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Días usados (total)</span>
-                  <span className="font-medium">{vacation.days_used_total || 0}</span>
+                  <span className="font-medium">{Math.floor(vacation.days_used_total || 0)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Días pendientes</span>
-                  <span className="font-medium text-primary-600">{vacation.days_pending?.toFixed(1) || 0}</span>
+                  <span className="font-medium text-primary-600">{Math.floor(vacation.days_pending || 0)}</span>
                 </div>
                 <div className="border-t pt-3">
                   <div className="flex justify-between text-sm">
@@ -778,7 +828,7 @@ export default function Profile() {
                   <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5" />
                   <div>
                     <p className="text-sm font-medium text-yellow-800">
-                      {vacation.days_expiring.toFixed(1)} días por vencer
+                      {Math.floor(vacation.days_expiring)} días por vencer
                     </p>
                     <p className="text-xs text-yellow-600">
                       Exceden el máximo acumulable de {vacation.max_accumulation_days} días

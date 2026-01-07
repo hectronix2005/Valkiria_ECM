@@ -131,8 +131,10 @@ module Api
         end
 
         # GET /api/v1/admin/variable_mappings/pending_variables
+        # Params: module_type (hr, legal, admin) - filter templates by module
         def pending_variables
           templates = ::Templates::Template.for_organization(current_organization)
+          templates = templates.by_module(params[:module_type]) if params[:module_type].present?
           available_mappings = ::Templates::VariableMapping.available_for(current_organization)
 
           pending_data = []
@@ -260,87 +262,72 @@ module Api
         end
 
         # GET /api/v1/admin/variable_mappings/aliases
-        # Get all variables grouped by their key (shows aliases)
+        # Get all variables that have aliases
         def aliases
           mappings = ::Templates::VariableMapping.available_for(current_organization)
-
-          # Group by key
-          grouped = mappings.group_by(&:key)
-
-          # Only return groups with more than one name (actual aliases)
-          alias_groups = grouped.select { |_key, vars| vars.size > 1 }
+                                                 .select { |m| m.aliases.present? && m.aliases.any? }
 
           render json: {
-            data: alias_groups.map do |key, vars|
-              {
-                key: key,
-                count: vars.size,
-                variables: vars.map { |v| mapping_json(v) }
-              }
-            end,
+            data: mappings.map { |m| mapping_json(m) },
             meta: {
-              total_groups: alias_groups.size,
-              total_aliases: alias_groups.values.flatten.size
+              total_with_aliases: mappings.size,
+              total_aliases: mappings.sum { |m| m.aliases.size }
             }
           }
         end
 
-        # POST /api/v1/admin/variable_mappings/create_alias
-        # Create an alias for an existing variable
-        def create_alias
-          source_id = params[:source_id]
+        # POST /api/v1/admin/variable_mappings/:id/add_alias
+        # Add an alias to an existing variable
+        def add_alias
+          mapping = ::Templates::VariableMapping.find_by(uuid: params[:id])
+          return render json: { error: "Variable no encontrada" }, status: :not_found unless mapping
+
           alias_name = params[:alias_name]
-
-          return render json: { error: "Se requiere source_id y alias_name" }, status: :bad_request if source_id.blank? || alias_name.blank?
-
-          source = ::Templates::VariableMapping.find_by(uuid: source_id)
-          return render json: { error: "Variable fuente no encontrada" }, status: :not_found unless source
+          return render json: { error: "Se requiere alias_name" }, status: :bad_request if alias_name.blank?
 
           # Normalize the alias name
           normalized_name = ::Templates::VariableNormalizer.normalize(alias_name)
 
-          # Check if alias already exists
-          existing = ::Templates::VariableMapping.where(name: normalized_name).first
-          if existing
-            return render json: { error: "Ya existe una variable con ese nombre" }, status: :unprocessable_content
+          # Check if alias already exists in this mapping
+          if mapping.name == normalized_name || mapping.aliases.include?(normalized_name)
+            return render json: { error: "Este alias ya existe en esta variable" }, status: :unprocessable_content
           end
 
-          # Create the alias
-          alias_mapping = ::Templates::VariableMapping.create!(
-            name: normalized_name,
-            key: source.key,
-            category: source.category,
-            description: "Alias de #{source.name}",
-            data_type: source.data_type,
-            is_system: false,
-            active: true,
-            organization: current_organization,
-            created_by: current_user
-          )
+          # Check if alias is already a name or alias in another mapping
+          existing = ::Templates::VariableMapping.find_by_name_or_alias(normalized_name)
+          if existing && existing.uuid != mapping.uuid
+            return render json: { error: "Este nombre ya existe en otra variable: #{existing.name}" }, status: :unprocessable_content
+          end
+
+          mapping.add_alias(alias_name)
 
           render json: {
-            data: mapping_json(alias_mapping),
-            message: "Alias creado exitosamente",
-            source: mapping_json(source)
-          }, status: :created
+            data: mapping_json(mapping.reload),
+            message: "Alias agregado exitosamente"
+          }
         end
 
         # DELETE /api/v1/admin/variable_mappings/:id/remove_alias
-        # Remove an alias (but keep the primary)
+        # Remove an alias from a variable
         def remove_alias
-          alias_mapping = ::Templates::VariableMapping.find_by(uuid: params[:id])
-          return render json: { error: "Alias no encontrado" }, status: :not_found unless alias_mapping
+          mapping = ::Templates::VariableMapping.find_by(uuid: params[:id])
+          return render json: { error: "Variable no encontrada" }, status: :not_found unless mapping
 
-          # Find other variables with the same key
-          same_key_count = ::Templates::VariableMapping.where(key: alias_mapping.key).count
+          alias_name = params[:alias_name]
+          return render json: { error: "Se requiere alias_name" }, status: :bad_request if alias_name.blank?
 
-          if same_key_count <= 1
-            return render json: { error: "No se puede eliminar la ultima variable con esta clave" }, status: :unprocessable_content
+          normalized_name = ::Templates::VariableNormalizer.normalize(alias_name)
+
+          unless mapping.aliases.include?(normalized_name)
+            return render json: { error: "Este alias no existe en esta variable" }, status: :unprocessable_content
           end
 
-          alias_mapping.destroy
+          mapping.remove_alias(alias_name)
 
-          render json: { message: "Alias eliminado exitosamente" }
+          render json: {
+            data: mapping_json(mapping.reload),
+            message: "Alias eliminado exitosamente"
+          }
         end
 
         # POST /api/v1/admin/variable_mappings/create_and_assign
@@ -406,8 +393,17 @@ module Api
           normalized_var = normalize_string(variable)
 
           suggestions = available_mappings.map do |mapping|
-            score = calculate_similarity(normalized_var, normalize_string(mapping.name))
-            { mapping: mapping_json(mapping), score: score }
+            # Check primary name
+            name_score = calculate_similarity(normalized_var, normalize_string(mapping.name))
+
+            # Check aliases and take the best match
+            alias_scores = (mapping.aliases || []).map { |a| calculate_similarity(normalized_var, normalize_string(a)) }
+            best_alias_score = alias_scores.max || 0
+
+            # Use the best score between name and aliases
+            best_score = [name_score, best_alias_score].max
+
+            { mapping: mapping_json(mapping), score: best_score }
           end
 
           # Return top 3 suggestions with score > 0.3
@@ -488,7 +484,8 @@ module Api
             :source_model,
             :source_field,
             :active,
-            :position
+            :position,
+            aliases: []
           )
         end
 
@@ -507,6 +504,8 @@ module Api
             is_system: mapping.is_system,
             active: mapping.active,
             position: mapping.position,
+            aliases: mapping.aliases || [],
+            all_names: mapping.all_names,
             created_at: mapping.created_at.iso8601
           }
         end

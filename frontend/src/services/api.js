@@ -47,6 +47,7 @@ export const signatureService = {
   update: (id, data) => api.patch(`/auth/signatures/${id}`, { signature: data }),
   delete: (id) => api.delete(`/auth/signatures/${id}`),
   setDefault: (id) => api.post(`/auth/signatures/${id}/set_default`),
+  toggleActive: (id) => api.post(`/auth/signatures/${id}/toggle_active`),
   getFonts: () => api.get('/auth/signatures/fonts'),
 }
 
@@ -56,8 +57,12 @@ export const vacationService = {
   get: (id) => api.get(`/hr/vacations/${id}`),
   create: (data) => api.post('/hr/vacations', { vacation: data }),
   update: (id, data) => api.patch(`/hr/vacations/${id}`, { vacation: data }),
+  delete: (id) => api.delete(`/hr/vacations/${id}`),
   submit: (id) => api.post(`/hr/vacations/${id}/submit`),
   cancel: (id, reason) => api.post(`/hr/vacations/${id}/cancel`, { reason }),
+  generateDocument: (id) => api.post(`/hr/vacations/${id}/generate_document`),
+  signDocument: (id) => api.post(`/hr/vacations/${id}/sign_document`),
+  downloadDocument: (id) => api.get(`/hr/vacations/${id}/download_document`, { responseType: 'blob' }),
 }
 
 // HR - Certifications
@@ -67,7 +72,9 @@ export const certificationService = {
   create: (data) => api.post('/hr/certifications', { certification: data }),
   update: (id, data) => api.patch(`/hr/certifications/${id}`, { certification: data }),
   cancel: (id) => api.post(`/hr/certifications/${id}/cancel`),
+  delete: (id) => api.delete(`/hr/certifications/${id}`),
   generateDocument: (id) => api.post(`/hr/certifications/${id}/generate_document`),
+  signDocument: (id) => api.post(`/hr/certifications/${id}/sign_document`),
   downloadDocument: (id) => api.get(`/hr/certifications/${id}/download_document`, { responseType: 'blob' }),
 }
 
@@ -164,14 +171,13 @@ export const variableMappingService = {
   toggleActive: (id) => api.post(`/admin/variable_mappings/${id}/toggle_active`),
   seedSystem: () => api.post('/admin/variable_mappings/seed_system'),
   reorder: (ids) => api.post('/admin/variable_mappings/reorder', { ids }),
-  pendingVariables: () => api.get('/admin/variable_mappings/pending_variables'),
+  pendingVariables: (params) => api.get('/admin/variable_mappings/pending_variables', { params }),
   autoAssign: (data) => api.post('/admin/variable_mappings/auto_assign', data),
   createAndAssign: (data) => api.post('/admin/variable_mappings/create_and_assign', data),
-  // Alias management
+  // Alias management (aliases are now stored directly in each mapping)
   aliases: () => api.get('/admin/variable_mappings/aliases'),
-  merge: (primaryId, aliasIds) => api.post('/admin/variable_mappings/merge', { primary_id: primaryId, alias_ids: aliasIds }),
-  createAlias: (sourceId, aliasName) => api.post('/admin/variable_mappings/create_alias', { source_id: sourceId, alias_name: aliasName }),
-  removeAlias: (id) => api.delete(`/admin/variable_mappings/${id}/remove_alias`),
+  addAlias: (id, aliasName) => api.post(`/admin/variable_mappings/${id}/add_alias`, { alias_name: aliasName }),
+  removeAlias: (id, aliasName) => api.post(`/admin/variable_mappings/${id}/remove_alias`, { alias_name: aliasName }),
 }
 
 // Admin - Templates
@@ -203,6 +209,52 @@ export const templateService = {
   updateSignatory: (templateId, sigId, data) => api.patch(`/admin/templates/${templateId}/signatories/${sigId}`, { signatory: data }),
   deleteSignatory: (templateId, sigId) => api.delete(`/admin/templates/${templateId}/signatories/${sigId}`),
   reorderSignatories: (templateId, ids) => api.post(`/admin/templates/${templateId}/signatories/reorder`, { ids }),
+}
+
+// Legal - Third Parties
+export const thirdPartyService = {
+  list: (params) => api.get('/legal/third_parties', { params }),
+  get: (id) => api.get(`/legal/third_parties/${id}`),
+  create: (data) => api.post('/legal/third_parties', { third_party: data }),
+  update: (id, data) => api.patch(`/legal/third_parties/${id}`, { third_party: data }),
+  delete: (id) => api.delete(`/legal/third_parties/${id}`),
+  activate: (id) => api.post(`/legal/third_parties/${id}/activate`),
+  deactivate: (id) => api.post(`/legal/third_parties/${id}/deactivate`),
+  block: (id, reason) => api.post(`/legal/third_parties/${id}/block`, { reason }),
+}
+
+// Legal - Contracts
+export const contractService = {
+  list: (params) => api.get('/legal/contracts', { params }),
+  get: (id) => api.get(`/legal/contracts/${id}`),
+  create: (data) => api.post('/legal/contracts', { contract: data }),
+  update: (id, data) => api.patch(`/legal/contracts/${id}`, { contract: data }),
+  delete: (id) => api.delete(`/legal/contracts/${id}`),
+  submit: (id) => api.post(`/legal/contracts/${id}/submit`),
+  activate: (id) => api.post(`/legal/contracts/${id}/activate`),
+  terminate: (id, reason) => api.post(`/legal/contracts/${id}/terminate`, { reason }),
+  cancel: (id, reason) => api.post(`/legal/contracts/${id}/cancel`, { reason }),
+  generateDocument: (id, templateId) => api.post(`/legal/contracts/${id}/generate_document`, { template_id: templateId }),
+  downloadDocument: (id) => api.get(`/legal/contracts/${id}/download_document`, { responseType: 'blob' }),
+}
+
+// Legal - Contract Approvals
+export const contractApprovalService = {
+  list: (params) => api.get('/legal/contract_approvals', { params }),
+  get: (id) => api.get(`/legal/contract_approvals/${id}`),
+  approve: (id, notes) => api.post(`/legal/contract_approvals/${id}/approve`, { notes }),
+  reject: (id, reason) => api.post(`/legal/contract_approvals/${id}/reject`, { reason }),
+}
+
+// Legal - Dashboard
+export const legalDashboardService = {
+  getStats: () => api.get('/legal/dashboard'),
+}
+
+// Admin - Settings
+export const settingsService = {
+  get: () => api.get('/admin/settings'),
+  update: (data) => api.patch('/admin/settings', { settings: data }),
 }
 
 export default api

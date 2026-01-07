@@ -1,0 +1,287 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <defs>
+    <!-- Gradientes principales -->
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1E1B4B"/>
+      <stop offset="30%" style="stop-color:#312E81"/>
+      <stop offset="60%" style="stop-color:#4338CA"/>
+      <stop offset="100%" style="stop-color:#6366F1"/>
+    </linearGradient>
+
+    <linearGradient id="goldArmor" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FEF3C7"/>
+      <stop offset="25%" style="stop-color:#FCD34D"/>
+      <stop offset="50%" style="stop-color:#F59E0B"/>
+      <stop offset="75%" style="stop-color:#D97706"/>
+      <stop offset="100%" style="stop-color:#B45309"/>
+    </linearGradient>
+
+    <linearGradient id="silverMetal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF"/>
+      <stop offset="30%" style="stop-color:#F1F5F9"/>
+      <stop offset="60%" style="stop-color:#CBD5E1"/>
+      <stop offset="100%" style="stop-color:#94A3B8"/>
+    </linearGradient>
+
+    <linearGradient id="horseBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F8FAFC"/>
+      <stop offset="40%" style="stop-color:#E2E8F0"/>
+      <stop offset="70%" style="stop-color:#CBD5E1"/>
+      <stop offset="100%" style="stop-color:#94A3B8"/>
+    </linearGradient>
+
+    <linearGradient id="wingFeathers" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#F8FAFC"/>
+      <stop offset="50%" style="stop-color:#E2E8F0"/>
+      <stop offset="100%" style="stop-color:#CBD5E1"/>
+    </linearGradient>
+
+    <linearGradient id="capeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7C3AED"/>
+      <stop offset="50%" style="stop-color:#6D28D9"/>
+      <stop offset="100%" style="stop-color:#5B21B6"/>
+    </linearGradient>
+
+    <linearGradient id="spearGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FCD34D"/>
+      <stop offset="100%" style="stop-color:#92400E"/>
+    </linearGradient>
+
+    <!-- Efectos -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softShadow">
+      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#1E1B4B" flood-opacity="0.5"/>
+    </filter>
+
+    <!-- Patrón de estrellas -->
+    <pattern id="stars" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="5" cy="5" r="0.5" fill="white" opacity="0.6"/>
+      <circle cx="25" cy="15" r="0.3" fill="white" opacity="0.4"/>
+      <circle cx="15" cy="30" r="0.4" fill="white" opacity="0.5"/>
+      <circle cx="35" cy="35" r="0.3" fill="white" opacity="0.3"/>
+    </pattern>
+  </defs>
+
+  <!-- Fondo circular con cielo nocturno -->
+  <circle cx="200" cy="200" r="190" fill="url(#skyGrad)"/>
+  <circle cx="200" cy="200" r="190" fill="url(#stars)" opacity="0.5"/>
+
+  <!-- Borde dorado elegante -->
+  <circle cx="200" cy="200" r="188" fill="none" stroke="url(#goldArmor)" stroke-width="3"/>
+  <circle cx="200" cy="200" r="183" fill="none" stroke="url(#goldArmor)" stroke-width="0.5" opacity="0.5"/>
+
+  <!-- Luna creciente de fondo -->
+  <path d="M320 80 Q350 110 340 150 Q360 120 320 80" fill="#E0E7FF" opacity="0.3"/>
+
+  <!-- ========== CABALLO ALADO ========== -->
+  <g filter="url(#softShadow)">
+    <!-- Ala trasera del caballo (fondo) -->
+    <g fill="url(#wingFeathers)" opacity="0.7">
+      <path d="M90 180
+               Q60 160 40 130
+               Q35 115 45 105
+               Q60 100 80 110
+               Q100 125 110 150
+               Q115 165 110 180
+               Z"/>
+      <path d="M100 195
+               Q65 185 35 165
+               Q25 155 30 145
+               Q45 140 70 155
+               Q95 175 105 195
+               Z"/>
+    </g>
+
+    <!-- Cuerpo del caballo -->
+    <path d="M120 220
+             Q100 230 95 260
+             Q90 290 110 310
+             L130 330
+             Q135 340 130 350
+             L125 365
+             Q130 370 140 365
+             L150 340
+             Q155 330 150 315
+             L160 300
+             Q180 310 200 305
+             Q220 310 235 300
+             L240 315
+             Q235 330 240 340
+             L250 365
+             Q260 370 265 365
+             L260 350
+             Q255 340 260 330
+             L275 310
+             Q290 295 285 260
+             Q280 235 260 220
+             Q220 200 180 205
+             Q140 210 120 220
+             Z" fill="url(#horseBody)"/>
+
+    <!-- Patas traseras -->
+    <path d="M130 310 L125 350 Q130 360 140 355 L150 320" fill="url(#horseBody)"/>
+    <path d="M260 310 L265 350 Q260 360 250 355 L245 320" fill="url(#horseBody)"/>
+
+    <!-- Cuello del caballo -->
+    <path d="M120 220
+             Q110 200 115 175
+             Q120 155 140 145
+             Q160 140 170 150
+             Q175 165 165 185
+             Q155 200 150 215
+             Q140 220 120 220
+             Z" fill="url(#horseBody)"/>
+
+    <!-- Cabeza del caballo -->
+    <path d="M115 175
+             Q100 165 90 155
+             Q80 150 75 155
+             Q70 165 80 175
+             Q90 180 100 178
+             Q110 180 120 175
+             Z" fill="url(#horseBody)"/>
+
+    <!-- Ojo del caballo -->
+    <circle cx="95" cy="165" r="3" fill="#1E1B4B"/>
+    <circle cx="94" cy="164" r="1" fill="white" opacity="0.6"/>
+
+    <!-- Crin del caballo -->
+    <path d="M140 145 Q130 130 125 115 Q135 125 140 140" fill="url(#silverMetal)" opacity="0.8"/>
+    <path d="M150 148 Q145 130 150 110 Q155 130 155 145" fill="url(#silverMetal)" opacity="0.8"/>
+    <path d="M160 155 Q165 135 175 120 Q170 140 165 155" fill="url(#silverMetal)" opacity="0.8"/>
+
+    <!-- Ala delantera del caballo (primer plano) -->
+    <g fill="url(#wingFeathers)">
+      <!-- Plumas principales -->
+      <path d="M130 200
+               Q80 170 50 120
+               Q40 95 55 80
+               Q75 70 100 85
+               Q130 105 150 140
+               Q165 170 160 195
+               Q150 205 130 200
+               Z"/>
+      <!-- Detalle de plumas -->
+      <path d="M140 185 Q100 150 70 110" stroke="#CBD5E1" stroke-width="1.5" fill="none"/>
+      <path d="M145 170 Q110 140 85 105" stroke="#CBD5E1" stroke-width="1.5" fill="none"/>
+      <path d="M150 155 Q120 125 100 95" stroke="#CBD5E1" stroke-width="1.5" fill="none"/>
+      <path d="M155 140 Q130 110 115 85" stroke="#CBD5E1" stroke-width="1.5" fill="none"/>
+    </g>
+
+    <!-- Cola del caballo -->
+    <path d="M285 270 Q310 280 320 310 Q315 290 300 275" fill="url(#silverMetal)" opacity="0.8"/>
+    <path d="M283 275 Q305 290 310 320 Q305 295 290 280" fill="url(#silverMetal)" opacity="0.7"/>
+  </g>
+
+  <!-- ========== VALKIRIA ========== -->
+  <g filter="url(#glow)">
+    <!-- Capa ondeando -->
+    <path d="M195 160
+             Q180 180 170 220
+             Q160 260 180 300
+             Q200 330 240 340
+             Q280 345 300 320
+             Q310 300 300 270
+             Q285 240 270 220
+             Q255 200 240 180
+             Q225 165 210 160
+             Z" fill="url(#capeGrad)" opacity="0.85"/>
+
+    <!-- Piernas con armadura -->
+    <path d="M185 250 L175 290 Q180 295 190 290 L195 255" fill="url(#goldArmor)"/>
+    <path d="M210 250 L220 290 Q215 295 205 290 L200 255" fill="url(#goldArmor)"/>
+
+    <!-- Cuerpo/Armadura -->
+    <path d="M175 175
+             Q165 190 165 210
+             Q165 235 175 250
+             Q190 260 200 260
+             Q210 260 225 250
+             Q235 235 235 210
+             Q235 190 225 175
+             Q210 165 200 165
+             Q185 165 175 175
+             Z" fill="url(#goldArmor)"/>
+
+    <!-- Detalles de la armadura -->
+    <path d="M200 175 L200 250" stroke="#92400E" stroke-width="2"/>
+    <path d="M180 195 Q200 205 220 195" stroke="#92400E" stroke-width="1.5" fill="none"/>
+    <path d="M175 220 Q200 235 225 220" stroke="#92400E" stroke-width="1.5" fill="none"/>
+
+    <!-- Cinturón -->
+    <rect x="172" y="245" width="56" height="8" rx="2" fill="#92400E"/>
+    <circle cx="200" cy="249" r="4" fill="url(#goldArmor)"/>
+
+    <!-- Hombreras -->
+    <ellipse cx="168" cy="180" rx="12" ry="8" fill="url(#goldArmor)"/>
+    <ellipse cx="232" cy="180" rx="12" ry="8" fill="url(#goldArmor)"/>
+
+    <!-- Cuello -->
+    <path d="M190 165 Q200 160 210 165 L210 155 Q200 150 190 155 Z" fill="url(#silverMetal)"/>
+
+    <!-- Casco con alas -->
+    <ellipse cx="200" cy="140" rx="22" ry="25" fill="url(#goldArmor)"/>
+    <!-- Visera del casco -->
+    <path d="M178 145 Q200 155 222 145 L222 138 Q200 145 178 138 Z" fill="#92400E"/>
+    <!-- Cresta del casco -->
+    <path d="M200 115 L200 135" stroke="url(#goldArmor)" stroke-width="4"/>
+    <path d="M200 115 Q210 100 225 95" stroke="#DC2626" stroke-width="3" fill="none"/>
+    <path d="M200 115 Q190 100 175 95" stroke="#DC2626" stroke-width="3" fill="none"/>
+
+    <!-- Alas del casco -->
+    <path d="M175 135 Q155 125 140 115 Q145 125 155 132 Q165 138 175 140" fill="url(#silverMetal)"/>
+    <path d="M225 135 Q245 125 260 115 Q255 125 245 132 Q235 138 225 140" fill="url(#silverMetal)"/>
+
+    <!-- Rostro visible bajo casco -->
+    <ellipse cx="200" cy="148" rx="15" ry="10" fill="#FEF3C7"/>
+    <!-- Ojos -->
+    <ellipse cx="193" cy="146" rx="2" ry="2.5" fill="#1E1B4B"/>
+    <ellipse cx="207" cy="146" rx="2" ry="2.5" fill="#1E1B4B"/>
+
+    <!-- ===== LANZA ===== -->
+    <g transform="rotate(-25, 280, 100)">
+      <!-- Asta de la lanza -->
+      <rect x="275" y="80" width="5" height="200" rx="2" fill="#78350F"/>
+      <!-- Punta de la lanza -->
+      <path d="M277.5 80 L270 50 L277.5 20 L285 50 Z" fill="url(#spearGrad)"/>
+      <!-- Detalle dorado -->
+      <rect x="273" y="75" width="9" height="10" rx="1" fill="url(#goldArmor)"/>
+    </g>
+
+    <!-- ===== ESCUDO ===== -->
+    <g transform="translate(145, 190) rotate(-15)">
+      <!-- Escudo redondo -->
+      <ellipse cx="0" cy="0" rx="35" ry="40" fill="url(#goldArmor)"/>
+      <!-- Borde del escudo -->
+      <ellipse cx="0" cy="0" rx="35" ry="40" fill="none" stroke="#92400E" stroke-width="3"/>
+      <!-- Centro del escudo -->
+      <circle cx="0" cy="0" r="12" fill="#1E1B4B"/>
+      <circle cx="0" cy="0" r="8" fill="url(#goldArmor)"/>
+      <!-- Runas en el escudo -->
+      <path d="M0 -25 L0 -15 M-5 -22 L5 -18" stroke="#92400E" stroke-width="2"/>
+      <path d="M0 15 L0 25 M-5 18 L5 22" stroke="#92400E" stroke-width="2"/>
+    </g>
+
+    <!-- Brazos -->
+    <path d="M168 185 Q155 195 145 200" stroke="url(#goldArmor)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M232 185 Q260 170 280 150" stroke="url(#goldArmor)" stroke-width="10" stroke-linecap="round"/>
+
+    <!-- Manos -->
+    <circle cx="145" cy="200" r="6" fill="#FEF3C7"/>
+    <circle cx="280" cy="150" r="6" fill="#FEF3C7"/>
+  </g>
+
+  <!-- Resplandor divino -->
+  <circle cx="200" cy="180" r="60" fill="none" stroke="url(#goldArmor)" stroke-width="0.5" opacity="0.3"/>
+  <circle cx="200" cy="180" r="80" fill="none" stroke="url(#goldArmor)" stroke-width="0.3" opacity="0.2"/>
+
+  <!-- Texto VALKYRIA en la base -->
+  <text x="200" y="380" text-anchor="middle" font-family="Cinzel, Georgia, serif" font-size="20" font-weight="600" fill="url(#goldArmor)" letter-spacing="4">VALKYRIA</text>
+</svg>

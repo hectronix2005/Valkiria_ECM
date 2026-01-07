@@ -101,18 +101,21 @@ module Templates
 
     # Find the appropriate user to sign based on role and context
     def find_signatory_for(context)
-      case role
-      when EMPLOYEE
+      # Use signatory_type_code if role is blank
+      effective_role = role.presence || signatory_type_code
+
+      case effective_role
+      when EMPLOYEE, "employee"
         context[:employee]&.user
-      when SUPERVISOR
+      when SUPERVISOR, "supervisor"
         context[:employee]&.supervisor&.user
-      when HR, HR_MANAGER
+      when HR, HR_MANAGER, "hr"
         find_hr_user(context[:organization])
-      when LEGAL
+      when LEGAL, "legal"
         find_legal_user(context[:organization])
-      when ADMIN
+      when ADMIN, "admin"
         find_admin_user(context[:organization])
-      when CUSTOM
+      when CUSTOM, "custom"
         find_custom_signatory
       end
     end

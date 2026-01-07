@@ -44,8 +44,7 @@ const templateCategories = {
 }
 
 export default function Documents() {
-  const { user } = useAuth()
-  const isAdmin = user?.roles?.includes('admin')
+  const { isAdmin } = useAuth()
   const queryClient = useQueryClient()
 
   const [page, setPage] = useState(1)

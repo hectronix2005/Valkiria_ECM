@@ -46,9 +46,14 @@ function ApprovalCard({ request, type, onApprove, onReject, onView, showActions 
                     {new Date(request.start_date).toLocaleDateString('es-ES')} -{' '}
                     {new Date(request.end_date).toLocaleDateString('es-ES')}
                   </p>
-                  <p className="text-sm font-medium text-primary-600">
-                    {request.days_requested} días solicitados
-                  </p>
+                  <div className="flex items-center gap-4 mt-1">
+                    <p className="text-sm font-medium text-primary-600">
+                      {Math.floor(request.days_requested)} días solicitados
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      <span className="font-medium text-green-600">{Math.floor(request.employee?.available_vacation_days || 0)}</span> días disponibles
+                    </p>
+                  </div>
                 </>
               ) : (
                 <>

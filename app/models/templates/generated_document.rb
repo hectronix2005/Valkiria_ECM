@@ -115,14 +115,17 @@ module Templates
 
         {
           "signatory_id" => sig.uuid,
+          "signatory_type_code" => sig.signatory_type_code,
           "signatory_role" => sig.role,
           "signatory_label" => sig.label,
+          "label" => sig.label,
           "user_id" => user&.id&.to_s,
           "user_name" => user&.full_name,
           "required" => sig.required,
           "status" => "pending",
           "signature_id" => nil,
-          "signed_at" => nil
+          "signed_at" => nil,
+          "signed_by_name" => nil
         }
       end
 
@@ -138,12 +141,125 @@ module Templates
 
       sig_entry["signature_id"] = signature.uuid
       sig_entry["signed_at"] = Time.current.iso8601
+      sig_entry["signed_by_name"] = user.full_name
       sig_entry["status"] = "signed"
 
       save!
 
+      # Apply signature to PDF immediately (don't wait for all signatures)
+      apply_signature_to_pdf!(sig_entry, signature)
+
       # Check if all required signatures are complete
       check_completion!
+    end
+
+    # Apply a single signature to the current PDF
+    def apply_signature_to_pdf!(sig_entry, signature)
+      signatory = template&.signatories&.find_by(uuid: sig_entry["signatory_id"])
+      return unless signatory
+
+      pdf_content = file_content
+      return unless pdf_content
+
+      # Create working files
+      input_pdf = Tempfile.new(["input", ".pdf"])
+      input_pdf.binmode
+      input_pdf.write(pdf_content)
+      input_pdf.rewind
+
+      begin
+        # Load the PDF
+        pdf = CombinePDF.load(input_pdf.path)
+        page_index = (signatory.page_number || 1) - 1
+        target_page = pdf.pages[page_index] || pdf.pages.last
+
+        # Get signature image
+        renderer = Templates::SignatureRendererService.new(signature)
+        img_tempfile = renderer.to_tempfile
+
+        begin
+          # Create signature overlay
+          overlay_pdf = create_signature_overlay_for(
+            img_path: img_tempfile.path,
+            signatory: signatory,
+            sig_entry: sig_entry,
+            page_width: target_page.mediabox[2],
+            page_height: target_page.mediabox[3]
+          )
+
+          # Merge overlay onto page
+          overlay = CombinePDF.parse(overlay_pdf)
+          target_page << overlay.pages.first
+
+          # Save updated PDF
+          output_pdf = Tempfile.new(["updated", ".pdf"])
+          pdf.save(output_pdf.path)
+
+          # Update in GridFS (replace draft with signed version)
+          store_updated_pdf(File.binread(output_pdf.path))
+        ensure
+          img_tempfile.close
+          img_tempfile.unlink
+          output_pdf&.close
+          output_pdf&.unlink
+        end
+      ensure
+        input_pdf.close
+        input_pdf.unlink
+      end
+    rescue StandardError => e
+      Rails.logger.error("Error applying signature to PDF: #{e.message}")
+      Rails.logger.error(e.backtrace.first(5).join("\n"))
+    end
+
+    def create_signature_overlay_for(img_path:, signatory:, sig_entry:, page_width:, page_height:)
+      box = signatory.signature_box
+      x = box[:x]
+      y = box[:y]
+      width = box[:width]
+      height = box[:height]
+
+      pdf = Prawn::Document.new(
+        page_size: [page_width, page_height],
+        margin: 0
+      )
+
+      # Calculate position from bottom (Prawn uses bottom-left origin)
+      y_from_bottom = page_height - y - height
+
+      # Draw signature image
+      sig_width = width * 0.75
+      pdf.image img_path, at: [x, y_from_bottom + height], fit: [sig_width, height]
+
+      # Add date to the right of signature (small, vertical)
+      pdf.fill_color "888888"
+      signed_at = sig_entry["signed_at"]
+      date_str = signed_at ? Time.parse(signed_at).strftime("%d/%m/%Y") : ""
+      time_str = signed_at ? Time.parse(signed_at).strftime("%H:%M") : ""
+      date_x = x + sig_width + 5
+      pdf.draw_text date_str, at: [date_x, y_from_bottom + height / 2 + 5], size: 6
+      pdf.draw_text time_str, at: [date_x, y_from_bottom + height / 2 - 5], size: 6
+      pdf.fill_color "000000"
+
+      pdf.render
+    end
+
+    def store_updated_pdf(pdf_content)
+      file_name = file_name_base + "-signed.pdf"
+      pdf_file = Mongoid::GridFs.put(
+        StringIO.new(pdf_content),
+        filename: file_name,
+        content_type: "application/pdf"
+      )
+
+      # Keep as draft_file_id to maintain the workflow
+      # Delete old file if exists
+      Mongoid::GridFs.delete(draft_file_id) if draft_file_id
+      update!(draft_file_id: pdf_file.id)
+    end
+
+    def file_name_base
+      file_name&.gsub(/\.pdf$/i, "") || "document"
     end
 
     def pending_signatures_count

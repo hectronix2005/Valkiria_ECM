@@ -155,11 +155,13 @@ module Hr
 
     # Check if employee is HR staff
     def hr_staff?
+      return false unless user
       user.has_role?("hr") || user.has_role?("hr_manager") || user.admin?
     end
 
     # Check if employee is HR manager
     def hr_manager?
+      return false unless user
       user.has_role?("hr_manager") || user.admin?
     end
 
@@ -223,6 +225,67 @@ module Hr
         .approved
         .overlapping(start_date, end_date)
         .sum(&:business_days)
+    end
+
+    # ============================================
+    # Vacation Balance Calculations (Ley Colombiana)
+    # 15 días hábiles por año trabajado
+    # ============================================
+
+    # Días acumulados según antigüedad
+    def accrued_vacation_days
+      return 0.0 unless hire_date
+
+      years_of_service = (Date.current - hire_date).to_f / 365.25
+      (years_of_service * 15).round(2)
+    end
+
+    # Días programados (aprobados pero aún no disfrutados)
+    def scheduled_vacation_days
+      vacation_requests
+        .approved
+        .sum(:days_requested)
+    end
+
+    # Días ya disfrutados
+    def enjoyed_vacation_days
+      vacation_requests
+        .enjoyed
+        .sum(:days_requested)
+    end
+
+    # Total de días usados (programados + disfrutados)
+    def total_used_vacation_days
+      vacation_requests
+        .used
+        .sum(:days_requested)
+    end
+
+    # Días disponibles totales (acumulados - usados)
+    def available_vacation_days
+      (accrued_vacation_days - total_used_vacation_days).round(2)
+    end
+
+    # Días disponibles sin programación (para nuevas solicitudes)
+    def available_for_request
+      available_vacation_days
+    end
+
+    # Días disponibles reales (excluyendo los ya programados)
+    def truly_available_days
+      (accrued_vacation_days - enjoyed_vacation_days).round(2)
+    end
+
+    # Resumen de vacaciones
+    def vacation_summary
+      {
+        accrued: accrued_vacation_days,
+        scheduled: scheduled_vacation_days,
+        enjoyed: enjoyed_vacation_days,
+        total_used: total_used_vacation_days,
+        available: available_vacation_days,
+        truly_available: truly_available_days
+      }
     end
 
     # Get supervisor chain (for escalation)

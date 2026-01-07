@@ -28,6 +28,14 @@ module Hr
       hr_staff? # Only HR can generate documents
     end
 
+    def sign_document?
+      hr_staff? || admin? # HR and Admin can sign documents
+    end
+
+    def destroy?
+      admin? # Only admin can delete certifications
+    end
+
     class Scope < ApplicationPolicy::Scope
       def resolve
         if user_employee.hr_staff? || user_employee.hr_manager?
@@ -60,6 +68,10 @@ module Hr
 
     def user_employee
       @user_employee ||= ::Hr::Employee.for_user(user)
+    end
+
+    def admin?
+      user.has_role?(:admin)
     end
   end
 end

@@ -206,7 +206,8 @@ module Api
             id: employee.uuid,
             name: employee.full_name,
             department: employee.department,
-            job_title: employee.job_title
+            job_title: employee.job_title,
+            available_vacation_days: employee.available_vacation_days
           }
         end
 

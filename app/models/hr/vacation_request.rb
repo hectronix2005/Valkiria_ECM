@@ -14,12 +14,22 @@ module Hr
 
     # Status constants
     STATUS_DRAFT = "draft"
-    STATUS_PENDING = "pending"
-    STATUS_APPROVED = "approved"
+    STATUS_PENDING = "pending"      # Solicitada
+    STATUS_APPROVED = "approved"    # Aprobada (programada, aún no disfrutada)
+    STATUS_ENJOYED = "enjoyed"      # Disfrutada (vacaciones ya tomadas)
     STATUS_REJECTED = "rejected"
     STATUS_CANCELLED = "cancelled"
 
-    STATUSES = [STATUS_DRAFT, STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED, STATUS_CANCELLED].freeze
+    STATUSES = [STATUS_DRAFT, STATUS_PENDING, STATUS_APPROVED, STATUS_ENJOYED, STATUS_REJECTED, STATUS_CANCELLED].freeze
+
+    STATUS_LABELS = {
+      STATUS_DRAFT => "Borrador",
+      STATUS_PENDING => "Solicitada",
+      STATUS_APPROVED => "Aprobada",
+      STATUS_ENJOYED => "Disfrutada",
+      STATUS_REJECTED => "Rechazada",
+      STATUS_CANCELLED => "Cancelada"
+    }.freeze
 
     # Vacation type constants
     TYPE_VACATION = "vacation"
@@ -45,6 +55,9 @@ module Hr
     field :decided_at, type: Time
     field :decision_reason, type: String
     field :approved_by_name, type: String
+
+    # Generated document reference
+    field :document_uuid, type: String
 
     # History tracking
     field :history, type: Array, default: []
@@ -76,6 +89,7 @@ module Hr
     validate :end_date_after_start_date
     validate :dates_not_in_past, on: :create
     validate :sufficient_balance, on: :create, if: :requires_balance_check?
+    validate :no_overlapping_requests, if: :dates_changed?
 
     # Callbacks
     before_create :generate_request_number
@@ -85,10 +99,14 @@ module Hr
     scope :draft, -> { where(status: STATUS_DRAFT) }
     scope :pending, -> { where(status: STATUS_PENDING) }
     scope :approved, -> { where(status: STATUS_APPROVED) }
+    scope :enjoyed, -> { where(status: STATUS_ENJOYED) }
     scope :rejected, -> { where(status: STATUS_REJECTED) }
     scope :cancelled, -> { where(status: STATUS_CANCELLED) }
     scope :active, -> { where(:status.in => [STATUS_PENDING, STATUS_APPROVED]) }
     scope :decided, -> { where(:status.in => [STATUS_APPROVED, STATUS_REJECTED]) }
+    scope :scheduled, -> { approved.where(:start_date.gt => Date.current) }  # Programadas (futuras)
+    scope :in_progress, -> { approved.where(:start_date.lte => Date.current, :end_date.gte => Date.current) }
+    scope :used, -> { where(:status.in => [STATUS_APPROVED, STATUS_ENJOYED]) }  # Consumen balance
     scope :for_approval_by, ->(employee) { pending.where(approver_id: employee.id) }
     scope :upcoming, -> { approved.where(:start_date.gte => Date.current) }
     scope :past, -> { approved.where(:end_date.lt => Date.current) }
@@ -117,8 +135,21 @@ module Hr
       status == STATUS_CANCELLED
     end
 
+    def enjoyed?
+      status == STATUS_ENJOYED
+    end
+
     def decided?
       approved? || rejected?
+    end
+
+    def status_label
+      STATUS_LABELS[status] || status
+    end
+
+    # Check if vacation period has passed and should be marked as enjoyed
+    def should_mark_as_enjoyed?
+      approved? && end_date < Date.current
     end
 
     # Submit request for approval
@@ -202,6 +233,31 @@ module Hr
       true
     end
 
+    # Mark vacation as enjoyed (after end_date has passed)
+    def mark_as_enjoyed!(actor: nil)
+      raise InvalidStateError, "Can only mark approved vacations as enjoyed" unless approved?
+      raise InvalidStateError, "Cannot mark as enjoyed before end date" if end_date >= Date.current
+
+      self.status = STATUS_ENJOYED
+
+      record_history("enjoyed", actor)
+      save!
+
+      log_audit_event("vacation_request_enjoyed", actor) if actor
+
+      true
+    end
+
+    # Class method to auto-mark past approved vacations as enjoyed
+    def self.mark_past_vacations_as_enjoyed!
+      approved.where(:end_date.lt => Date.current).each do |vacation|
+        vacation.mark_as_enjoyed!
+      rescue InvalidStateError
+        # Skip if already processed
+        next
+      end
+    end
+
     # Check if actor can approve this request
     def can_approve?(actor)
       # Must be in same organization
@@ -257,7 +313,28 @@ module Hr
     def dates_not_in_past
       return unless start_date
 
-      errors.add(:start_date, "cannot be in the past") if start_date < Date.current
+      # Allow 1 day tolerance for timezone differences (UTC vs local time)
+      errors.add(:start_date, "cannot be in the past") if start_date < Date.current - 1.day
+    end
+
+    def no_overlapping_requests
+      return unless employee && start_date && end_date
+
+      # Find other requests from the same employee that overlap with these dates
+      # Exclude cancelled and rejected requests, and exclude self (for updates)
+      overlapping = employee.vacation_requests
+                            .where(:status.nin => [STATUS_CANCELLED, STATUS_REJECTED])
+                            .where(:id.ne => id)
+                            .where(:start_date.lte => end_date, :end_date.gte => start_date)
+
+      return unless overlapping.exists?
+
+      overlapping_request = overlapping.first
+      errors.add(:base, "Ya tienes una solicitud (#{overlapping_request.request_number}) que incluye estas fechas")
+    end
+
+    def dates_changed?
+      new_record? || start_date_changed? || end_date_changed?
     end
 
     def sufficient_balance

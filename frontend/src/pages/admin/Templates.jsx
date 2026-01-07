@@ -36,6 +36,8 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [moduleType, setModuleType] = useState('hr')
+  const [mainCategory, setMainCategory] = useState('laboral')
   const [category, setCategory] = useState('other')
   const [error, setError] = useState('')
 
@@ -59,6 +61,8 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
   const handleClose = () => {
     setName('')
     setDescription('')
+    setModuleType('hr')
+    setMainCategory('laboral')
     setCategory('other')
     setError('')
     onClose()
@@ -70,10 +74,41 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
       setError('El nombre es requerido')
       return
     }
-    createMutation.mutate({ name, description, category })
+    createMutation.mutate({ name, description, module_type: moduleType, main_category: mainCategory, category })
   }
 
-  const categories = categoriesData?.data?.data || []
+  const modules = categoriesData?.data?.modules || []
+  const mainCategories = categoriesData?.data?.main_categories || []
+  const categoryToModule = categoriesData?.data?.category_to_module || {}
+  const grouped = categoriesData?.data?.grouped || {}
+  const filteredSubcategories = grouped[mainCategory] || []
+
+  // Handle module change - auto-select matching main category
+  const handleModuleChange = (value) => {
+    setModuleType(value)
+    // Find matching main category
+    const matchingCategory = Object.entries(categoryToModule).find(([cat, mod]) => mod === value)
+    if (matchingCategory) {
+      setMainCategory(matchingCategory[0])
+      const subs = grouped[matchingCategory[0]] || []
+      if (subs.length > 0) {
+        setCategory(subs[0].value)
+      }
+    }
+  }
+
+  // Auto-select first subcategory when main category changes
+  const handleMainCategoryChange = (value) => {
+    setMainCategory(value)
+    // Update module based on category
+    if (categoryToModule[value]) {
+      setModuleType(categoryToModule[value])
+    }
+    const subs = grouped[value] || []
+    if (subs.length > 0) {
+      setCategory(subs[0].value)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -105,19 +140,56 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Categoria
+              Módulo
             </label>
             <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              value={moduleType}
+              onChange={(e) => handleModuleChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              {categories.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label}
+              {modules.map((mod) => (
+                <option key={mod.value} value={mod.value}>
+                  {mod.label}
                 </option>
               ))}
             </select>
+            <p className="text-xs text-gray-500 mt-1">Define a qué módulo del sistema pertenece este template</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Categoría
+              </label>
+              <select
+                value={mainCategory}
+                onChange={(e) => handleMainCategoryChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {mainCategories.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Subcategoría
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {filteredSubcategories.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -152,6 +224,8 @@ function EditTemplateModal({ isOpen, onClose, template }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [moduleType, setModuleType] = useState('hr')
+  const [mainCategory, setMainCategory] = useState('laboral')
   const [category, setCategory] = useState('')
   const [error, setError] = useState('')
 
@@ -171,15 +245,47 @@ function EditTemplateModal({ isOpen, onClose, template }) {
     }
   })
 
+  const modules = categoriesData?.data?.modules || []
+  const grouped = categoriesData?.data?.grouped || {}
+  const mainCategories = categoriesData?.data?.main_categories || []
+  const categoryToModule = categoriesData?.data?.category_to_module || {}
+  const filteredSubcategories = grouped[mainCategory] || []
+
   // Update form when template changes
   useEffect(() => {
     if (isOpen && template) {
       setName(template.name || '')
       setDescription(template.description || '')
+      setModuleType(template.module_type || 'hr')
+      setMainCategory(template.main_category || 'laboral')
       setCategory(template.category || 'other')
       setError('')
     }
   }, [isOpen, template?.id])
+
+  // Handle module change - auto-select matching main category
+  const handleModuleChange = (value) => {
+    setModuleType(value)
+    const matchingCategory = Object.entries(categoryToModule).find(([cat, mod]) => mod === value)
+    if (matchingCategory) {
+      setMainCategory(matchingCategory[0])
+      const subs = grouped[matchingCategory[0]] || []
+      if (subs.length > 0) {
+        setCategory(subs[0].value)
+      }
+    }
+  }
+
+  const handleMainCategoryChange = (value) => {
+    setMainCategory(value)
+    if (categoryToModule[value]) {
+      setModuleType(categoryToModule[value])
+    }
+    const subs = grouped[value] || []
+    if (subs.length > 0 && !subs.find(s => s.value === category)) {
+      setCategory(subs[0].value)
+    }
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -187,10 +293,8 @@ function EditTemplateModal({ isOpen, onClose, template }) {
       setError('El nombre es requerido')
       return
     }
-    updateMutation.mutate({ name, description, category })
+    updateMutation.mutate({ name, description, module_type: moduleType, main_category: mainCategory, category })
   }
-
-  const categories = categoriesData?.data?.data || []
 
   if (!isOpen || !template) return null
 
@@ -222,19 +326,56 @@ function EditTemplateModal({ isOpen, onClose, template }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Categoria
+              Módulo
             </label>
             <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              value={moduleType}
+              onChange={(e) => handleModuleChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              {categories.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label}
+              {modules.map((mod) => (
+                <option key={mod.value} value={mod.value}>
+                  {mod.label}
                 </option>
               ))}
             </select>
+            <p className="text-xs text-gray-500 mt-1">Define a qué módulo del sistema pertenece este template</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Categoría
+              </label>
+              <select
+                value={mainCategory}
+                onChange={(e) => handleMainCategoryChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {mainCategories.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Subcategoría
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {filteredSubcategories.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -380,6 +521,18 @@ function PreviewModal({ isOpen, onClose, template }) {
   )
 }
 
+const MAIN_CATEGORY_COLORS = {
+  laboral: 'bg-blue-100 text-blue-700',
+  comercial: 'bg-purple-100 text-purple-700',
+  administrativo: 'bg-amber-100 text-amber-700'
+}
+
+const MODULE_COLORS = {
+  hr: 'bg-emerald-100 text-emerald-700',
+  legal: 'bg-indigo-100 text-indigo-700',
+  admin: 'bg-slate-100 text-slate-700'
+}
+
 export default function Templates() {
   const queryClient = useQueryClient()
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -389,13 +542,15 @@ export default function Templates() {
   const [templateToPreview, setTemplateToPreview] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [mainCategoryFilter, setMainCategoryFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
 
   const { data: templatesData, isLoading } = useQuery({
-    queryKey: ['templates', { q: searchQuery, status: statusFilter, category: categoryFilter }],
+    queryKey: ['templates', { q: searchQuery, status: statusFilter, main_category: mainCategoryFilter, category: categoryFilter }],
     queryFn: () => templateService.list({
       q: searchQuery || undefined,
       status: statusFilter || undefined,
+      main_category: mainCategoryFilter || undefined,
       category: categoryFilter || undefined
     })
   })
@@ -453,7 +608,9 @@ export default function Templates() {
   }
 
   const templates = templatesData?.data?.data || []
-  const categories = categoriesData?.data?.data || []
+  const mainCategories = categoriesData?.data?.main_categories || []
+  const grouped = categoriesData?.data?.grouped || {}
+  const filteredSubcategories = mainCategoryFilter ? (grouped[mainCategoryFilter] || []) : (categoriesData?.data?.subcategories || [])
   const meta = templatesData?.data?.meta || {}
 
   return (
@@ -499,12 +656,28 @@ export default function Templates() {
             </select>
 
             <select
+              value={mainCategoryFilter}
+              onChange={(e) => {
+                setMainCategoryFilter(e.target.value)
+                setCategoryFilter('') // Reset subcategory when main changes
+              }}
+              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Todas las categorías</option>
+              {mainCategories.map((cat) => (
+                <option key={cat.value} value={cat.value}>
+                  {cat.label}
+                </option>
+              ))}
+            </select>
+
+            <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Todas las categorias</option>
-              {categories.map((cat) => (
+              <option value="">Todas las subcategorías</option>
+              {filteredSubcategories.map((cat) => (
                 <option key={cat.value} value={cat.value}>
                   {cat.label}
                 </option>
@@ -539,22 +712,25 @@ export default function Templates() {
             <table className="w-full table-fixed">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="w-[35%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[30%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Template
                   </th>
                   <th className="w-[12%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
+                    Módulo
+                  </th>
+                  <th className="w-[15%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Categoría
                   </th>
-                  <th className="w-[8%] px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[6%] px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">
                     Vars
                   </th>
-                  <th className="w-[8%] px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[6%] px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">
                     Firm.
                   </th>
-                  <th className="w-[12%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[10%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
-                  <th className="w-[25%] px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[21%] px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
@@ -586,7 +762,17 @@ export default function Templates() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <span className="text-sm text-gray-600 truncate block">{template.category_label}</span>
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${MODULE_COLORS[template.module_type] || 'bg-gray-100 text-gray-700'}`}>
+                          {template.module_type_label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium w-fit ${MAIN_CATEGORY_COLORS[template.main_category] || 'bg-gray-100 text-gray-700'}`}>
+                            {template.main_category_label}
+                          </span>
+                          <span className="text-xs text-gray-500">{template.category_label}</span>
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-medium text-gray-700">

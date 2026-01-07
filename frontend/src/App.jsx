@@ -9,12 +9,18 @@ import Vacations from './pages/hr/Vacations'
 import Approvals from './pages/hr/Approvals'
 import Employees from './pages/hr/Employees'
 import Certifications from './pages/hr/Certifications'
+import HRDashboard from './pages/hr/HRDashboard'
 import Templates from './pages/admin/Templates'
 import TemplateEdit from './pages/admin/TemplateEdit'
-import VariableMappings from './pages/admin/VariableMappings'
+import HRVariables from './pages/hr/HRVariables'
 import SignatoryTypes from './pages/admin/SignatoryTypes'
+import Settings from './pages/admin/Settings'
 import Documents from './pages/Documents'
 import Folders from './pages/Folders'
+import ThirdParties from './pages/legal/ThirdParties'
+import Contracts from './pages/legal/Contracts'
+import ContractApprovals from './pages/legal/ContractApprovals'
+import LegalVariables from './pages/legal/LegalVariables'
 
 // Protected Route wrapper
 function ProtectedRoute({ children, requireHR = false, requireApprover = false, requireAdmin = false }) {
@@ -149,7 +155,7 @@ export default function App() {
         path="/hr/dashboard"
         element={
           <ProtectedRoute requireHR>
-            <ComingSoon title="Dashboard HR" />
+            <HRDashboard />
           </ProtectedRoute>
         }
       />
@@ -188,8 +194,8 @@ export default function App() {
       <Route
         path="/admin/settings"
         element={
-          <ProtectedRoute>
-            <ComingSoon title="Configuración" />
+          <ProtectedRoute requireAdmin>
+            <Settings />
           </ProtectedRoute>
         }
       />
@@ -212,12 +218,12 @@ export default function App() {
         }
       />
 
-      {/* Admin - Variable Mappings */}
+      {/* HR - Variables */}
       <Route
-        path="/admin/variable-mappings"
+        path="/hr/variables"
         element={
-          <ProtectedRoute requireAdmin>
-            <VariableMappings />
+          <ProtectedRoute requireHR>
+            <HRVariables />
           </ProtectedRoute>
         }
       />
@@ -228,6 +234,46 @@ export default function App() {
         element={
           <ProtectedRoute requireAdmin>
             <SignatoryTypes />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Legal - Third Parties */}
+      <Route
+        path="/legal/third-parties"
+        element={
+          <ProtectedRoute requireHR>
+            <ThirdParties />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Legal - Contracts */}
+      <Route
+        path="/legal/contracts"
+        element={
+          <ProtectedRoute requireApprover>
+            <Contracts />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Legal - Contract Approvals */}
+      <Route
+        path="/legal/approvals"
+        element={
+          <ProtectedRoute requireApprover>
+            <ContractApprovals />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Legal - Variables */}
+      <Route
+        path="/legal/variables"
+        element={
+          <ProtectedRoute requireHR>
+            <LegalVariables />
           </ProtectedRoute>
         }
       />

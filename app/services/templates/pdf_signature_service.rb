@@ -104,7 +104,7 @@ module Templates
       # Get position from signatory config
       box = signatory.signature_box
       x = box[:x]
-      y = box[:y]
+      y = box[:y]  # y from top of document
       width = box[:width]
       height = box[:height]
 
@@ -115,20 +115,31 @@ module Templates
       img_file.rewind
 
       begin
-        Prawn::Document.new(
+        pdf = Prawn::Document.new(
           page_size: [page_width, page_height],
-          margin: 0
-        ) do |pdf|
-          # Position and draw signature image
-          pdf.bounding_box([x, page_height - y], width: width, height: height) do
-            pdf.image img_file.path, fit: [width, height - 20], position: :center
+          margin: 0,
+          skip_page_creation: false
+        )
 
-            # Add signature label and date
-            pdf.move_down 5
-            pdf.text signatory.label, size: 8, align: :center
-            pdf.text "Firmado: #{format_date(sig_entry['signed_at'])}", size: 7, align: :center, color: "666666"
-          end
-        end.render
+        # Calculate position from bottom (Prawn uses bottom-left origin)
+        # y_from_top = 700 means the signature box TOP is 700pt from page top
+        # So bottom of signature box is at: page_height - y - height
+        y_from_bottom = page_height - y - height
+
+        # Draw signature image at absolute position
+        pdf.image img_file.path, at: [x, y_from_bottom + height], fit: [width, height - 25]
+
+        # Add label below signature
+        label_y = y_from_bottom + 20
+        pdf.draw_text signatory.label, at: [x + (width / 2) - 40, label_y], size: 8
+
+        # Add date
+        date_y = y_from_bottom + 8
+        pdf.fill_color "666666"
+        pdf.draw_text "Firmado: #{format_date(sig_entry['signed_at'])}", at: [x + (width / 2) - 50, date_y], size: 7
+        pdf.fill_color "000000"
+
+        pdf.render
       ensure
         img_file.close
         img_file.unlink

@@ -88,6 +88,51 @@ const identificationTypeOptions = [
   { value: 'NIT', label: 'NIT' },
 ]
 
+// Función para convertir números a palabras en español
+const numberToWords = (amount) => {
+  if (!amount || amount === 0) return 'cero pesos'
+
+  const units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+  const teens = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciseis', 'diecisiete', 'dieciocho', 'diecinueve']
+  const tens = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa']
+  const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+
+  const n = Math.floor(parseFloat(amount))
+  if (n === 0) return 'cero pesos'
+
+  const helper = (num) => {
+    if (num === 0) return ''
+    if (num < 10) return units[num]
+    if (num < 20) return teens[num - 10]
+    if (num < 30) return num === 20 ? 'veinte' : 'veinti' + units[num - 20]
+    if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 > 0 ? ' y ' + units[num % 10] : '')
+    if (num === 100) return 'cien'
+    if (num < 1000) return hundreds[Math.floor(num / 100)] + (num % 100 > 0 ? ' ' + helper(num % 100) : '')
+    return num.toString()
+  }
+
+  const parts = []
+  let remaining = n
+
+  if (remaining >= 1000000) {
+    const millions = Math.floor(remaining / 1000000)
+    parts.push(millions === 1 ? 'un millon' : helper(millions) + ' millones')
+    remaining %= 1000000
+  }
+
+  if (remaining >= 1000) {
+    const thousands = Math.floor(remaining / 1000)
+    parts.push(thousands === 1 ? 'mil' : helper(thousands) + ' mil')
+    remaining %= 1000
+  }
+
+  if (remaining > 0) {
+    parts.push(helper(remaining))
+  }
+
+  return parts.join(' ').trim() + ' pesos'
+}
+
 const contractTypeLabels = {
   indefinite: 'Termino Indefinido',
   fixed_term: 'Termino Fijo',
@@ -319,12 +364,20 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
               value={formData.employment_type}
               onChange={(e) => setFormData({ ...formData, employment_type: e.target.value })}
             />
-            <Select
-              label="Supervisor"
-              options={supervisorOptions}
-              value={formData.supervisor_id}
-              onChange={(e) => setFormData({ ...formData, supervisor_id: e.target.value })}
-            />
+            <div>
+              <Select
+                label="Supervisor *"
+                options={supervisorOptions}
+                value={formData.supervisor_id}
+                onChange={(e) => setFormData({ ...formData, supervisor_id: e.target.value })}
+              />
+              {!formData.supervisor_id && (
+                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Requerido para aprobaciones y firmas de documentos
+                </p>
+              )}
+            </div>
             <Input
               label="Fecha de Contratacion"
               type="date"
@@ -408,27 +461,42 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
       {activeTab === 'compensacion' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Salario Mensual"
-              type="number"
-              value={formData.salary}
-              onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
-              placeholder="2500000"
-            />
-            <Input
-              label="Auxilio de Alimentacion"
-              type="number"
-              value={formData.food_allowance}
-              onChange={(e) => setFormData({ ...formData, food_allowance: e.target.value })}
-              placeholder="0"
-            />
-            <Input
-              label="Auxilio de Transporte"
-              type="number"
-              value={formData.transport_allowance}
-              onChange={(e) => setFormData({ ...formData, transport_allowance: e.target.value })}
-              placeholder="140606"
-            />
+            <div>
+              <Input
+                label="Salario Mensual"
+                type="number"
+                value={formData.salary}
+                onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                placeholder="2500000"
+              />
+              {formData.salary && (
+                <p className="text-xs text-gray-500 mt-1 italic">{numberToWords(formData.salary)}</p>
+              )}
+            </div>
+            <div>
+              <Input
+                label="Auxilio de Alimentacion"
+                type="number"
+                value={formData.food_allowance}
+                onChange={(e) => setFormData({ ...formData, food_allowance: e.target.value })}
+                placeholder="0"
+              />
+              {formData.food_allowance > 0 && (
+                <p className="text-xs text-gray-500 mt-1 italic">{numberToWords(formData.food_allowance)}</p>
+              )}
+            </div>
+            <div>
+              <Input
+                label="Auxilio de Transporte"
+                type="number"
+                value={formData.transport_allowance}
+                onChange={(e) => setFormData({ ...formData, transport_allowance: e.target.value })}
+                placeholder="140606"
+              />
+              {formData.transport_allowance > 0 && (
+                <p className="text-xs text-gray-500 mt-1 italic">{numberToWords(formData.transport_allowance)}</p>
+              )}
+            </div>
           </div>
           {(formData.salary || formData.food_allowance || formData.transport_allowance) && (
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -439,6 +507,13 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
                   (parseFloat(formData.food_allowance) || 0) +
                   (parseFloat(formData.transport_allowance) || 0)
                 ).toLocaleString('es-CO')}
+              </p>
+              <p className="text-xs text-green-600 mt-1 italic">
+                {numberToWords(
+                  (parseFloat(formData.salary) || 0) +
+                  (parseFloat(formData.food_allowance) || 0) +
+                  (parseFloat(formData.transport_allowance) || 0)
+                )}
               </p>
             </div>
           )}
@@ -547,6 +622,469 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
   )
 }
 
+function EmployeeCreateForm({ employees = [], contractTemplates = [], onSubmit, onCancel, loading, error }) {
+  const [formData, setFormData] = useState({
+    // Datos básicos (requeridos)
+    first_name: '',
+    last_name: '',
+    personal_email: '',
+    identification_type: 'CC',
+    identification_number: '',
+    // Laboral
+    employee_number: '',
+    job_title: '',
+    department: '',
+    employment_status: 'active',
+    employment_type: 'full_time',
+    hire_date: new Date().toISOString().split('T')[0],
+    supervisor_id: '',
+    cost_center: '',
+    // Contrato
+    contract_type: 'indefinite',
+    contract_template_id: '',
+    contract_start_date: new Date().toISOString().split('T')[0],
+    contract_end_date: '',
+    contract_duration_value: '',
+    contract_duration_unit: 'months',
+    trial_period_days: '60',
+    // Compensación
+    salary: '',
+    food_allowance: '',
+    transport_allowance: '',
+    // Personal
+    date_of_birth: '',
+    place_of_birth: '',
+    nationality: 'Colombiana',
+    address: '',
+    phone: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+  })
+
+  const [activeTab, setActiveTab] = useState('basico')
+  const [validationErrors, setValidationErrors] = useState({})
+
+  const validateForm = () => {
+    const errors = {}
+    if (!formData.first_name.trim()) errors.first_name = 'Nombre es requerido'
+    if (!formData.last_name.trim()) errors.last_name = 'Apellido es requerido'
+    if (!formData.personal_email.trim()) errors.personal_email = 'Correo es requerido'
+    if (!formData.identification_number.trim()) errors.identification_number = 'Número de documento es requerido'
+    if (!formData.job_title.trim()) errors.job_title = 'Cargo es requerido'
+    if (!formData.department) errors.department = 'Departamento es requerido'
+    if (!formData.supervisor_id) errors.supervisor_id = 'Supervisor es requerido'
+    if (!formData.hire_date) errors.hire_date = 'Fecha de contratación es requerida'
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!validateForm()) {
+      // Ir al tab que tiene errores
+      if (validationErrors.first_name || validationErrors.last_name || validationErrors.personal_email || validationErrors.identification_number) {
+        setActiveTab('basico')
+      } else if (validationErrors.job_title || validationErrors.department || validationErrors.supervisor_id || validationErrors.hire_date) {
+        setActiveTab('laboral')
+      }
+      return
+    }
+    // Clean empty strings to null
+    const cleanedData = { ...formData }
+    Object.keys(cleanedData).forEach(key => {
+      if (cleanedData[key] === '') cleanedData[key] = null
+    })
+    onSubmit(cleanedData)
+  }
+
+  const supervisorOptions = [
+    { value: '', label: 'Seleccionar supervisor *' },
+    ...employees.map(e => ({ value: e.id, label: `${e.full_name} - ${e.job_title || 'Sin cargo'}` }))
+  ]
+
+  const tabs = [
+    { id: 'basico', label: 'Datos Básicos', icon: User, required: true },
+    { id: 'laboral', label: 'Laboral', icon: Briefcase, required: true },
+    { id: 'contrato', label: 'Contrato', icon: FileText },
+    { id: 'compensacion', label: 'Compensación', icon: DollarSign },
+    { id: 'personal', label: 'Personal', icon: MapPin },
+  ]
+
+  const hasTabError = (tabId) => {
+    if (tabId === 'basico') return validationErrors.first_name || validationErrors.last_name || validationErrors.personal_email || validationErrors.identification_number
+    if (tabId === 'laboral') return validationErrors.job_title || validationErrors.department || validationErrors.supervisor_id || validationErrors.hire_date
+    return false
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span className="text-sm">{error}</span>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-2 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2 px-3 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : hasTabError(tab.id)
+                  ? 'border-red-300 text-red-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+              {tab.required && <span className="text-red-500">*</span>}
+              {hasTabError(tab.id) && <AlertCircle className="w-3 h-3 text-red-500" />}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Tab: Datos Básicos */}
+      {activeTab === 'basico' && (
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-700">
+              <strong>Información requerida:</strong> Estos datos son necesarios para crear la cuenta del empleado.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Input
+                label="Nombre *"
+                value={formData.first_name}
+                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                placeholder="Nombre"
+                error={validationErrors.first_name}
+              />
+              {validationErrors.first_name && <p className="text-xs text-red-600 mt-1">{validationErrors.first_name}</p>}
+            </div>
+            <div>
+              <Input
+                label="Apellido *"
+                value={formData.last_name}
+                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                placeholder="Apellido"
+                error={validationErrors.last_name}
+              />
+              {validationErrors.last_name && <p className="text-xs text-red-600 mt-1">{validationErrors.last_name}</p>}
+            </div>
+            <div>
+              <Input
+                label="Correo Personal *"
+                type="email"
+                value={formData.personal_email}
+                onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })}
+                placeholder="correo@personal.com"
+                error={validationErrors.personal_email}
+              />
+              {validationErrors.personal_email && <p className="text-xs text-red-600 mt-1">{validationErrors.personal_email}</p>}
+              <p className="text-xs text-gray-500 mt-1">Se usará para crear la cuenta de usuario</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Select
+                label="Tipo Doc *"
+                options={identificationTypeOptions}
+                value={formData.identification_type}
+                onChange={(e) => setFormData({ ...formData, identification_type: e.target.value })}
+              />
+              <div className="col-span-2">
+                <Input
+                  label="Número de Documento *"
+                  value={formData.identification_number}
+                  onChange={(e) => setFormData({ ...formData, identification_number: e.target.value })}
+                  placeholder="1234567890"
+                  error={validationErrors.identification_number}
+                />
+                {validationErrors.identification_number && <p className="text-xs text-red-600 mt-1">{validationErrors.identification_number}</p>}
+                <p className="text-xs text-gray-500 mt-1">Será la contraseña inicial</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Laboral */}
+      {activeTab === 'laboral' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Número de Empleado"
+              value={formData.employee_number}
+              onChange={(e) => setFormData({ ...formData, employee_number: e.target.value })}
+              placeholder="EMP-001 (auto si vacío)"
+            />
+            <div>
+              <Input
+                label="Cargo *"
+                value={formData.job_title}
+                onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
+                placeholder="Ej: Desarrollador Senior"
+                error={validationErrors.job_title}
+              />
+              {validationErrors.job_title && <p className="text-xs text-red-600 mt-1">{validationErrors.job_title}</p>}
+            </div>
+            <div>
+              <Select
+                label="Departamento *"
+                options={[{ value: '', label: 'Seleccionar departamento *' }, ...departmentOptions.slice(1)]}
+                value={formData.department}
+                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+              />
+              {validationErrors.department && <p className="text-xs text-red-600 mt-1">{validationErrors.department}</p>}
+            </div>
+            <Input
+              label="Centro de Costo"
+              value={formData.cost_center}
+              onChange={(e) => setFormData({ ...formData, cost_center: e.target.value })}
+              placeholder="Ej: CC-100"
+            />
+            <Select
+              label="Estado Laboral"
+              options={employmentStatusOptions}
+              value={formData.employment_status}
+              onChange={(e) => setFormData({ ...formData, employment_status: e.target.value })}
+            />
+            <Select
+              label="Tipo de Empleo"
+              options={employmentTypeOptions}
+              value={formData.employment_type}
+              onChange={(e) => setFormData({ ...formData, employment_type: e.target.value })}
+            />
+            <div>
+              <Select
+                label="Supervisor *"
+                options={supervisorOptions}
+                value={formData.supervisor_id}
+                onChange={(e) => setFormData({ ...formData, supervisor_id: e.target.value })}
+              />
+              {validationErrors.supervisor_id && <p className="text-xs text-red-600 mt-1">{validationErrors.supervisor_id}</p>}
+              {!formData.supervisor_id && (
+                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Requerido para aprobaciones y firmas
+                </p>
+              )}
+            </div>
+            <div>
+              <Input
+                label="Fecha de Contratación *"
+                type="date"
+                value={formData.hire_date}
+                onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
+                error={validationErrors.hire_date}
+              />
+              {validationErrors.hire_date && <p className="text-xs text-red-600 mt-1">{validationErrors.hire_date}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Contrato */}
+      {activeTab === 'contrato' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              label="Tipo de Contrato"
+              options={contractTemplates.length > 0 ? [{ value: '', label: 'Seleccionar template' }, ...contractTemplates] : contractTypeOptions}
+              value={contractTemplates.length > 0 ? formData.contract_template_id : formData.contract_type}
+              onChange={(e) => {
+                if (contractTemplates.length > 0) {
+                  setFormData({ ...formData, contract_template_id: e.target.value })
+                } else {
+                  setFormData({ ...formData, contract_type: e.target.value })
+                }
+              }}
+            />
+            <Input
+              label="Días de Periodo de Prueba"
+              type="number"
+              value={formData.trial_period_days}
+              onChange={(e) => setFormData({ ...formData, trial_period_days: e.target.value })}
+              placeholder="60"
+            />
+            <Input
+              label="Fecha de Inicio del Contrato"
+              type="date"
+              value={formData.contract_start_date}
+              onChange={(e) => setFormData({ ...formData, contract_start_date: e.target.value })}
+            />
+            {(formData.contract_type === 'fixed_term' || formData.contract_type === 'work_or_labor') && (
+              <>
+                <Input
+                  label="Fecha de Fin del Contrato"
+                  type="date"
+                  value={formData.contract_end_date}
+                  onChange={(e) => setFormData({ ...formData, contract_end_date: e.target.value })}
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duración del Contrato</label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      value={formData.contract_duration_value}
+                      onChange={(e) => setFormData({ ...formData, contract_duration_value: e.target.value })}
+                      placeholder="12"
+                      className="flex-1"
+                    />
+                    <Select
+                      options={durationUnitOptions}
+                      value={formData.contract_duration_unit}
+                      onChange={(e) => setFormData({ ...formData, contract_duration_unit: e.target.value })}
+                      className="w-32"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Compensación */}
+      {activeTab === 'compensacion' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Input
+                label="Salario Mensual"
+                type="number"
+                value={formData.salary}
+                onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                placeholder="2500000"
+              />
+              {formData.salary && (
+                <p className="text-xs text-gray-500 mt-1 italic">{numberToWords(formData.salary)}</p>
+              )}
+            </div>
+            <div>
+              <Input
+                label="Auxilio de Alimentación"
+                type="number"
+                value={formData.food_allowance}
+                onChange={(e) => setFormData({ ...formData, food_allowance: e.target.value })}
+                placeholder="0"
+              />
+              {formData.food_allowance > 0 && (
+                <p className="text-xs text-gray-500 mt-1 italic">{numberToWords(formData.food_allowance)}</p>
+              )}
+            </div>
+            <div>
+              <Input
+                label="Auxilio de Transporte"
+                type="number"
+                value={formData.transport_allowance}
+                onChange={(e) => setFormData({ ...formData, transport_allowance: e.target.value })}
+                placeholder="140606"
+              />
+              {formData.transport_allowance > 0 && (
+                <p className="text-xs text-gray-500 mt-1 italic">{numberToWords(formData.transport_allowance)}</p>
+              )}
+            </div>
+          </div>
+          {(formData.salary || formData.food_allowance || formData.transport_allowance) && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-700">
+                <span className="font-medium">Compensación Total: </span>
+                ${(
+                  (parseFloat(formData.salary) || 0) +
+                  (parseFloat(formData.food_allowance) || 0) +
+                  (parseFloat(formData.transport_allowance) || 0)
+                ).toLocaleString('es-CO')}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Personal */}
+      {activeTab === 'personal' && (
+        <div className="space-y-6">
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Datos Personales</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Fecha de Nacimiento"
+                type="date"
+                value={formData.date_of_birth}
+                onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+              />
+              <Input
+                label="Lugar de Nacimiento"
+                value={formData.place_of_birth}
+                onChange={(e) => setFormData({ ...formData, place_of_birth: e.target.value })}
+                placeholder="Bogotá, Colombia"
+              />
+              <Input
+                label="Nacionalidad"
+                value={formData.nationality}
+                onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                placeholder="Colombiana"
+              />
+              <Input
+                label="Teléfono"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="+57 300 123 4567"
+              />
+              <div className="md:col-span-2">
+                <Input
+                  label="Dirección"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  placeholder="Calle 123 # 45-67, Bogotá"
+                />
+              </div>
+            </div>
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Contacto de Emergencia</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Nombre del Contacto"
+                value={formData.emergency_contact_name}
+                onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                placeholder="Nombre completo"
+              />
+              <Input
+                label="Teléfono del Contacto"
+                value={formData.emergency_contact_phone}
+                onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
+                placeholder="+57 300 123 4567"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-between items-center gap-3 pt-4 border-t border-gray-200">
+        <p className="text-xs text-gray-500">
+          Los campos marcados con <span className="text-red-500">*</span> son obligatorios
+        </p>
+        <div className="flex gap-3">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button type="submit" loading={loading}>
+            <UserPlus className="w-4 h-4" />
+            Crear Empleado
+          </Button>
+        </div>
+      </div>
+    </form>
+  )
+}
+
 function EmployeeCard({ employee, onView }) {
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -609,7 +1147,7 @@ function EmployeeTable({ employees, onView, sortColumn, sortDirection, onSort })
       onClick={() => onSort(column)}
       className={`px-4 py-3 text-${align} text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none`}
     >
-      <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
+      <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : ''}`}>
         {children}
         <SortIcon column={column} />
       </div>
@@ -627,6 +1165,7 @@ function EmployeeTable({ employees, onView, sortColumn, sortDirection, onSort })
               <SortableHeader column="department">Departamento</SortableHeader>
               <SortableHeader column="employment_status">Estado</SortableHeader>
               <SortableHeader column="hire_date">Fecha Ingreso</SortableHeader>
+              <SortableHeader column="available_vacation_days" align="center">Vacaciones</SortableHeader>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
             </tr>
           </thead>
@@ -656,6 +1195,11 @@ function EmployeeTable({ employees, onView, sortColumn, sortDirection, onSort })
                 <td className="px-4 py-4 text-sm text-gray-600">
                   {employee.hire_date ? new Date(employee.hire_date).toLocaleDateString('es-CO') : '-'}
                 </td>
+                <td className="px-4 py-4 text-center">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    {employee.available_vacation_days ?? 0} días
+                  </span>
+                </td>
                 <td className="px-4 py-4 text-right">
                   <Button variant="ghost" size="sm" onClick={() => onView(employee)}>
                     <Eye className="w-4 h-4" />
@@ -671,8 +1215,7 @@ function EmployeeTable({ employees, onView, sortColumn, sortDirection, onSort })
 }
 
 export default function Employees() {
-  const { isHR, user } = useAuth()
-  const isAdmin = user?.roles?.includes('admin')
+  const { isHR, isAdmin } = useAuth()
   const canEdit = isHR || isAdmin
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -684,20 +1227,24 @@ export default function Employees() {
   const [page, setPage] = useState(1)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [updateError, setUpdateError] = useState('')
+  const [createError, setCreateError] = useState('')
   const [sortColumn, setSortColumn] = useState('full_name')
   const [sortDirection, setSortDirection] = useState('asc')
 
   const queryClient = useQueryClient()
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['employees', { q: searchQuery, status: statusFilter, department: departmentFilter, page }],
+    queryKey: ['employees', { q: searchQuery, status: statusFilter, department: departmentFilter, page, sortColumn, sortDirection }],
     queryFn: () => employeeService.list({
       q: searchQuery || undefined,
       status: statusFilter || undefined,
       department: departmentFilter || undefined,
+      sort_by: sortColumn,
+      sort_direction: sortDirection,
       page,
       per_page: 20
     }),
@@ -719,6 +1266,24 @@ export default function Employees() {
     },
     onError: (error) => {
       setUpdateError(error.response?.data?.error || 'Error al actualizar el empleado')
+    }
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => employeeService.create(data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['employees'])
+      setShowCreateModal(false)
+      setCreateError('')
+      // Mostrar el empleado creado
+      const newEmployee = response.data?.data
+      if (newEmployee) {
+        setSelectedEmployee(newEmployee)
+        setShowDetailModal(true)
+      }
+    },
+    onError: (error) => {
+      setCreateError(error.response?.data?.error || error.response?.data?.errors?.join(', ') || 'Error al crear el empleado')
     }
   })
 
@@ -792,6 +1357,10 @@ export default function Employees() {
         case 'hire_date':
           aVal = a.hire_date ? new Date(a.hire_date).getTime() : 0
           bVal = b.hire_date ? new Date(b.hire_date).getTime() : 0
+          break
+        case 'available_vacation_days':
+          aVal = a.available_vacation_days ?? 0
+          bVal = b.available_vacation_days ?? 0
           break
         default:
           aVal = (a.full_name || '').toLowerCase()
@@ -877,21 +1446,29 @@ export default function Employees() {
           <h1 className="text-2xl font-bold text-gray-900">Empleados</h1>
           <p className="text-gray-500">Directorio de empleados de la organización</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant={viewMode === 'table' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setViewMode('table')}
-          >
-            Tabla
-          </Button>
-          <Button
-            variant={viewMode === 'grid' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setViewMode('grid')}
-          >
-            Tarjetas
-          </Button>
+        <div className="flex items-center gap-3">
+          {canEdit && (
+            <Button onClick={() => { setCreateError(''); setShowCreateModal(true); }}>
+              <Plus className="w-4 h-4" />
+              Agregar Empleado
+            </Button>
+          )}
+          <div className="flex items-center gap-1 border-l pl-3 ml-2">
+            <Button
+              variant={viewMode === 'table' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+            >
+              Tabla
+            </Button>
+            <Button
+              variant={viewMode === 'grid' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setViewMode('grid')}
+            >
+              Tarjetas
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -1297,36 +1874,51 @@ export default function Employees() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {employeeDetail.salary && (
-                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                      <DollarSign className="w-5 h-5 text-green-500" />
-                      <div>
-                        <p className="text-xs text-green-600">Salario Mensual</p>
-                        <p className="text-sm font-medium text-green-900">
-                          ${parseFloat(employeeDetail.salary).toLocaleString('es-CO')}
-                        </p>
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <DollarSign className="w-5 h-5 text-green-500" />
+                        <div>
+                          <p className="text-xs text-green-600">Salario Mensual</p>
+                          <p className="text-sm font-medium text-green-900">
+                            ${parseFloat(employeeDetail.salary).toLocaleString('es-CO')}
+                          </p>
+                        </div>
                       </div>
+                      <p className="text-xs text-green-600 mt-1 italic ml-8">
+                        {numberToWords(employeeDetail.salary)}
+                      </p>
                     </div>
                   )}
                   {employeeDetail.food_allowance > 0 && (
-                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                      <DollarSign className="w-5 h-5 text-green-500" />
-                      <div>
-                        <p className="text-xs text-green-600">Auxilio Alimentacion</p>
-                        <p className="text-sm font-medium text-green-900">
-                          ${parseFloat(employeeDetail.food_allowance).toLocaleString('es-CO')}
-                        </p>
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <DollarSign className="w-5 h-5 text-green-500" />
+                        <div>
+                          <p className="text-xs text-green-600">Auxilio Alimentacion</p>
+                          <p className="text-sm font-medium text-green-900">
+                            ${parseFloat(employeeDetail.food_allowance).toLocaleString('es-CO')}
+                          </p>
+                        </div>
                       </div>
+                      <p className="text-xs text-green-600 mt-1 italic ml-8">
+                        {numberToWords(employeeDetail.food_allowance)}
+                      </p>
                     </div>
                   )}
                   {employeeDetail.transport_allowance > 0 && (
-                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                      <DollarSign className="w-5 h-5 text-green-500" />
-                      <div>
-                        <p className="text-xs text-green-600">Auxilio Transporte</p>
-                        <p className="text-sm font-medium text-green-900">
-                          ${parseFloat(employeeDetail.transport_allowance).toLocaleString('es-CO')}
-                        </p>
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <DollarSign className="w-5 h-5 text-green-500" />
+                        <div>
+                          <p className="text-xs text-green-600">Auxilio Transporte</p>
+                          <p className="text-sm font-medium text-green-900">
+                            ${parseFloat(employeeDetail.transport_allowance).toLocaleString('es-CO')}
+                          </p>
+                        </div>
                       </div>
+                      <p className="text-xs text-green-600 mt-1 italic ml-8">
+                        {numberToWords(employeeDetail.transport_allowance)}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1338,6 +1930,13 @@ export default function Employees() {
                       (parseFloat(employeeDetail.food_allowance) || 0) +
                       (parseFloat(employeeDetail.transport_allowance) || 0)
                     ).toLocaleString('es-CO')}
+                  </p>
+                  <p className="text-xs text-green-700 mt-1 italic">
+                    {numberToWords(
+                      (parseFloat(employeeDetail.salary) || 0) +
+                      (parseFloat(employeeDetail.food_allowance) || 0) +
+                      (parseFloat(employeeDetail.transport_allowance) || 0)
+                    )}
                   </p>
                 </div>
               </div>
@@ -1535,6 +2134,23 @@ export default function Employees() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Create Employee Modal */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Agregar Nuevo Empleado"
+        size="lg"
+      >
+        <EmployeeCreateForm
+          employees={employees}
+          contractTemplates={contractTypeOptionsFromTemplates}
+          onSubmit={(data) => createMutation.mutate(data)}
+          onCancel={() => setShowCreateModal(false)}
+          loading={createMutation.isPending}
+          error={createError}
+        />
       </Modal>
     </div>
   )

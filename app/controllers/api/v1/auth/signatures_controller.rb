@@ -4,7 +4,7 @@ module Api
   module V1
     module Auth
       class SignaturesController < BaseController
-        before_action :set_signature, only: [:show, :update, :destroy, :set_default]
+        before_action :set_signature, only: [:show, :update, :destroy, :set_default, :toggle_active]
 
         # GET /api/v1/auth/signatures
         def index
@@ -61,10 +61,35 @@ module Api
 
         # DELETE /api/v1/auth/signatures/:id
         def destroy
+          if @signature.in_use?
+            return render json: {
+              error: "Esta firma está siendo utilizada en documentos",
+              in_use: true,
+              documents_count: @signature.documents_using_count,
+              message: "No se puede eliminar. Use la opción de desactivar en su lugar."
+            }, status: :unprocessable_content
+          end
+
           @signature.destroy
 
           render json: {
             message: "Firma eliminada exitosamente"
+          }
+        end
+
+        # POST /api/v1/auth/signatures/:id/toggle_active
+        def toggle_active
+          if @signature.active?
+            @signature.disable!
+            message = "Firma desactivada exitosamente"
+          else
+            @signature.enable!
+            message = "Firma activada exitosamente"
+          end
+
+          render json: {
+            data: signature_json(@signature, include_image: true),
+            message: message
           }
         end
 
@@ -120,6 +145,9 @@ module Api
             name: signature.name,
             signature_type: signature.signature_type,
             is_default: signature.is_default,
+            active: signature.active?,
+            in_use: signature.in_use?,
+            documents_count: signature.documents_using_count,
             created_at: signature.created_at.iso8601
           }
 

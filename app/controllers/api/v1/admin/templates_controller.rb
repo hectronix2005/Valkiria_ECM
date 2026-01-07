@@ -16,7 +16,13 @@ module Api
           # Filter by status
           @templates = @templates.where(status: params[:status]) if params[:status].present?
 
-          # Filter by category
+          # Filter by module
+          @templates = @templates.by_module(params[:module_type]) if params[:module_type].present?
+
+          # Filter by main category
+          @templates = @templates.by_main_category(params[:main_category]) if params[:main_category].present?
+
+          # Filter by subcategory
           @templates = @templates.where(category: params[:category]) if params[:category].present?
 
           # Search by name
@@ -124,10 +130,28 @@ module Api
 
         # GET /api/v1/admin/templates/categories
         def categories
+          modules = ::Templates::Template::MODULES.map do |key, config|
+            { value: key, label: config[:label], icon: config[:icon] }
+          end
+
+          main_categories = ::Templates::Template::MAIN_CATEGORIES.map do |key, label|
+            { value: key, label: label, module: ::Templates::Template::CATEGORY_TO_MODULE[key] }
+          end
+
+          subcategories = ::Templates::Template::SUBCATEGORIES.map do |key, config|
+            { value: key, label: config[:label], main_category: config[:main] }
+          end
+
+          # Group subcategories by main category for easier frontend consumption
+          grouped = subcategories.group_by { |s| s[:main_category] }
+
           render json: {
-            data: ::Templates::Template::CATEGORIES.map do |key, label|
-              { value: key, label: label }
-            end
+            data: subcategories, # Legacy: flat list of subcategories
+            modules: modules,
+            main_categories: main_categories,
+            subcategories: subcategories,
+            grouped: grouped,
+            category_to_module: ::Templates::Template::CATEGORY_TO_MODULE
           }
         end
 
@@ -257,6 +281,8 @@ module Api
           params.require(:template).permit(
             :name,
             :description,
+            :module_type,
+            :main_category,
             :category,
             variable_mappings: {}
           )
@@ -289,6 +315,10 @@ module Api
             id: template.uuid,
             name: template.name,
             description: template.description,
+            module_type: template.module_type,
+            module_type_label: template.module_type_label,
+            main_category: template.main_category,
+            main_category_label: template.main_category_label,
             category: template.category,
             category_label: template.category_label,
             status: template.status,
