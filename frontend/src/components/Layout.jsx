@@ -26,7 +26,8 @@ import {
   Scale,
   Building2,
   FileCheck,
-  Variable
+  Variable,
+  Network
 } from 'lucide-react'
 
 const navigation = [
@@ -38,6 +39,7 @@ const navigation = [
 const hrNavigation = [
   { name: 'Mis Vacaciones', href: '/hr/vacations', icon: Calendar },
   { name: 'Mis Certificaciones', href: '/hr/certifications', icon: Award },
+  { name: 'Organigrama', href: '/hr/organigrama', icon: Network },
 ]
 
 const hrAdminNavigation = [
@@ -57,6 +59,7 @@ const getHrNavigation = (isSupervisor, isHR, employeeMode) => {
 
 const adminNavigation = [
   { name: 'Configuración', href: '/admin/settings', icon: Settings },
+  { name: 'Áreas', href: '/admin/departments', icon: Building2 },
   { name: 'Templates', href: '/admin/templates', icon: FileText },
   { name: 'Firmantes', href: '/admin/signatory-types', icon: Users },
 ]

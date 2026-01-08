@@ -84,10 +84,54 @@ module Api
         def submit
           authorize @contract
 
+          # Validate contract has required data
+          unless @contract.third_party
+            return render json: { error: "El contrato debe tener un tercero asignado" }, status: :unprocessable_entity
+          end
+
+          unless @contract.amount && @contract.amount > 0
+            return render json: { error: "El contrato debe tener un monto válido" }, status: :unprocessable_entity
+          end
+
+          unless @contract.start_date && @contract.end_date
+            return render json: { error: "El contrato debe tener fechas de inicio y fin" }, status: :unprocessable_entity
+          end
+
+          # If contract has a template, generate document first to validate variables
+          if @contract.template_id && !@contract.document_uuid
+            template = ::Templates::Template.find_by(uuid: @contract.template_id)
+            if template
+              context = {
+                third_party: @contract.third_party,
+                contract: @contract,
+                organization: current_organization,
+                user: current_user
+              }
+
+              begin
+                service = ::Templates::RobustDocumentGeneratorService.new(template, context)
+                doc = service.generate!
+                @contract.update!(document_uuid: doc.uuid)
+              rescue ::Templates::RobustDocumentGeneratorService::MissingVariablesError => e
+                return render json: {
+                  error: "No se puede enviar a aprobación. Faltan datos para generar el documento.",
+                  missing_variables: e.message,
+                  action_required: "complete_data"
+                }, status: :unprocessable_entity
+              rescue ::Templates::RobustDocumentGeneratorService::GenerationError => e
+                return render json: {
+                  error: "Error al generar el documento: #{e.message}",
+                  action_required: "fix_template"
+                }, status: :unprocessable_entity
+              end
+            end
+          end
+
           @contract.submit!(actor: current_user)
           render json: {
             data: contract_json(@contract),
-            message: "Contrato enviado a aprobación"
+            message: "Contrato enviado a aprobación",
+            document_generated: @contract.document_uuid.present?
           }
         rescue ::Legal::Contract::InvalidStateError, ::Legal::Contract::ValidationError => e
           render json: { error: e.message }, status: :unprocessable_entity
@@ -138,7 +182,13 @@ module Api
         def generate_document
           authorize @contract
 
-          template = ::Templates::Template.find_by(uuid: params[:template_id])
+          # Use provided template_id or fall back to contract's stored template
+          template_id = params[:template_id].presence || @contract.template_id
+          unless template_id
+            return render json: { error: "No se especificó un template y el contrato no tiene uno asociado" }, status: :unprocessable_entity
+          end
+
+          template = ::Templates::Template.find_by(uuid: template_id)
           unless template
             return render json: { error: "Template no encontrado" }, status: :not_found
           end
@@ -170,6 +220,76 @@ module Api
           }, status: :unprocessable_entity
         rescue ::Templates::RobustDocumentGeneratorService::GenerationError => e
           render json: { error: e.message }, status: :unprocessable_entity
+        end
+
+        # POST /api/v1/legal/contracts/validate_template
+        # Validates that all template variables can be resolved with the given data
+        def validate_template
+          authorize ::Legal::Contract
+
+          template_id = params[:template_id]
+          third_party_id = params[:third_party_id]
+
+          unless template_id.present?
+            return render json: { error: "Se requiere template_id" }, status: :unprocessable_entity
+          end
+
+          template = ::Templates::Template.find_by(uuid: template_id)
+          unless template
+            return render json: { error: "Template no encontrado" }, status: :not_found
+          end
+
+          third_party = nil
+          if third_party_id.present?
+            third_party = ::Legal::ThirdParty.find_by(uuid: third_party_id)
+            unless third_party
+              return render json: { error: "Tercero no encontrado" }, status: :not_found
+            end
+          end
+
+          # Build a temporary contract object with the provided data
+          temp_contract = ::Legal::Contract.new(
+            title: params[:title] || "Validación",
+            contract_type: params[:contract_type] || "services",
+            amount: params[:amount]&.to_f,
+            currency: params[:currency] || "COP",
+            start_date: params[:start_date],
+            end_date: params[:end_date],
+            description: params[:description],
+            payment_terms: params[:payment_terms],
+            organization: current_organization,
+            third_party: third_party
+          )
+
+          # Create context for variable resolution
+          context = {
+            third_party: third_party,
+            contract: temp_contract,
+            organization: current_organization
+          }
+
+          # Validate variables
+          resolver = ::Templates::VariableResolverService.new(context)
+          validation = resolver.validate_for_template(template)
+
+          # Group missing variables by source for better UX
+          missing_by_source = validation[:missing].group_by { |m| m[:source] }
+
+          render json: {
+            valid: validation[:valid],
+            template: {
+              id: template.uuid,
+              name: template.name,
+              total_variables: validation[:total_variables]
+            },
+            validation: {
+              resolved_count: validation[:resolved_count],
+              missing_count: validation[:missing_count],
+              missing: validation[:missing],
+              missing_by_source: missing_by_source
+            },
+            message: validation[:valid] ? "Todos los datos están completos" : "Faltan datos requeridos para generar el documento"
+          }
         end
 
         # GET /api/v1/legal/contracts/:id/download_document

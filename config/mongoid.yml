@@ -55,17 +55,11 @@ production:
       options:
         read:
           mode: :primary
-        write:
-          w: majority
-          j: true
-          wtimeout: 5000
         max_pool_size: 50
         min_pool_size: 5
-        connect_timeout: 10
+        connect_timeout: 15
         socket_timeout: 30
         server_selection_timeout: 30
-        # Enable TLS in production
-        ssl: true
 
   options:
     belongs_to_required_by_default: true

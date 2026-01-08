@@ -27,27 +27,48 @@ module Api
 
         # POST /api/v1/auth/password/force_change
         # For users who must change password on first login
+        # Also updates corporate email
         def force_change
           unless current_user.must_change_password?
             return render json: { error: "No se requiere cambio de contraseña" }, status: :unprocessable_content
+          end
+
+          corporate_email = force_change_params[:corporate_email]
+          if corporate_email.blank?
+            return render json: { error: "El correo corporativo es requerido" }, status: :unprocessable_content
+          end
+
+          unless corporate_email.match?(/\A[^@\s]+@[^@\s]+\z/)
+            return render json: { error: "El correo electronico no es valido" }, status: :unprocessable_content
+          end
+
+          # Check if email is already taken by another user
+          existing_user = Identity::User.where(email: corporate_email).where(:id.ne => current_user.id).first
+          if existing_user
+            return render json: { error: "El correo electronico ya esta en uso" }, status: :unprocessable_content
           end
 
           if force_change_params[:new_password] != force_change_params[:new_password_confirmation]
             return render json: { error: "Las contraseñas no coinciden" }, status: :unprocessable_content
           end
 
-          if force_change_params[:new_password].length < 6
-            return render json: { error: "La contraseña debe tener al menos 6 caracteres" }, status: :unprocessable_content
+          if force_change_params[:new_password].length < 8
+            return render json: { error: "La contraseña debe tener al menos 8 caracteres" }, status: :unprocessable_content
           end
 
-          if current_user.update(password: force_change_params[:new_password])
+          # Update user email and password
+          if current_user.update(email: corporate_email, password: force_change_params[:new_password])
             current_user.password_changed!
+
+            # Update employee work_email if exists
+            employee = ::Hr::Employee.for_user(current_user)
+            employee&.update(work_email: corporate_email)
 
             # Generate new token after password change
             token = Warden::JWTAuth::UserEncoder.new.call(current_user, :identity_user, nil).first
 
             render json: {
-              message: "Contraseña actualizada exitosamente",
+              message: "Cuenta actualizada exitosamente. Tu nuevo correo es: #{corporate_email}",
               token: token,
               data: user_response(current_user)
             }, status: :ok
@@ -76,7 +97,7 @@ module Api
         end
 
         def force_change_params
-          params.permit(:new_password, :new_password_confirmation)
+          params.permit(:corporate_email, :new_password, :new_password_confirmation)
         end
 
         def user_response(user)

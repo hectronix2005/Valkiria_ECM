@@ -14,6 +14,10 @@ module Legal
       admin? || legal_staff? || manager?
     end
 
+    def validate_template?
+      admin? || legal_staff? || manager?
+    end
+
     def update?
       return false unless record.editable?
       admin? || legal_staff? || (manager? && owner?)

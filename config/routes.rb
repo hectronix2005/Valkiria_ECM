@@ -58,6 +58,13 @@ Rails.application.routes.draw do
       namespace :admin do
         resource :settings, only: [:show, :update]
 
+        # Departments (areas) management
+        resources :departments do
+          member do
+            post :toggle_active
+          end
+        end
+
         # Variable mappings management
         resources :variable_mappings do
           member do
@@ -116,6 +123,9 @@ Rails.application.routes.draw do
 
       # HR Module
       namespace :hr do
+        # Orgchart
+        get :orgchart, to: 'orgchart#index'
+
         # Employee's own requests
         resources :vacations do
           member do
@@ -160,6 +170,13 @@ Rails.application.routes.draw do
 
       # Legal Module
       namespace :legal do
+        # Third party types (admin-managed)
+        resources :third_party_types do
+          member do
+            post :toggle_active
+          end
+        end
+
         # Third parties (providers, clients, contractors, etc.)
         resources :third_parties do
           member do
@@ -171,6 +188,9 @@ Rails.application.routes.draw do
 
         # Contracts with multi-level approval
         resources :contracts do
+          collection do
+            post :validate_template
+          end
           member do
             post :submit
             post :activate

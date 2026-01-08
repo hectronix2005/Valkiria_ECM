@@ -121,6 +121,28 @@ module Api
           end
         end
 
+        # GET /api/v1/hr/employees/org_chart
+        # Returns hierarchical organization chart data
+        def org_chart
+          authorize ::Hr::Employee, :index?
+
+          employees = ::Hr::Employee
+            .where(organization_id: current_organization.id)
+            .active
+            .order(last_name: :asc)
+
+          # Build tree structure
+          tree = build_org_tree(employees)
+
+          render json: {
+            data: tree,
+            meta: {
+              total_employees: employees.count,
+              top_level_count: tree.count
+            }
+          }
+        end
+
         # POST /api/v1/hr/employees/:id/generate_document
         def generate_document
           authorize @employee, :update?
@@ -169,6 +191,8 @@ module Api
 
         def employee_params
           permitted = params.require(:employee).permit(
+            :first_name,
+            :last_name,
             :employee_number,
             :employment_status,
             :employment_type,
@@ -383,6 +407,39 @@ module Api
           current_employee.id == employee.id ||
             current_employee.hr_staff? ||
             current_employee.supervises?(employee)
+        end
+
+        def build_org_tree(employees)
+          # Group by supervisor_id for efficient lookup
+          by_supervisor = employees.group_by(&:supervisor_id)
+
+          # Find top-level employees (no supervisor or supervisor outside org)
+          employee_ids = employees.pluck(:id).to_set
+          top_level = employees.select do |e|
+            e.supervisor_id.nil? || !employee_ids.include?(e.supervisor_id)
+          end
+
+          # Build tree recursively
+          top_level.map { |e| build_node(e, by_supervisor) }
+        end
+
+        def build_node(employee, by_supervisor)
+          children = by_supervisor[employee.id] || []
+          {
+            id: employee.uuid,
+            name: employee.full_name,
+            job_title: employee.job_title,
+            department: employee.department,
+            email: employee.user&.email,
+            photo_url: nil, # Future: add avatar support
+            subordinates_count: count_all_subordinates(employee, by_supervisor),
+            children: children.sort_by(&:last_name).map { |c| build_node(c, by_supervisor) }
+          }
+        end
+
+        def count_all_subordinates(employee, by_supervisor)
+          direct = by_supervisor[employee.id] || []
+          direct.count + direct.sum { |c| count_all_subordinates(c, by_supervisor) }
         end
 
         def current_employee

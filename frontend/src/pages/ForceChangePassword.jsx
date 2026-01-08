@@ -4,11 +4,14 @@ import { useAuth } from '../contexts/AuthContext'
 import { authService } from '../services/api'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
-import { FileText, AlertCircle, Lock, ShieldCheck } from 'lucide-react'
+import { AlertCircle, Lock, ShieldCheck, Mail, Eye, EyeOff } from 'lucide-react'
 
 export default function ForceChangePassword() {
+  const [corporateEmail, setCorporateEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { user, updateUser, logout } = useAuth()
@@ -18,13 +21,23 @@ export default function ForceChangePassword() {
     e.preventDefault()
     setError('')
 
+    if (!corporateEmail.trim()) {
+      setError('El correo corporativo es requerido')
+      return
+    }
+
+    if (!corporateEmail.includes('@')) {
+      setError('Ingresa un correo electronico valido')
+      return
+    }
+
     if (newPassword !== confirmPassword) {
       setError('Las contraseñas no coinciden')
       return
     }
 
-    if (newPassword.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres')
+    if (newPassword.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres')
       return
     }
 
@@ -32,6 +45,7 @@ export default function ForceChangePassword() {
 
     try {
       const response = await authService.forceChangePassword({
+        corporate_email: corporateEmail,
         new_password: newPassword,
         new_password_confirmation: confirmPassword
       })
@@ -92,29 +106,59 @@ export default function ForceChangePassword() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Nueva Contraseña"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Minimo 6 caracteres"
-              required
-              autoFocus
-            />
+            <div>
+              <Input
+                label="Correo Corporativo"
+                type="email"
+                value={corporateEmail}
+                onChange={(e) => setCorporateEmail(e.target.value)}
+                placeholder="tu.nombre@empresa.com"
+                required
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 mt-1">Este sera tu nuevo correo para iniciar sesion</p>
+            </div>
 
-            <Input
-              label="Confirmar Nueva Contraseña"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Repite la contraseña"
-              required
-            />
+            <div className="relative">
+              <Input
+                label="Nueva Contraseña"
+                type={showPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Minimo 8 caracteres"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-[34px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+
+            <div className="relative">
+              <Input
+                label="Confirmar Nueva Contraseña"
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repite la contraseña"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-[34px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
 
             <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
               <p className="font-medium mb-1">Requisitos de la contraseña:</p>
               <ul className="list-disc list-inside space-y-0.5 text-gray-500">
-                <li>Minimo 6 caracteres</li>
+                <li>Minimo 8 caracteres</li>
                 <li>No puede ser igual a tu numero de documento</li>
               </ul>
             </div>

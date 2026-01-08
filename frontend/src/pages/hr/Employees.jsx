@@ -154,18 +154,7 @@ const durationUnitLabels = {
   years: 'anos',
 }
 
-const departmentOptions = [
-  { value: '', label: 'Sin departamento' },
-  { value: 'engineering', label: 'Ingeniería' },
-  { value: 'hr', label: 'Recursos Humanos' },
-  { value: 'finance', label: 'Finanzas' },
-  { value: 'sales', label: 'Ventas' },
-  { value: 'marketing', label: 'Marketing' },
-  { value: 'operations', label: 'Operaciones' },
-  { value: 'legal', label: 'Legal' },
-  { value: 'it', label: 'Tecnología' },
-  { value: 'admin', label: 'Administración' },
-]
+// departmentOptions se carga dinámicamente desde la API
 
 const statusLabels = {
   active: 'Activo',
@@ -190,8 +179,10 @@ const employmentTypeLabels = {
   intern: 'Pasante',
 }
 
-function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmit, onCancel, loading, error }) {
+function EmployeeEditForm({ employee, employees, contractTemplates = [], departmentOptions = [], onSubmit, onCancel, loading, error }) {
   const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
     employee_number: '',
     job_title: '',
     department: '',
@@ -226,11 +217,13 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
     personal_email: '',
   })
 
-  const [activeTab, setActiveTab] = useState('laboral')
+  const [activeTab, setActiveTab] = useState('basico')
 
   useEffect(() => {
     if (employee) {
       setFormData({
+        first_name: employee.first_name || '',
+        last_name: employee.last_name || '',
         employee_number: employee.employee_number || '',
         job_title: employee.job_title || '',
         department: employee.department || '',
@@ -281,17 +274,18 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
 
   // Filter out current employee from supervisor list
   const supervisorOptions = [
-    { value: '', label: 'Sin supervisor' },
+    { value: '', label: 'Junta Directiva' },
     ...employees
       .filter(e => e.id !== employee?.id)
       .map(e => ({ value: e.id, label: `${e.full_name} - ${e.job_title || 'Sin cargo'}` }))
   ]
 
   const tabs = [
+    { id: 'basico', label: 'Datos Básicos', icon: User },
     { id: 'laboral', label: 'Laboral', icon: Briefcase },
     { id: 'contrato', label: 'Contrato', icon: FileText },
-    { id: 'compensacion', label: 'Compensacion', icon: DollarSign },
-    { id: 'personal', label: 'Personal', icon: User },
+    { id: 'compensacion', label: 'Compensación', icon: DollarSign },
+    { id: 'personal', label: 'Personal', icon: MapPin },
   ]
 
   return (
@@ -323,6 +317,28 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
           ))}
         </nav>
       </div>
+
+      {/* Tab: Datos Básicos */}
+      {activeTab === 'basico' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Nombre *"
+              value={formData.first_name}
+              onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+              placeholder="Nombre del empleado"
+              required
+            />
+            <Input
+              label="Apellido *"
+              value={formData.last_name}
+              onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+              placeholder="Apellido del empleado"
+              required
+            />
+          </div>
+        </div>
+      )}
 
       {/* Tab: Información Laboral */}
       {activeTab === 'laboral' && (
@@ -366,17 +382,11 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
             />
             <div>
               <Select
-                label="Supervisor *"
+                label="Jefe Inmediato"
                 options={supervisorOptions}
                 value={formData.supervisor_id}
                 onChange={(e) => setFormData({ ...formData, supervisor_id: e.target.value })}
               />
-              {!formData.supervisor_id && (
-                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Requerido para aprobaciones y firmas de documentos
-                </p>
-              )}
             </div>
             <Input
               label="Fecha de Contratacion"
@@ -622,7 +632,7 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], onSubmi
   )
 }
 
-function EmployeeCreateForm({ employees = [], contractTemplates = [], onSubmit, onCancel, loading, error }) {
+function EmployeeCreateForm({ employees = [], contractTemplates = [], departmentOptions = [], onSubmit, onCancel, loading, error }) {
   const [formData, setFormData] = useState({
     // Datos básicos (requeridos)
     first_name: '',
@@ -672,7 +682,7 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], onSubmit, 
     if (!formData.identification_number.trim()) errors.identification_number = 'Número de documento es requerido'
     if (!formData.job_title.trim()) errors.job_title = 'Cargo es requerido'
     if (!formData.department) errors.department = 'Departamento es requerido'
-    if (!formData.supervisor_id) errors.supervisor_id = 'Supervisor es requerido'
+    // supervisor_id es opcional - puede ser "Sin supervisor"
     if (!formData.hire_date) errors.hire_date = 'Fecha de contratación es requerida'
     setValidationErrors(errors)
     return Object.keys(errors).length === 0
@@ -698,7 +708,7 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], onSubmit, 
   }
 
   const supervisorOptions = [
-    { value: '', label: 'Seleccionar supervisor *' },
+    { value: '', label: 'Junta Directiva' },
     ...employees.map(e => ({ value: e.id, label: `${e.full_name} - ${e.job_title || 'Sin cargo'}` }))
   ]
 
@@ -712,7 +722,7 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], onSubmit, 
 
   const hasTabError = (tabId) => {
     if (tabId === 'basico') return validationErrors.first_name || validationErrors.last_name || validationErrors.personal_email || validationErrors.identification_number
-    if (tabId === 'laboral') return validationErrors.job_title || validationErrors.department || validationErrors.supervisor_id || validationErrors.hire_date
+    if (tabId === 'laboral') return validationErrors.job_title || validationErrors.department || validationErrors.hire_date
     return false
   }
 
@@ -863,18 +873,11 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], onSubmit, 
             />
             <div>
               <Select
-                label="Supervisor *"
+                label="Jefe Inmediato"
                 options={supervisorOptions}
                 value={formData.supervisor_id}
                 onChange={(e) => setFormData({ ...formData, supervisor_id: e.target.value })}
               />
-              {validationErrors.supervisor_id && <p className="text-xs text-red-600 mt-1">{validationErrors.supervisor_id}</p>}
-              {!formData.supervisor_id && (
-                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Requerido para aprobaciones y firmas
-                </p>
-              )}
             </div>
             <div>
               <Input
@@ -1223,6 +1226,7 @@ export default function Employees() {
   const [departmentFilter, setDepartmentFilter] = useState('')
   const [contractTypeFilter, setContractTypeFilter] = useState('')
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
   const [viewMode, setViewMode] = useState('table')
   const [page, setPage] = useState(1)
   const [showDetailModal, setShowDetailModal] = useState(false)
@@ -1236,6 +1240,9 @@ export default function Employees() {
   const [sortDirection, setSortDirection] = useState('asc')
 
   const queryClient = useQueryClient()
+
+  // Use static department list
+  const departmentOptions = departmentFilters
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['employees', { q: searchQuery, status: statusFilter, department: departmentFilter, page, sortColumn, sortDirection }],
@@ -1489,36 +1496,23 @@ export default function Employees() {
                   />
                 </div>
               </div>
-              <Select
-                options={statusFilters}
-                value={statusFilter}
-                onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-                className="w-44"
-              />
-              <Select
-                options={departmentFilters}
-                value={departmentFilter}
-                onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1) }}
-                className="w-48"
-              />
-              <Select
-                options={[
-                  { value: '', label: 'Tipo de contrato' },
-                  ...contractTypeOptions
-                ]}
-                value={contractTypeFilter}
-                onChange={(e) => { setContractTypeFilter(e.target.value); setPage(1) }}
-                className="w-44"
-              />
-              <Select
-                options={[
-                  { value: '', label: 'Tipo de empleo' },
-                  ...employmentTypeOptions
-                ]}
-                value={employmentTypeFilter}
-                onChange={(e) => { setEmploymentTypeFilter(e.target.value); setPage(1) }}
-                className="w-44"
-              />
+              <button
+                type="button"
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-3 py-2 text-sm rounded-lg flex items-center gap-2 transition-colors ${
+                  showFilters || hasFilters
+                    ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Filter className="w-4 h-4" />
+                Filtros
+                {hasFilters && (
+                  <span className="bg-primary-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                    {[statusFilter, departmentFilter, contractTypeFilter, employmentTypeFilter].filter(Boolean).length}
+                  </span>
+                )}
+              </button>
               {hasFilters && (
                 <button
                   type="button"
@@ -1530,6 +1524,41 @@ export default function Employees() {
                 </button>
               )}
             </div>
+            {/* Collapsible filters */}
+            {showFilters && (
+              <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-gray-100">
+                <Select
+                  options={statusFilters}
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+                  className="w-44"
+                />
+                <Select
+                  options={departmentFilters}
+                  value={departmentFilter}
+                  onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1) }}
+                  className="w-48"
+                />
+                <Select
+                  options={[
+                    { value: '', label: 'Tipo de contrato' },
+                    ...contractTypeOptions
+                  ]}
+                  value={contractTypeFilter}
+                  onChange={(e) => { setContractTypeFilter(e.target.value); setPage(1) }}
+                  className="w-44"
+                />
+                <Select
+                  options={[
+                    { value: '', label: 'Tipo de empleo' },
+                    ...employmentTypeOptions
+                  ]}
+                  value={employmentTypeFilter}
+                  onChange={(e) => { setEmploymentTypeFilter(e.target.value); setPage(1) }}
+                  className="w-44"
+                />
+              </div>
+            )}
             {/* Results counter */}
             {!isLoading && employeesRaw.length > 0 && (
               <div className="text-sm text-gray-500 flex items-center justify-between">
@@ -2072,6 +2101,7 @@ export default function Employees() {
             employee={employeeDetail}
             employees={employees}
             contractTemplates={contractTypeOptionsFromTemplates}
+            departmentOptions={departmentOptions}
             onSubmit={handleUpdate}
             onCancel={handleCloseEdit}
             loading={updateMutation.isPending}
@@ -2146,6 +2176,7 @@ export default function Employees() {
         <EmployeeCreateForm
           employees={employees}
           contractTemplates={contractTypeOptionsFromTemplates}
+          departmentOptions={departmentOptions}
           onSubmit={(data) => createMutation.mutate(data)}
           onCancel={() => setShowCreateModal(false)}
           loading={createMutation.isPending}

@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { contractApprovalService } from '../../services/api'
+import { contractApprovalService, contractService } from '../../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import Badge from '../../components/ui/Badge'
-import { CheckCircle, XCircle, Clock, FileText, Building2, User, AlertCircle } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, FileText, Building2, User, AlertCircle, Download, Eye, FileWarning } from 'lucide-react'
 
 const STATUS_COLORS = {
   pending: 'yellow',
@@ -73,7 +73,7 @@ function ApprovalTimeline({ approvals }) {
   )
 }
 
-function ApprovalCard({ contract, onApprove, onReject, onViewDetail }) {
+function ApprovalCard({ contract, onApprove, onReject, onViewDetail, onViewDocument }) {
   const formatAmount = (amount, currency) => {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
@@ -137,6 +137,36 @@ function ApprovalCard({ contract, onApprove, onReject, onViewDetail }) {
         {/* Approval Timeline */}
         <div className="mt-4">
           <ApprovalTimeline approvals={contract.approvals} />
+        </div>
+
+        {/* Document Preview */}
+        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-blue-600" />
+              <span className="text-sm font-medium text-blue-900">Documento del Contrato</span>
+            </div>
+            {contract.has_document ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onViewDocument(contract)}
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                Ver Documento
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2 text-amber-600">
+                <FileWarning className="h-4 w-4" />
+                <span className="text-sm">Sin documento generado</span>
+              </div>
+            )}
+          </div>
+          {!contract.has_document && (
+            <p className="text-xs text-amber-700 mt-2">
+              Este contrato no tiene un documento generado. Se recomienda generar el documento antes de aprobar.
+            </p>
+          )}
         </div>
 
         {/* Actions */}
@@ -264,8 +294,36 @@ export default function ContractApprovals() {
   const [activeTab, setActiveTab] = useState('pending')
   const [approveContract, setApproveContract] = useState(null)
   const [rejectContract, setRejectContract] = useState(null)
+  const [documentContract, setDocumentContract] = useState(null)
+  const [documentUrl, setDocumentUrl] = useState(null)
+  const [documentLoading, setDocumentLoading] = useState(false)
 
   const queryClient = useQueryClient()
+
+  // Handle document view
+  const handleViewDocument = async (contract) => {
+    setDocumentContract(contract)
+    setDocumentLoading(true)
+    try {
+      const response = await contractService.downloadDocument(contract.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      setDocumentUrl(url)
+    } catch (error) {
+      console.error('Error loading document:', error)
+      alert('Error al cargar el documento')
+    } finally {
+      setDocumentLoading(false)
+    }
+  }
+
+  const handleCloseDocument = () => {
+    if (documentUrl) {
+      URL.revokeObjectURL(documentUrl)
+    }
+    setDocumentContract(null)
+    setDocumentUrl(null)
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['contract-approvals', activeTab],
@@ -382,6 +440,7 @@ export default function ContractApprovals() {
               contract={contract}
               onApprove={setApproveContract}
               onReject={setRejectContract}
+              onViewDocument={handleViewDocument}
             />
           ))}
         </div>
@@ -419,6 +478,110 @@ export default function ContractApprovals() {
             isLoading={rejectMutation.isPending}
           />
         )}
+      </Modal>
+
+      {/* Document Preview Modal */}
+      <Modal
+        isOpen={!!documentContract}
+        onClose={handleCloseDocument}
+        title={`Documento: ${documentContract?.contract_number || ''}`}
+        size="xl"
+      >
+        <div className="space-y-4">
+          {/* Contract Info Header */}
+          {documentContract && (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Contrato:</span>
+                  <p className="font-medium">{documentContract.title}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Tercero:</span>
+                  <p className="font-medium">{documentContract.third_party?.display_name}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Monto:</span>
+                  <p className="font-medium text-green-600">
+                    {new Intl.NumberFormat('es-CO', { style: 'currency', currency: documentContract.currency || 'COP' }).format(documentContract.amount)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Estado:</span>
+                  <Badge variant={documentContract.status}>{documentContract.status_label}</Badge>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PDF Viewer */}
+          {documentLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+              <span className="ml-3 text-gray-500">Cargando documento...</span>
+            </div>
+          ) : documentUrl ? (
+            <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '60vh' }}>
+              <iframe
+                src={documentUrl}
+                className="w-full h-full"
+                title="Contract Document"
+              />
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <FileWarning className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>No se pudo cargar el documento</p>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-between pt-4 border-t">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (documentUrl) {
+                  const a = document.createElement('a')
+                  a.href = documentUrl
+                  a.download = `${documentContract?.contract_number || 'contrato'}.pdf`
+                  a.click()
+                }
+              }}
+              disabled={!documentUrl}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Descargar PDF
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={handleCloseDocument}>
+                Cerrar
+              </Button>
+              {documentContract?.can_approve && (
+                <>
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      handleCloseDocument()
+                      setRejectContract(documentContract)
+                    }}
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Rechazar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      handleCloseDocument()
+                      setApproveContract(documentContract)
+                    }}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Aprobar
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   )

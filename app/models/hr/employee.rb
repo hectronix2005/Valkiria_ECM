@@ -79,6 +79,7 @@ module Hr
     field :address, type: String
     field :phone, type: String
     field :personal_email, type: String  # Email personal para crear cuenta de acceso
+    field :work_email, type: String  # Email corporativo (se actualiza cuando el usuario lo cambia)
 
     # Vacation balance (mock for now - would integrate with payroll system)
     field :vacation_balance_days, type: Float, default: 0.0

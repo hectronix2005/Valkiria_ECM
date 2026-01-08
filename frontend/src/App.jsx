@@ -10,11 +10,13 @@ import Approvals from './pages/hr/Approvals'
 import Employees from './pages/hr/Employees'
 import Certifications from './pages/hr/Certifications'
 import HRDashboard from './pages/hr/HRDashboard'
+import Orgchart from './pages/hr/Orgchart'
 import Templates from './pages/admin/Templates'
 import TemplateEdit from './pages/admin/TemplateEdit'
 import HRVariables from './pages/hr/HRVariables'
 import SignatoryTypes from './pages/admin/SignatoryTypes'
 import Settings from './pages/admin/Settings'
+import Departments from './pages/admin/Departments'
 import Documents from './pages/Documents'
 import Folders from './pages/Folders'
 import ThirdParties from './pages/legal/ThirdParties'
@@ -160,6 +162,16 @@ export default function App() {
         }
       />
 
+      {/* HR - Organigrama */}
+      <Route
+        path="/hr/organigrama"
+        element={
+          <ProtectedRoute>
+            <Orgchart />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Documents */}
       <Route
         path="/documents"
@@ -196,6 +208,16 @@ export default function App() {
         element={
           <ProtectedRoute requireAdmin>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Departments */}
+      <Route
+        path="/admin/departments"
+        element={
+          <ProtectedRoute requireAdmin>
+            <Departments />
           </ProtectedRoute>
         }
       />

@@ -62,7 +62,102 @@ module Templates
       result
     end
 
+    # Validate all template variables and return missing ones
+    # Returns { valid: true/false, missing: [...], resolved: {...} }
+    def validate_for_template(template)
+      resolved = {}
+      missing = []
+
+      template.variables.each do |variable_name|
+        path = template.variable_mappings[variable_name]
+        if path
+          value = resolve(path)
+          if value.present?
+            resolved[variable_name] = value
+          else
+            missing << {
+              variable: variable_name,
+              path: path,
+              source: path.split(".").first,
+              field: path.split(".")[1..].join("."),
+              label: friendly_label_for(path)
+            }
+          end
+        else
+          missing << {
+            variable: variable_name,
+            path: nil,
+            source: "unmapped",
+            field: nil,
+            label: "Variable sin mapear: #{variable_name}"
+          }
+        end
+      end
+
+      {
+        valid: missing.empty?,
+        total_variables: template.variables.size,
+        resolved_count: resolved.size,
+        missing_count: missing.size,
+        missing: missing,
+        resolved: resolved
+      }
+    end
+
     private
+
+    # Get a friendly label for a variable path
+    def friendly_label_for(path)
+      return "Variable desconocida" unless path
+
+      parts = path.split(".")
+      source = parts.first
+      field = parts[1..].join(".")
+
+      source_labels = {
+        "third_party" => "Tercero",
+        "contract" => "Contrato",
+        "organization" => "Organización",
+        "employee" => "Empleado",
+        "system" => "Sistema"
+      }
+
+      field_labels = {
+        # Third party
+        "legal_rep_name" => "Nombre del representante legal",
+        "legal_rep_id" => "Cédula del representante legal",
+        "legal_rep_email" => "Email del representante legal",
+        "display_name" => "Nombre",
+        "business_name" => "Razón social",
+        "identification_number" => "Número de identificación",
+        "identification_type" => "Tipo de identificación",
+        "address" => "Dirección",
+        "city" => "Ciudad",
+        "phone" => "Teléfono",
+        "email" => "Email",
+        "bank_name" => "Banco",
+        "bank_account_number" => "Número de cuenta",
+        "bank_account_type" => "Tipo de cuenta",
+        # Contract
+        "contract_number" => "Número de contrato",
+        "title" => "Título",
+        "amount" => "Monto",
+        "amount_text" => "Monto en letras",
+        "start_date" => "Fecha de inicio",
+        "end_date" => "Fecha de fin",
+        "description" => "Descripción",
+        "duration_text" => "Duración",
+        # Organization
+        "name" => "Nombre",
+        "tax_id" => "NIT",
+        "nit" => "NIT"
+      }
+
+      source_label = source_labels[source] || source.humanize
+      field_label = field_labels[field] || field.humanize
+
+      "#{source_label}: #{field_label}"
+    end
 
     def resolve_employee_field(field)
       return nil unless @employee

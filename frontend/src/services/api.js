@@ -103,6 +103,11 @@ export const dashboardService = {
   getStats: () => api.get('/hr/dashboard'),
 }
 
+// HR - Orgchart
+export const orgchartService = {
+  get: () => api.get('/hr/orgchart'),
+}
+
 // Generated Documents (from templates)
 export const generatedDocumentService = {
   list: (params) => api.get('/documents', { params }),
@@ -211,6 +216,16 @@ export const templateService = {
   reorderSignatories: (templateId, ids) => api.post(`/admin/templates/${templateId}/signatories/reorder`, { ids }),
 }
 
+// Legal - Third Party Types (admin-managed)
+export const thirdPartyTypeService = {
+  list: (params) => api.get('/legal/third_party_types', { params }),
+  get: (id) => api.get(`/legal/third_party_types/${id}`),
+  create: (data) => api.post('/legal/third_party_types', { third_party_type: data }),
+  update: (id, data) => api.patch(`/legal/third_party_types/${id}`, { third_party_type: data }),
+  delete: (id) => api.delete(`/legal/third_party_types/${id}`),
+  toggleActive: (id) => api.post(`/legal/third_party_types/${id}/toggle_active`),
+}
+
 // Legal - Third Parties
 export const thirdPartyService = {
   list: (params) => api.get('/legal/third_parties', { params }),
@@ -236,6 +251,7 @@ export const contractService = {
   cancel: (id, reason) => api.post(`/legal/contracts/${id}/cancel`, { reason }),
   generateDocument: (id, templateId) => api.post(`/legal/contracts/${id}/generate_document`, { template_id: templateId }),
   downloadDocument: (id) => api.get(`/legal/contracts/${id}/download_document`, { responseType: 'blob' }),
+  validateTemplate: (data) => api.post('/legal/contracts/validate_template', data),
 }
 
 // Legal - Contract Approvals
@@ -255,6 +271,16 @@ export const legalDashboardService = {
 export const settingsService = {
   get: () => api.get('/admin/settings'),
   update: (data) => api.patch('/admin/settings', { settings: data }),
+}
+
+// Admin - Departments (Areas)
+export const departmentService = {
+  list: (params) => api.get('/admin/departments', { params }),
+  get: (id) => api.get(`/admin/departments/${id}`),
+  create: (data) => api.post('/admin/departments', { department: data }),
+  update: (id, data) => api.patch(`/admin/departments/${id}`, { department: data }),
+  delete: (id) => api.delete(`/admin/departments/${id}`),
+  toggleActive: (id) => api.post(`/admin/departments/${id}/toggle_active`),
 }
 
 export default api

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
-import { FileText, AlertCircle, Users } from 'lucide-react'
+import { FileText, AlertCircle, Users, Eye, EyeOff } from 'lucide-react'
 
 const TEST_USERS = [
   { email: 'admin@valkyria.com', password: 'Admin123!', role: 'Admin', color: 'bg-red-100 text-red-700' },
@@ -19,6 +19,7 @@ const TEST_USERS = [
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
@@ -88,14 +89,23 @@ export default function Login() {
               autoFocus
             />
 
-            <Input
-              label="Contraseña"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
+            <div className="relative">
+              <Input
+                label="Contraseña"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-[34px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
 
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2">

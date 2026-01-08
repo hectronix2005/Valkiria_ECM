@@ -39,7 +39,7 @@ const STATUS_CONFIG = {
 }
 
 // Formulario de contrato (paso 2: después de seleccionar template)
-function ContractForm({ template, thirdParties, onSubmit, onCancel, onBack, isLoading }) {
+function ContractForm({ template, thirdParties, onSubmit, onCancel, onBack, isLoading, onEditThirdParty }) {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -52,8 +52,70 @@ function ContractForm({ template, thirdParties, onSubmit, onCancel, onBack, isLo
     payment_terms: '',
     template_id: template?.id || '',
   })
+  const [useSuggestedTitle, setUseSuggestedTitle] = useState(true)
+  const [validation, setValidation] = useState(null)
+  const [validating, setValidating] = useState(false)
+
+  // Validate template variables when third party or other contract data changes
+  useEffect(() => {
+    const validateData = async () => {
+      if (!template?.id || !formData.third_party_id) {
+        setValidation(null)
+        return
+      }
+
+      setValidating(true)
+      try {
+        const response = await contractService.validateTemplate({
+          template_id: template.id,
+          third_party_id: formData.third_party_id,
+          amount: formData.amount || 0,
+          start_date: formData.start_date,
+          end_date: formData.end_date,
+          description: formData.description,
+          contract_type: formData.contract_type,
+        })
+        setValidation(response.data)
+      } catch (error) {
+        console.error('Validation error:', error)
+        setValidation(null)
+      } finally {
+        setValidating(false)
+      }
+    }
+
+    // Debounce validation
+    const timer = setTimeout(validateData, 500)
+    return () => clearTimeout(timer)
+  }, [template?.id, formData.third_party_id, formData.amount, formData.start_date, formData.end_date])
+
+  // Generate suggested title from contract type and third party
+  const getSuggestedTitle = () => {
+    const typeLabel = CONTRACT_TYPES.find(t => t.value === formData.contract_type)?.label || ''
+    const thirdParty = thirdParties.find(tp => tp.id === formData.third_party_id)
+    const thirdPartyName = thirdParty?.trade_name || thirdParty?.business_name || thirdParty?.display_name || ''
+
+    if (typeLabel && thirdPartyName) {
+      return `${typeLabel} - ${thirdPartyName}`
+    }
+    return ''
+  }
+
+  // Auto-update title when using suggested and type/third_party changes
+  useEffect(() => {
+    if (useSuggestedTitle) {
+      const suggested = getSuggestedTitle()
+      if (suggested) {
+        setFormData(prev => ({ ...prev, title: suggested }))
+      }
+    }
+  }, [formData.contract_type, formData.third_party_id, useSuggestedTitle])
 
   const handleChange = (field, value) => {
+    // If user manually changes title, switch to manual mode
+    if (field === 'title') {
+      setUseSuggestedTitle(false)
+    }
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -78,14 +140,6 @@ function ContractForm({ template, thirdParties, onSubmit, onCancel, onBack, isLo
         </div>
       </div>
 
-      <Input
-        label="Título del Contrato"
-        value={formData.title}
-        onChange={(e) => handleChange('title', e.target.value)}
-        placeholder="Ej: Contrato de Servicios TI 2025"
-        required
-      />
-
       <div className="grid grid-cols-2 gap-4">
         <Select
           label="Tipo de Contrato"
@@ -104,6 +158,45 @@ function ContractForm({ template, thirdParties, onSubmit, onCancel, onBack, isLo
           ]}
           required
         />
+      </div>
+
+      {/* Título del contrato con sugerencia automática */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm font-medium text-gray-700">Título del Contrato</label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={useSuggestedTitle}
+              onChange={(e) => {
+                setUseSuggestedTitle(e.target.checked)
+                if (e.target.checked) {
+                  const suggested = getSuggestedTitle()
+                  if (suggested) {
+                    setFormData(prev => ({ ...prev, title: suggested }))
+                  }
+                }
+              }}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-gray-600">Sugerir nombre</span>
+          </label>
+        </div>
+        <input
+          type="text"
+          value={formData.title}
+          onChange={(e) => handleChange('title', e.target.value)}
+          placeholder={useSuggestedTitle ? 'Selecciona tipo y tercero...' : 'Ej: Contrato de Servicios TI 2025'}
+          required
+          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+            useSuggestedTitle ? 'border-primary-300 bg-primary-50' : 'border-gray-300'
+          }`}
+        />
+        {useSuggestedTitle && getSuggestedTitle() && (
+          <p className="mt-1 text-xs text-primary-600">
+            Nombre generado automáticamente desde Tipo + Tercero
+          </p>
+        )}
       </div>
 
       <div>
@@ -174,6 +267,92 @@ function ContractForm({ template, thirdParties, onSubmit, onCancel, onBack, isLo
         </div>
       )}
 
+      {/* Validation status */}
+      {validating && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span className="text-sm text-blue-700">Validando datos del template...</span>
+          </div>
+        </div>
+      )}
+
+      {validation && !validating && (
+        validation.valid ? (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <span className="text-sm font-medium text-green-700">
+                Todos los datos están completos ({validation.validation.resolved_count}/{validation.template.total_variables} variables)
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-700 mb-2">
+                  Faltan datos para generar el documento ({validation.validation.missing_count} de {validation.template.total_variables})
+                </p>
+                <div className="space-y-1">
+                  {validation.validation.missing_by_source?.third_party?.length > 0 && (
+                    <div className="text-xs">
+                      <span className="font-medium text-red-600">Datos del Tercero:</span>
+                      <ul className="ml-4 list-disc text-red-600">
+                        {validation.validation.missing_by_source.third_party.map((m, i) => (
+                          <li key={i}>{m.label}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {validation.validation.missing_by_source?.contract?.length > 0 && (
+                    <div className="text-xs">
+                      <span className="font-medium text-red-600">Datos del Contrato:</span>
+                      <ul className="ml-4 list-disc text-red-600">
+                        {validation.validation.missing_by_source.contract.map((m, i) => (
+                          <li key={i}>{m.label}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {validation.validation.missing_by_source?.unmapped?.length > 0 && (
+                    <div className="text-xs">
+                      <span className="font-medium text-amber-600">Variables sin mapear:</span>
+                      <ul className="ml-4 list-disc text-amber-600">
+                        {validation.validation.missing_by_source.unmapped.map((m, i) => (
+                          <li key={i}>{m.variable}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-red-500 mt-2">
+                  Complete los datos faltantes del tercero o contacte a un administrador para mapear las variables.
+                </p>
+                {validation.validation.missing_by_source?.third_party?.length > 0 && formData.third_party_id && onEditThirdParty && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => {
+                      const tp = thirdParties.find(t => t.id === formData.third_party_id)
+                      if (tp) {
+                        onEditThirdParty(tp, validation.validation.missing_by_source.third_party)
+                      }
+                    }}
+                  >
+                    <Edit2 className="h-4 w-4 mr-2" />
+                    Completar datos del tercero
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      )}
+
       <div className="flex justify-between pt-4 border-t">
         <Button type="button" variant="ghost" onClick={onBack}>
           ← Cambiar Template
@@ -182,7 +361,11 @@ function ContractForm({ template, thirdParties, onSubmit, onCancel, onBack, isLo
           <Button type="button" variant="secondary" onClick={onCancel}>
             Cancelar
           </Button>
-          <Button type="submit" loading={isLoading}>
+          <Button
+            type="submit"
+            loading={isLoading}
+            disabled={validating || (validation && !validation.valid)}
+          >
             <Plus className="h-4 w-4 mr-2" />
             Crear Contrato
           </Button>
@@ -513,6 +696,10 @@ export default function Contracts() {
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [selectedContract, setSelectedContract] = useState(null)
   const [generateTemplateId, setGenerateTemplateId] = useState('')
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [detailContract, setDetailContract] = useState(null)
+  const [editingThirdParty, setEditingThirdParty] = useState(null)
+  const [missingFields, setMissingFields] = useState([])
 
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -571,6 +758,15 @@ export default function Contracts() {
     }
   })
 
+  const updateThirdPartyMutation = useMutation({
+    mutationFn: ({ id, data }) => thirdPartyService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['third-parties-active'])
+      setEditingThirdParty(null)
+      setMissingFields([])
+    },
+  })
+
   const contracts = data?.data?.data || []
   const thirdParties = thirdPartiesData?.data?.data || []
   const templates = templatesData?.data?.data || []
@@ -602,9 +798,18 @@ export default function Contracts() {
   }
 
   const handleGenerateClick = (contract) => {
-    setSelectedContract(contract)
-    setGenerateTemplateId('')
-    setShowGenerateModal(true)
+    // If contract already has a template, generate directly
+    if (contract.template_id) {
+      generateMutation.mutate({
+        contractId: contract.id,
+        templateId: contract.template_id
+      })
+    } else {
+      // Show modal to select template
+      setSelectedContract(contract)
+      setGenerateTemplateId('')
+      setShowGenerateModal(true)
+    }
   }
 
   const handleDelete = (id) => {
@@ -797,8 +1002,17 @@ export default function Contracts() {
                   <ContractRow
                     key={contract.id}
                     contract={contract}
-                    onView={(id) => navigate(`/legal/contracts/${id}`)}
-                    onEdit={(c) => navigate(`/legal/contracts/${c.id}`)}
+                    onView={(id) => {
+                      const contract = contracts.find(c => c.id === id)
+                      if (contract) {
+                        setDetailContract(contract)
+                        setShowDetailModal(true)
+                      }
+                    }}
+                    onEdit={(c) => {
+                      setDetailContract(c)
+                      setShowDetailModal(true)
+                    }}
                     onSubmit={(id) => submitMutation.mutate(id)}
                     onDownload={handleDownload}
                     onGenerate={handleGenerateClick}
@@ -832,6 +1046,10 @@ export default function Contracts() {
             onCancel={handleCloseCreateModal}
             onBack={() => setCreateStep(1)}
             isLoading={createMutation.isPending}
+            onEditThirdParty={(tp, missing) => {
+              setEditingThirdParty(tp)
+              setMissingFields(missing)
+            }}
           />
         )}
       </Modal>
@@ -908,6 +1126,285 @@ export default function Contracts() {
           </div>
         </div>
       </Modal>
+
+      {/* Detail Modal */}
+      <Modal
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false)
+          setDetailContract(null)
+        }}
+        title="Detalle del Contrato"
+        size="lg"
+      >
+        {detailContract && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{detailContract.title}</h3>
+                <p className="text-sm text-gray-500">{detailContract.contract_number}</p>
+              </div>
+              <Badge variant={detailContract.status}>
+                {detailContract.status_label || detailContract.status}
+              </Badge>
+            </div>
+
+            {/* Info Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Tercero</p>
+                <p className="font-medium">{detailContract.third_party?.display_name || 'N/A'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Tipo</p>
+                <p className="font-medium">{detailContract.type_label || detailContract.contract_type}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Monto</p>
+                <p className="font-medium text-green-600">
+                  {new Intl.NumberFormat('es-CO', { style: 'currency', currency: detailContract.currency || 'COP' }).format(detailContract.amount || 0)}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Nivel de Aprobación</p>
+                <p className="font-medium">{detailContract.approval_level_label || detailContract.approval_level}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Fecha Inicio</p>
+                <p className="font-medium">{detailContract.start_date ? new Date(detailContract.start_date).toLocaleDateString('es-CO') : 'N/A'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Fecha Fin</p>
+                <p className="font-medium">{detailContract.end_date ? new Date(detailContract.end_date).toLocaleDateString('es-CO') : 'N/A'}</p>
+              </div>
+            </div>
+
+            {/* Description */}
+            {detailContract.description && (
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Descripción</p>
+                <p className="text-gray-700">{detailContract.description}</p>
+              </div>
+            )}
+
+            {/* Payment Terms */}
+            {detailContract.payment_terms && (
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Términos de Pago</p>
+                <p className="text-gray-700">{detailContract.payment_terms}</p>
+              </div>
+            )}
+
+            {/* Document */}
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-blue-600" />
+                  <span className="font-medium text-blue-900">Documento del Contrato</span>
+                </div>
+                {detailContract.has_document ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleDownload(detailContract.id)}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Descargar PDF
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <FileWarning className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm text-amber-600">Sin documento</span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setShowDetailModal(false)
+                        handleGenerateClick(detailContract)
+                      }}
+                    >
+                      <FilePlus className="h-4 w-4 mr-1" />
+                      Generar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Approvals */}
+            {detailContract.approvals && detailContract.approvals.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Aprobaciones</p>
+                <div className="space-y-2">
+                  {detailContract.approvals.map((approval, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                      <div>
+                        <p className="font-medium text-sm">{approval.role_label || approval.role}</p>
+                        {approval.approver_name && <p className="text-xs text-gray-500">{approval.approver_name}</p>}
+                      </div>
+                      <Badge variant={approval.status === 'approved' ? 'success' : approval.status === 'rejected' ? 'error' : 'warning'}>
+                        {approval.status === 'approved' ? 'Aprobado' : approval.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowDetailModal(false)
+                  setDetailContract(null)
+                }}
+              >
+                Cerrar
+              </Button>
+              {detailContract.status === 'draft' && (
+                <Button
+                  onClick={() => {
+                    submitMutation.mutate(detailContract.id)
+                    setShowDetailModal(false)
+                    setDetailContract(null)
+                  }}
+                  loading={submitMutation.isPending}
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Enviar a Aprobación
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit Third Party Modal */}
+      <Modal
+        isOpen={!!editingThirdParty}
+        onClose={() => {
+          setEditingThirdParty(null)
+          setMissingFields([])
+        }}
+        title="Completar datos del tercero"
+        size="lg"
+      >
+        {editingThirdParty && (
+          <ThirdPartyQuickEdit
+            thirdParty={editingThirdParty}
+            missingFields={missingFields}
+            onSubmit={(data) => updateThirdPartyMutation.mutate({ id: editingThirdParty.id, data })}
+            onCancel={() => {
+              setEditingThirdParty(null)
+              setMissingFields([])
+            }}
+            isLoading={updateThirdPartyMutation.isPending}
+          />
+        )}
+      </Modal>
     </div>
+  )
+}
+
+// Quick edit form for third party - shows only missing fields
+function ThirdPartyQuickEdit({ thirdParty, missingFields, onSubmit, onCancel, isLoading }) {
+  const [formData, setFormData] = useState({
+    ...thirdParty,
+  })
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSubmit(formData)
+  }
+
+  // Map field paths to form fields
+  const getFieldConfig = (fieldPath) => {
+    const fieldMap = {
+      'legal_rep_name': { label: 'Nombre del Representante Legal', type: 'text', field: 'legal_rep_name' },
+      'legal_rep_id': { label: 'Cédula del Representante Legal', type: 'text', field: 'legal_rep_id_number' },
+      'legal_rep_email': { label: 'Email del Representante Legal', type: 'email', field: 'legal_rep_email' },
+      'display_name': { label: 'Nombre', type: 'text', field: 'business_name' },
+      'business_name': { label: 'Razón Social', type: 'text', field: 'business_name' },
+      'trade_name': { label: 'Nombre Comercial', type: 'text', field: 'trade_name' },
+      'identification_number': { label: 'Número de Identificación', type: 'text', field: 'identification_number' },
+      'address': { label: 'Dirección', type: 'text', field: 'address' },
+      'city': { label: 'Ciudad', type: 'text', field: 'city' },
+      'phone': { label: 'Teléfono', type: 'text', field: 'phone' },
+      'email': { label: 'Email', type: 'email', field: 'email' },
+      'bank_name': { label: 'Banco', type: 'text', field: 'bank_name' },
+      'bank_account_number': { label: 'Número de Cuenta', type: 'text', field: 'bank_account_number' },
+      'bank_account_type': { label: 'Tipo de Cuenta', type: 'select', field: 'bank_account_type', options: [
+        { value: '', label: 'Seleccionar...' },
+        { value: 'savings', label: 'Ahorros' },
+        { value: 'checking', label: 'Corriente' },
+      ]},
+    }
+    return fieldMap[fieldPath] || null
+  }
+
+  // Get unique fields to show
+  const fieldsToShow = [...new Set(missingFields.map(m => m.field))].map(field => getFieldConfig(field)).filter(Boolean)
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+          <div>
+            <p className="font-medium text-amber-900">Datos faltantes para {thirdParty.display_name}</p>
+            <p className="text-sm text-amber-700">
+              Complete los siguientes campos para poder generar el documento del contrato.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {fieldsToShow.map((config, idx) => (
+          <div key={idx}>
+            {config.type === 'select' ? (
+              <Select
+                label={config.label}
+                value={formData[config.field] || ''}
+                onChange={(e) => handleChange(config.field, e.target.value)}
+                options={config.options}
+                required
+              />
+            ) : (
+              <Input
+                label={config.label}
+                type={config.type}
+                value={formData[config.field] || ''}
+                onChange={(e) => handleChange(config.field, e.target.value)}
+                required
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {fieldsToShow.length === 0 && (
+        <div className="text-center py-4 text-gray-500">
+          <p>No se pudieron determinar los campos faltantes.</p>
+          <p className="text-sm">Por favor, edite el tercero desde la sección de Terceros.</p>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button type="submit" loading={isLoading} disabled={fieldsToShow.length === 0}>
+          <CheckCircle className="h-4 w-4 mr-2" />
+          Guardar y Continuar
+        </Button>
+      </div>
+    </form>
   )
 }
