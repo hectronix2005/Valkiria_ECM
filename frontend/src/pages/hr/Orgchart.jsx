@@ -5,8 +5,8 @@ import { employeeService } from '../../services/api'
 
 // Employee node component
 function EmployeeNode({ employee, employees, expanded, onToggle, level = 0 }) {
-  const subordinates = employees.filter(e => e.supervisor_id === employee.id)
-  const hasSubordinates = subordinates.length > 0
+  const colaboradores = employees.filter(e => e.supervisor_id === employee.id)
+  const hasColaboradores = colaboradores.length > 0
   const isExpanded = expanded[employee.id] !== false // Default expanded
 
   const getRoleBadge = (roles) => {
@@ -45,9 +45,9 @@ function EmployeeNode({ employee, employees, expanded, onToggle, level = 0 }) {
         className={`
           relative bg-white rounded-xl border-2 shadow-sm hover:shadow-md transition-all
           ${level === 0 ? 'border-primary-400 bg-primary-50/30' : 'border-gray-200 hover:border-primary-300'}
-          ${hasSubordinates ? 'cursor-pointer' : ''}
+          ${hasColaboradores ? 'cursor-pointer' : ''}
         `}
-        onClick={() => hasSubordinates && onToggle(employee.id)}
+        onClick={() => hasColaboradores && onToggle(employee.id)}
         style={{ minWidth: '200px', maxWidth: '240px' }}
       >
         {/* Status indicator */}
@@ -83,30 +83,30 @@ function EmployeeNode({ employee, employees, expanded, onToggle, level = 0 }) {
             {getRoleBadge(employee.roles)}
           </div>
 
-          {/* Subordinates count */}
-          {hasSubordinates && (
+          {/* Colaboradores count */}
+          {hasColaboradores && (
             <div className="flex items-center justify-center gap-1 mt-3 text-xs text-gray-500">
               <Users className="w-3.5 h-3.5" />
-              <span>{subordinates.length} subordinado{subordinates.length !== 1 ? 's' : ''}</span>
+              <span>{colaboradores.length} colaborador{colaboradores.length !== 1 ? 'es' : ''}</span>
               {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
             </div>
           )}
         </div>
       </div>
 
-      {/* Subordinates */}
-      {hasSubordinates && isExpanded && (
+      {/* Colaboradores */}
+      {hasColaboradores && isExpanded && (
         <>
           {/* Vertical connector */}
           <div className="w-0.5 h-6 bg-gray-300" />
 
           {/* Horizontal connector for multiple children */}
-          {subordinates.length > 1 && (
+          {colaboradores.length > 1 && (
             <div className="relative w-full flex justify-center">
               <div
                 className="h-0.5 bg-gray-300"
                 style={{
-                  width: `${Math.min(subordinates.length * 220, 880)}px`,
+                  width: `${Math.min(colaboradores.length * 220, 880)}px`,
                   maxWidth: '100%'
                 }}
               />
@@ -115,9 +115,9 @@ function EmployeeNode({ employee, employees, expanded, onToggle, level = 0 }) {
 
           {/* Children container */}
           <div className="flex flex-wrap justify-center gap-4 pt-2">
-            {subordinates.map(sub => (
+            {colaboradores.map(sub => (
               <div key={sub.id} className="flex flex-col items-center">
-                {subordinates.length > 1 && <div className="w-0.5 h-4 bg-gray-300" />}
+                {colaboradores.length > 1 && <div className="w-0.5 h-4 bg-gray-300" />}
                 <EmployeeNode
                   employee={sub}
                   employees={employees}
@@ -200,7 +200,7 @@ export default function Orgchart() {
     total: employees.length,
     active: employees.filter(e => e.employment_status === 'active').length,
     departments: [...new Set(employees.map(e => e.department).filter(Boolean))].length,
-    managers: employees.filter(e => employees.some(sub => sub.supervisor_id === e.id)).length,
+    conEquipo: employees.filter(e => employees.some(col => col.supervisor_id === e.id)).length,
   }
 
   if (isLoading) {
@@ -239,7 +239,7 @@ export default function Orgchart() {
         <StatCard icon={Users} label="Total Empleados" value={stats.total} color="bg-blue-100 text-blue-600" />
         <StatCard icon={User} label="Activos" value={stats.active} color="bg-green-100 text-green-600" />
         <StatCard icon={Building2} label="Departamentos" value={stats.departments} color="bg-purple-100 text-purple-600" />
-        <StatCard icon={Briefcase} label="Con Equipo" value={stats.managers} color="bg-amber-100 text-amber-600" />
+        <StatCard icon={Briefcase} label="Con Colaboradores" value={stats.conEquipo} color="bg-amber-100 text-amber-600" />
       </div>
 
       {/* Controls */}
@@ -326,7 +326,7 @@ export default function Orgchart() {
             <div className="flex flex-col items-center gap-4">
               {rootEmployees.length > 1 && (
                 <p className="text-sm text-gray-500 mb-4">
-                  {rootEmployees.length} empleados sin supervisor asignado (nodos raíz)
+                  {rootEmployees.length} líderes principales
                 </p>
               )}
               <div className="flex flex-wrap justify-center gap-8">

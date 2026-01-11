@@ -351,7 +351,8 @@ module Api
             job_title: employee.job_title,
             employment_status: employee.employment_status,
             hire_date: employee.hire_date&.iso8601,
-            available_vacation_days: employee.available_vacation_days&.floor
+            available_vacation_days: employee.available_vacation_days&.floor,
+            supervisor_id: employee.supervisor&.uuid
           }
 
           if detailed
