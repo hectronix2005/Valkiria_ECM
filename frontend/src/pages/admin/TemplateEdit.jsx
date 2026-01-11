@@ -962,121 +962,153 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 pt-4 overflow-auto">
-      <div className="bg-white rounded-lg shadow-xl mx-2 mb-4 overflow-x-auto" style={{ width: 'auto', maxWidth: '98vw' }}>
-        {/* All content in horizontal layout - single line */}
-        <div className="flex flex-nowrap items-center gap-2 p-2" style={{ minWidth: 'max-content' }}>
-          {/* Title */}
-          <h3 className="text-sm font-semibold whitespace-nowrap">Agregar Firmante</h3>
-
-          <div className="h-6 w-px bg-gray-300" />
-
-          {/* Type */}
-          <div className="flex items-center gap-1">
-            <label className="text-[11px] text-gray-500 whitespace-nowrap">Tipo:</label>
-            {loadingTypes ? (
-              <span className="text-xs text-gray-400">...</span>
-            ) : (
-              <select value={typeCode} onChange={(e) => {
-                  setTypeCode(e.target.value)
-                  const selectedType = signatoryTypes.find(t => t.code === e.target.value)
-                  if (!label && selectedType) setLabel(selectedType.name)
-                }}
-                className="px-1 py-0.5 text-xs border border-gray-300 rounded w-28">
-                <option value="">Seleccionar</option>
-                {signatoryTypes.map((t) => (<option key={t.code} value={t.code}>{t.name}</option>))}
-              </select>
-            )}
-          </div>
-
-          {/* Label */}
-          <div className="flex items-center gap-1">
-            <label className="text-[11px] text-gray-500">Etiqueta:</label>
-            <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Firma..."
-              className="px-1 py-0.5 text-xs border border-gray-300 rounded w-24" />
-          </div>
-
-          <div className="h-6 w-px bg-gray-300" />
-
-          {/* Position */}
-          <div className="flex items-center gap-1">
-            <span className="text-[11px] text-gray-500">Pág:</span>
-            <input type="number" value={pageNumber} onChange={(e) => setPageNumber(Math.max(1, Math.min(totalPages, Number(e.target.value))))}
-              className="w-10 px-1 py-0.5 border border-gray-300 rounded text-xs text-center" min="1" max={totalPages} />
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-gray-500">X:</span>
-            <input type="number" value={xPosition} onChange={(e) => setXPosition(Number(e.target.value))}
-              className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs" min="0" max="600" />
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-gray-500">Y:</span>
-            <input type="number" value={yPosition} onChange={(e) => setYPosition(Number(e.target.value))}
-              className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs" min="0" max={pdfHeight} />
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-gray-500">An:</span>
-            <input type="number" value={width} onChange={(e) => setWidth(Number(e.target.value))}
-              className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs" min="50" max="300" />
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-gray-500">Al:</span>
-            <input type="number" value={height} onChange={(e) => setHeight(Number(e.target.value))}
-              className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs" min="30" max="150" />
-          </div>
-
-          <div className="h-6 w-px bg-gray-300" />
-
-          {/* Date position - inline buttons */}
-          <div className="flex items-center gap-1">
-            <span className="text-[11px] text-gray-500">Fecha:</span>
-            {DATE_POSITION_OPTIONS.map((opt) => (
-              <button key={opt.value} type="button" onClick={() => setDatePosition(opt.value)}
-                className={`px-1.5 py-0.5 text-[10px] rounded border ${datePosition === opt.value ? 'border-primary-500 bg-primary-100 text-primary-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="h-6 w-px bg-gray-300" />
-
-          {/* Options - inline checkboxes */}
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} className="w-3 h-3" />
-            <span className="text-[10px] text-gray-600">Req</span>
-          </label>
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" checked={showLabel} onChange={(e) => setShowLabel(e.target.checked)} className="w-3 h-3" />
-            <span className="text-[10px] text-gray-600">Etiq</span>
-          </label>
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" checked={showSignerName} onChange={(e) => setShowSignerName(e.target.checked)} className="w-3 h-3" />
-            <span className="text-[10px] text-gray-600">Nombre</span>
-          </label>
-
-          {/* Buttons */}
-          <button type="button" onClick={handleClose} className="px-2 py-1 text-xs text-gray-600 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200">
-            Cancelar
-          </button>
-          <button type="button" onClick={handleSubmit} disabled={!typeCode || signatoryTypes.length === 0 || createMutation.isPending}
-            className="px-2 py-1 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1">
-            <Plus className="w-3 h-3" />
-            Agregar
-          </button>
-
-          {/* Close X */}
-          <button onClick={handleClose} className="p-0.5 hover:bg-gray-200 rounded ml-1">
-            <X className="w-4 h-4 text-gray-400" />
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        {/* Header - fixed */}
+        <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+          <h3 className="text-lg font-semibold">Agregar Firmante</h3>
+          <button onClick={handleClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Error message if any */}
-        {error && (
-          <div className="mx-3 mb-2 p-1.5 bg-red-50 border border-red-200 rounded flex items-center gap-2 text-red-700">
-            <AlertCircle className="w-3 h-3" />
-            <span className="text-xs">{error}</span>
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {error && (
+            <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 mb-3">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
+          {/* Two column layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Left column */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Firmante</label>
+                {loadingTypes ? (
+                  <div className="py-1 text-gray-500 text-sm">Cargando...</div>
+                ) : signatoryTypes.length === 0 ? (
+                  <div className="py-1 text-amber-600 text-sm">No hay tipos configurados</div>
+                ) : (
+                  <select
+                    value={typeCode}
+                    onChange={(e) => {
+                      setTypeCode(e.target.value)
+                      const selectedType = signatoryTypes.find(t => t.code === e.target.value)
+                      if (!label && selectedType) setLabel(selectedType.name)
+                    }}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Seleccionar tipo...</option>
+                    {signatoryTypes.map((t) => (
+                      <option key={t.code} value={t.code}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Etiqueta</label>
+                <input
+                  type="text"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder="Ej: Firma del Empleado"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)}
+                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
+                  <span className="text-sm text-gray-700">Requerida</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={showLabel} onChange={(e) => setShowLabel(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                  <span className="text-sm text-gray-700">Mostrar etiqueta</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={showSignerName} onChange={(e) => setShowSignerName(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                  <span className="text-sm text-gray-700">Mostrar nombre</span>
+                </label>
+              </div>
+
+              {/* Date Position - compact */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Posición de fecha</label>
+                <div className="grid grid-cols-4 gap-1">
+                  {DATE_POSITION_OPTIONS.map((opt) => (
+                    <button key={opt.value} type="button" onClick={() => setDatePosition(opt.value)}
+                      className={`px-2 py-1.5 text-xs rounded-lg border-2 transition-all ${
+                        datePosition === opt.value ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                      }`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right column - Position */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Página:</label>
+                <input type="number" value={pageNumber}
+                  onChange={(e) => setPageNumber(Math.max(1, Math.min(totalPages, Number(e.target.value))))}
+                  className="w-16 px-2 py-1 border border-gray-300 rounded-lg text-sm text-center" min="1" max={totalPages} />
+                <span className="text-xs text-gray-500">de {totalPages}</span>
+                {totalPages > 1 && (
+                  <div className="flex gap-1 ml-auto">
+                    <button type="button" onClick={() => setPageNumber(1)}
+                      className={`px-2 py-1 text-xs rounded ${pageNumber === 1 ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>1ra</button>
+                    <button type="button" onClick={() => setPageNumber(totalPages)}
+                      className={`px-2 py-1 text-xs rounded ${pageNumber === totalPages ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Últ</button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">X (horizontal)</label>
+                  <input type="number" value={xPosition} onChange={(e) => setXPosition(Number(e.target.value))}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm" min="0" max="600" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Y (vertical)</label>
+                  <input type="number" value={yPosition} onChange={(e) => setYPosition(Number(e.target.value))}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm" min="0" max={pdfHeight} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Ancho</label>
+                  <input type="number" value={width} onChange={(e) => setWidth(Number(e.target.value))}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm" min="50" max="300" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Alto</label>
+                  <input type="number" value={height} onChange={(e) => setHeight(Number(e.target.value))}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm" min="30" max="150" />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">PDF: {pdfWidth} x {pdfHeight} pts</p>
+            </div>
           </div>
-        )}
+        </div>
+
+        {/* Footer - fixed */}
+        <div className="flex justify-end gap-3 px-4 py-3 border-t bg-gray-50 flex-shrink-0">
+          <Button type="button" variant="secondary" onClick={handleClose}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} loading={createMutation.isPending} disabled={!typeCode || signatoryTypes.length === 0}>
+            <Plus className="w-4 h-4" />
+            Agregar
+          </Button>
+        </div>
       </div>
     </div>
   )
