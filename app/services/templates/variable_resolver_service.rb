@@ -208,6 +208,10 @@ module Templates
       when "total_compensation_text"
         total = (@employee.salary || 0) + (@employee.food_allowance || 0) + (@employee.transport_allowance || 0)
         number_to_words(total)
+      when "payment_frequency"
+        format_payment_frequency(@employee.payment_frequency)
+      when "work_city"
+        @employee.work_city
       # Contract fields
       when "contract_type"
         format_contract_type(@employee.contract_type)
@@ -414,6 +418,15 @@ module Templates
       when "compensacion_total_en_letras"
         total = (@employee.salary || 0) + (@employee.food_allowance || 0) + (@employee.transport_allowance || 0)
         number_to_words(total)
+      # Ciudad de labores
+      when "ciudad_labores", "ciudad_de_labores"
+        @employee.work_city
+      # Email del trabajador
+      when "email_trabajador", "correo_trabajador", "email_empleado"
+        @employee.personal_email || @employee.user&.email
+      # Periodicidad de pago
+      when "periodicidad_pago", "frecuencia_pago"
+        format_payment_frequency(@employee.payment_frequency)
       else
         nil
       end
@@ -646,6 +659,10 @@ module Templates
 
       frequencies = {
         "monthly" => "Mensual",
+        "bimonthly" => "Bimestral",
+        "quarterly" => "Trimestral",
+        "semiannual" => "Semestral",
+        "annual" => "Anual",
         "biweekly" => "Quincenal",
         "weekly" => "Semanal",
         "one_time" => "Pago Único",

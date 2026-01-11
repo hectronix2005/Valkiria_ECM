@@ -133,7 +133,8 @@ module Templates
     end
 
     # Apply a user's signature
-    def sign!(user:, signature:)
+    # custom_position: { x:, y:, width:, height: } - optional override for signature position
+    def sign!(user:, signature:, custom_position: nil)
       sig_entry = find_pending_signature_for(user)
 
       raise SignatureError, "No hay firma pendiente para este usuario" unless sig_entry
@@ -143,6 +144,14 @@ module Templates
       sig_entry["signed_at"] = Time.current.iso8601
       sig_entry["signed_by_name"] = user.full_name
       sig_entry["status"] = "signed"
+
+      # Store custom position if provided
+      if custom_position.present?
+        sig_entry["custom_x"] = custom_position[:x] if custom_position[:x]
+        sig_entry["custom_y"] = custom_position[:y] if custom_position[:y]
+        sig_entry["custom_width"] = custom_position[:width] if custom_position[:width]
+        sig_entry["custom_height"] = custom_position[:height] if custom_position[:height]
+      end
 
       save!
 
@@ -170,21 +179,40 @@ module Templates
       begin
         # Load the PDF
         pdf = CombinePDF.load(input_pdf.path)
-        page_index = (signatory.page_number || 1) - 1
-        target_page = pdf.pages[page_index] || pdf.pages.last
+
+        # Get page dimensions to calculate correct page from absolute Y
+        first_page = pdf.pages.first
+        page_height = first_page.mediabox[3].to_f
+
+        # Calculate which page the signature should go on based on absolute Y
+        absolute_y = signatory.y_position.to_f
+        calculated_page = (absolute_y / page_height).floor + 1
+        relative_y = absolute_y % page_height
+
+        # Use calculated page, but respect explicit page_number if Y is within first page
+        page_index = if absolute_y < page_height && signatory.page_number
+                       (signatory.page_number || 1) - 1
+                     else
+                       calculated_page - 1
+                     end
+        page_index = [[page_index, 0].max, pdf.pages.count - 1].min
+        target_page = pdf.pages[page_index]
+
+        Rails.logger.info "Signature placement: absoluteY=#{absolute_y}, pageHeight=#{page_height}, calculatedPage=#{calculated_page}, relativeY=#{relative_y}, pageIndex=#{page_index}"
 
         # Get signature image
         renderer = Templates::SignatureRendererService.new(signature)
         img_tempfile = renderer.to_tempfile
 
         begin
-          # Create signature overlay
+          # Create signature overlay with relative Y position for this page
           overlay_pdf = create_signature_overlay_for(
             img_path: img_tempfile.path,
             signatory: signatory,
             sig_entry: sig_entry,
             page_width: target_page.mediabox[2],
-            page_height: target_page.mediabox[3]
+            page_height: target_page.mediabox[3],
+            relative_y: relative_y
           )
 
           # Merge overlay onto page
@@ -212,34 +240,110 @@ module Templates
       Rails.logger.error(e.backtrace.first(5).join("\n"))
     end
 
-    def create_signature_overlay_for(img_path:, signatory:, sig_entry:, page_width:, page_height:)
+    def create_signature_overlay_for(img_path:, signatory:, sig_entry:, page_width:, page_height:, relative_y: nil)
       box = signatory.signature_box
-      x = box[:x]
-      y = box[:y]
-      width = box[:width]
-      height = box[:height]
+
+      # Use custom position from sig_entry if available, otherwise use template defaults
+      x = sig_entry["custom_x"] || box[:x]
+      base_y = sig_entry["custom_y"] || box[:y]
+      # Use relative_y if provided (for multi-page documents), otherwise use base_y
+      y = relative_y || base_y
+      width = sig_entry["custom_width"] || box[:width]
+      height = sig_entry["custom_height"] || box[:height]
+      date_position = box[:date_position] || "right"
+      show_label = box[:show_label].nil? ? true : box[:show_label]
+      show_signer_name = box[:show_signer_name] || false
 
       pdf = Prawn::Document.new(
         page_size: [page_width, page_height],
         margin: 0
       )
 
+      # Calculate text space needed below signature
+      text_lines = 0
+      text_lines += 1 if show_label
+      text_lines += 1 if show_signer_name
+      text_space = text_lines * 10
+
+      # Calculate signature dimensions based on date position
+      # This ensures the preview matches what's rendered
+      sig_width, sig_height, sig_y_offset = case date_position
+      when "right"
+        # Fecha a la derecha: firma usa 75% del ancho
+        [width * 0.75, height - text_space, 0]
+      when "below"
+        # Fecha debajo: firma usa 100% ancho, 80% alto, fecha en el 20% inferior
+        [width, (height - text_space) * 0.80, (height - text_space) * 0.20]
+      when "above"
+        # Fecha arriba: firma usa 100% ancho, 80% alto, firma en el 80% inferior
+        [width, (height - text_space) * 0.80, 0]
+      when "none"
+        # Sin fecha: firma usa 100% del espacio
+        [width, height - text_space, 0]
+      else
+        [width * 0.75, height - text_space, 0]
+      end
+
       # Calculate position from bottom (Prawn uses bottom-left origin)
-      y_from_bottom = page_height - y - height
+      # y is distance from TOP of page to TOP of signature box
+      # Prawn's image at: [x, y] positions the TOP-LEFT of the image at (x, y) from bottom-left origin
+      # So we need: y_position_from_bottom = page_height - y_from_top
+      sig_top_from_bottom = page_height - y + sig_y_offset
 
-      # Draw signature image
-      sig_width = width * 0.75
-      pdf.image img_path, at: [x, y_from_bottom + height], fit: [sig_width, height]
+      Rails.logger.info "Signature overlay: x=#{x}, y=#{y}, sig_top_from_bottom=#{sig_top_from_bottom}, page_height=#{page_height}, date_position=#{date_position}, show_label=#{show_label}"
 
-      # Add date to the right of signature (small, vertical)
-      pdf.fill_color "888888"
-      signed_at = sig_entry["signed_at"]
-      date_str = signed_at ? Time.parse(signed_at).strftime("%d/%m/%Y") : ""
-      time_str = signed_at ? Time.parse(signed_at).strftime("%H:%M") : ""
-      date_x = x + sig_width + 5
-      pdf.draw_text date_str, at: [date_x, y_from_bottom + height / 2 + 5], size: 6
-      pdf.draw_text time_str, at: [date_x, y_from_bottom + height / 2 - 5], size: 6
-      pdf.fill_color "000000"
+      # Draw signature image - fit maintains aspect ratio within the specified dimensions
+      # at: positions TOP-LEFT corner of image at given coordinates
+      pdf.image img_path, at: [x, sig_top_from_bottom], fit: [sig_width, sig_height]
+
+      # Add optional label and signer name below signature
+      # Position text below the signature (signature bottom = sig_top - sig_height)
+      current_y = sig_top_from_bottom - sig_height - 3
+
+      if show_label
+        pdf.fill_color "333333"
+        pdf.draw_text signatory.label, at: [x, current_y], size: 7
+        pdf.fill_color "000000"
+        current_y -= 10
+      end
+
+      if show_signer_name && sig_entry["signed_by_name"].present?
+        pdf.fill_color "666666"
+        pdf.draw_text sig_entry["signed_by_name"], at: [x, current_y], size: 6
+        pdf.fill_color "000000"
+      end
+
+      # Add date based on position setting
+      unless date_position == "none"
+        pdf.fill_color "666666"
+        signed_at = sig_entry["signed_at"]
+        date_str = signed_at ? Time.parse(signed_at).strftime("%d/%m/%Y") : ""
+        time_str = signed_at ? Time.parse(signed_at).strftime("%H:%M") : ""
+
+        # Calculate signature center Y for positioning date
+        sig_center_y = sig_top_from_bottom - (sig_height / 2)
+
+        case date_position
+        when "right"
+          # Fecha a la derecha de la firma (vertical, centrada)
+          date_x = x + sig_width + 5
+          pdf.draw_text date_str, at: [date_x, sig_center_y + 5], size: 7
+          pdf.draw_text time_str, at: [date_x, sig_center_y - 7], size: 6
+        when "below"
+          # Fecha debajo de la firma (horizontal, centrada)
+          date_text = "#{date_str} #{time_str}"
+          date_x = x + (width / 2) - 25
+          date_y = sig_top_from_bottom - sig_height - 15
+          pdf.draw_text date_text, at: [date_x, date_y], size: 7
+        when "above"
+          # Fecha arriba de la firma (horizontal, centrada)
+          date_text = "#{date_str} #{time_str}"
+          date_x = x + (width / 2) - 25
+          date_y = sig_top_from_bottom + 5
+          pdf.draw_text date_text, at: [date_x, date_y], size: 7
+        end
+        pdf.fill_color "000000"
+      end
 
       pdf.render
     end

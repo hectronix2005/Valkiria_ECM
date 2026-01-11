@@ -7,8 +7,6 @@ import {
   Home,
   FileText,
   Folder,
-  Calendar,
-  Award,
   Users,
   CheckSquare,
   BarChart3,
@@ -26,7 +24,6 @@ import {
   Scale,
   Building2,
   FileCheck,
-  Variable,
   Network
 } from 'lucide-react'
 
@@ -37,15 +34,14 @@ const navigation = [
 ]
 
 const hrNavigation = [
-  { name: 'Mis Vacaciones', href: '/hr/vacations', icon: Calendar },
-  { name: 'Mis Certificaciones', href: '/hr/certifications', icon: Award },
+  { name: 'Mis Solicitudes', href: '/hr/my-requests/vacations', icon: FileText },
   { name: 'Organigrama', href: '/hr/organigrama', icon: Network },
 ]
 
 const hrAdminNavigation = [
   { name: 'Aprobaciones', href: '/hr/approvals', icon: CheckSquare, badge: true },
   { name: 'Empleados', href: '/hr/employees', icon: Users },
-  { name: 'Variables', href: '/hr/variables', icon: Variable },
+  { name: 'Documentacion', href: '/hr/documents', icon: FileCheck },
   { name: 'Dashboard HR', href: '/hr/dashboard', icon: BarChart3 },
 ]
 
@@ -59,16 +55,14 @@ const getHrNavigation = (isSupervisor, isHR, employeeMode) => {
 
 const adminNavigation = [
   { name: 'Configuración', href: '/admin/settings', icon: Settings },
+  { name: 'Usuarios', href: '/admin/users', icon: Shield },
   { name: 'Áreas', href: '/admin/departments', icon: Building2 },
   { name: 'Templates', href: '/admin/templates', icon: FileText },
-  { name: 'Firmantes', href: '/admin/signatory-types', icon: Users },
 ]
 
 const legalNavigation = [
-  { name: 'Terceros', href: '/legal/third-parties', icon: Building2 },
   { name: 'Contratos', href: '/legal/contracts', icon: FileText },
   { name: 'Aprobaciones', href: '/legal/approvals', icon: FileCheck, badge: true },
-  { name: 'Variables', href: '/legal/variables', icon: Variable },
 ]
 
 export default function Layout({ children }) {
@@ -112,7 +106,9 @@ export default function Layout({ children }) {
   }
 
   const NavLink = ({ item }) => {
-    const isActive = location.pathname === item.href
+    // Check if active: exact match or starts with the base path (for sub-routes like my-requests)
+    const isActive = location.pathname === item.href ||
+      (item.href.includes('/my-requests') && location.pathname.startsWith('/hr/my-requests'))
     // Determine badge count based on route
     const getBadgeCount = () => {
       if (!item.badge) return 0
@@ -144,7 +140,10 @@ export default function Layout({ children }) {
 
   const CollapsibleSection = ({ id, title, items, icon: Icon }) => {
     const isExpanded = expandedSections.includes(id)
-    const hasActiveItem = items.some(item => location.pathname === item.href)
+    const hasActiveItem = items.some(item =>
+      location.pathname === item.href ||
+      (item.href.includes('/my-requests') && location.pathname.startsWith('/hr/my-requests'))
+    )
 
     return (
       <div className="mb-2">

@@ -1,6 +1,24 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { authService } from '../services/api'
 
+// Permission levels (1-5 scale)
+export const PERMISSION_LEVELS = {
+  VIEWER: 1,
+  EMPLOYEE: 2,
+  HR: 3,
+  LEGAL: 4,
+  ADMIN: 5,
+}
+
+// Level to name mapping
+export const LEVEL_NAMES = {
+  1: 'Viewer',
+  2: 'Employee',
+  3: 'HR',
+  4: 'Legal',
+  5: 'Admin',
+}
+
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -67,6 +85,24 @@ export function AuthProvider({ children }) {
     return user.permissions.includes(permission)
   }, [user, employeeMode])
 
+  // Permission level methods
+  const permissionLevel = employeeMode ? PERMISSION_LEVELS.EMPLOYEE : (user?.permission_level || 0)
+
+  const hasAtLeastLevel = useCallback((minLevel) => {
+    if (employeeMode) return PERMISSION_LEVELS.EMPLOYEE >= minLevel
+    return (user?.permission_level || 0) >= minLevel
+  }, [user, employeeMode])
+
+  const hasAtMostLevel = useCallback((maxLevel) => {
+    if (employeeMode) return PERMISSION_LEVELS.EMPLOYEE <= maxLevel
+    return (user?.permission_level || 0) <= maxLevel
+  }, [user, employeeMode])
+
+  const getLevelName = useCallback(() => {
+    const level = employeeMode ? PERMISSION_LEVELS.EMPLOYEE : (user?.permission_level || 0)
+    return LEVEL_NAMES[level] || 'None'
+  }, [user, employeeMode])
+
   // Real roles (unaffected by employee mode) - for toggle visibility
   const realIsAdmin = user?.roles?.includes('admin')
   const realIsHR = user?.is_hr || user?.roles?.includes('hr') || user?.roles?.includes('hr_manager')
@@ -106,6 +142,12 @@ export function AuthProvider({ children }) {
     employeeMode,
     toggleEmployeeMode,
     hasElevatedRole,
+    // Permission levels
+    permissionLevel,
+    hasAtLeastLevel,
+    hasAtMostLevel,
+    getLevelName,
+    PERMISSION_LEVELS,
   }
 
   return (

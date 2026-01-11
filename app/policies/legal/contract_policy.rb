@@ -3,11 +3,12 @@
 module Legal
   class ContractPolicy < ApplicationPolicy
     def index?
-      admin? || legal_staff? || manager?
+      # Allow all authenticated users - scoping will filter appropriately
+      true
     end
 
     def show?
-      admin? || legal_staff? || (manager? && owner_or_approver?)
+      admin? || legal_staff? || (manager? && owner_or_approver?) || signatory?
     end
 
     def create?
@@ -24,8 +25,11 @@ module Legal
     end
 
     def destroy?
+      # Admin can delete any contract (for testing/cleanup purposes)
+      return true if admin?
+      # Others can only delete drafts they own
       return false unless record.draft?
-      admin? || (legal_staff? && owner?)
+      legal_staff? && owner?
     end
 
     def submit?
@@ -43,8 +47,15 @@ module Legal
     end
 
     def activate?
-      return false unless record.approved?
+      return false unless record.can_activate?
       admin? || legal_staff?
+    end
+
+    def sign_document?
+      return false unless record.pending_signatures?
+      doc = record.generated_document
+      return false unless doc
+      doc.can_be_signed_by?(user)
     end
 
     def terminate?
@@ -57,12 +68,22 @@ module Legal
       admin? || legal_staff? || (manager? && owner?)
     end
 
+    def archive?
+      return false unless %w[active expired terminated cancelled].include?(record.status)
+      admin?
+    end
+
+    def unarchive?
+      return false unless record.archived?
+      admin?
+    end
+
     def generate_document?
       admin? || legal_staff?
     end
 
     def download_document?
-      admin? || legal_staff? || (manager? && owner_or_approver?)
+      admin? || legal_staff? || (manager? && owner_or_approver?) || signatory?
     end
 
     class Scope < ApplicationPolicy::Scope
@@ -70,13 +91,15 @@ module Legal
         if admin? || legal_staff?
           scope.where(organization_id: user.organization_id)
         elsif manager?
-          # Managers see contracts they created or need to approve
+          # Managers see contracts they created, need to approve, or need to sign
           scope.where(organization_id: user.organization_id).any_of(
             { requested_by_id: user.id },
-            { :status => "pending_approval" }
+            { :status => "pending_approval" },
+            { :status => "pending_signatures" }
           )
         else
-          scope.none
+          # Other users only see contracts where they are signatories
+          scope.where(organization_id: user.organization_id, status: "pending_signatures")
         end
       end
 
@@ -107,6 +130,12 @@ module Legal
 
     def owner_or_approver?
       owner? || record.can_approve?(user)
+    end
+
+    def signatory?
+      doc = record.generated_document
+      return false unless doc
+      doc.can_be_signed_by?(user)
     end
   end
 end

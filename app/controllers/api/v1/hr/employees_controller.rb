@@ -173,11 +173,17 @@ module Api
               },
               message: "Documento generado exitosamente"
             }, status: :created
+          rescue ::Templates::RobustDocumentGeneratorService::MissingVariablesError => e
+            render json: {
+              error: "No se puede generar el documento. Faltan datos requeridos.",
+              missing_variables: e.message,
+              action_required: "complete_employee_data"
+            }, status: :unprocessable_entity
           rescue ::Templates::RobustDocumentGeneratorService::GenerationError => e
-            render json: { error: e.message }, status: :unprocessable_content
+            render json: { error: e.message }, status: :unprocessable_entity
           rescue StandardError => e
             Rails.logger.error "Error generating document: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
-            render json: { error: "Error al generar el documento" }, status: :internal_server_error
+            render json: { error: "Error al generar el documento: #{e.message}" }, status: :internal_server_error
           end
         end
 
@@ -217,6 +223,8 @@ module Api
             :salary,
             :food_allowance,
             :transport_allowance,
+            :payment_frequency,
+            :work_city,
             # Personal identification
             :identification_type,
             :identification_number,
@@ -265,6 +273,8 @@ module Api
             :salary,
             :food_allowance,
             :transport_allowance,
+            :payment_frequency,
+            :work_city,
             # Personal identification
             :identification_type,
             :identification_number,
@@ -371,6 +381,8 @@ module Api
               salary: employee.salary&.to_f,
               food_allowance: employee.food_allowance&.to_f,
               transport_allowance: employee.transport_allowance&.to_f,
+              payment_frequency: employee.payment_frequency,
+              work_city: employee.work_city,
               # Personal identification
               identification_type: employee.identification_type,
               identification_number: employee.identification_number,

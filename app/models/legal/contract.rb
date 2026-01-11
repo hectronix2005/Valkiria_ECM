@@ -26,19 +26,21 @@ module Legal
     }.freeze
 
     STATUSES = %w[
-      draft pending_approval approved rejected
-      active expired terminated cancelled
+      draft pending_approval approved pending_signatures
+      active expired terminated cancelled rejected archived
     ].freeze
 
     STATUS_LABELS = {
       "draft" => "Borrador",
       "pending_approval" => "Pendiente de Aprobación",
       "approved" => "Aprobado",
+      "pending_signatures" => "Pendiente de Firmas",
       "rejected" => "Rechazado",
       "active" => "Activo",
       "expired" => "Vencido",
       "terminated" => "Terminado",
-      "cancelled" => "Cancelado"
+      "cancelled" => "Cancelado",
+      "archived" => "Archivado"
     }.freeze
 
     CURRENCIES = %w[COP USD EUR].freeze
@@ -127,9 +129,12 @@ module Legal
     scope :draft, -> { where(status: "draft") }
     scope :pending_approval, -> { where(status: "pending_approval") }
     scope :approved, -> { where(status: "approved") }
+    scope :pending_signatures, -> { where(status: "pending_signatures") }
     scope :rejected, -> { where(status: "rejected") }
     scope :active, -> { where(status: "active") }
     scope :expired, -> { where(status: "expired") }
+    scope :archived, -> { where(status: "archived") }
+    scope :not_archived, -> { where.not(status: "archived") }
     scope :by_type, ->(type) { where(contract_type: type) }
     scope :by_third_party, ->(tp_id) { where(third_party_id: tp_id) }
     scope :expiring_soon, ->(days = 30) { active.where(:end_date.lte => Date.current + days) }
@@ -147,11 +152,13 @@ module Legal
     def draft?; status == "draft"; end
     def pending_approval?; status == "pending_approval"; end
     def approved?; status == "approved"; end
+    def pending_signatures?; status == "pending_signatures"; end
     def rejected?; status == "rejected"; end
     def active?; status == "active"; end
     def expired?; status == "expired"; end
     def terminated?; status == "terminated"; end
     def cancelled?; status == "cancelled"; end
+    def archived?; status == "archived"; end
 
     def editable?
       draft?
@@ -162,7 +169,42 @@ module Legal
     end
 
     def can_activate?
-      approved?
+      approved? || (pending_signatures? && document_all_signed?)
+    end
+
+    # Document and signature helpers
+    def generated_document
+      return nil unless document_uuid
+      @generated_document ||= ::Templates::GeneratedDocument.find_by(uuid: document_uuid)
+    end
+
+    def document_has_pending_signatures?
+      doc = generated_document
+      return false unless doc
+      doc.pending_signatures? && doc.pending_signatures_count > 0
+    end
+
+    def document_all_signed?
+      doc = generated_document
+      return true unless doc # No document = nothing to sign
+      return true unless doc.signatures.any? # No signatures configured
+      doc.all_required_signed?
+    end
+
+    def document_pending_signatures_count
+      generated_document&.pending_signatures_count || 0
+    end
+
+    def document_signatures_status
+      doc = generated_document
+      return nil unless doc
+
+      {
+        total: doc.total_required_signatures,
+        signed: doc.completed_signatures_count,
+        pending: doc.pending_signatures_count,
+        all_signed: doc.all_required_signed?
+      }
     end
 
     # Workflow methods
@@ -196,7 +238,13 @@ module Legal
       if next_role
         self.current_approver_role = next_role
       else
-        self.status = "approved"
+        # All approvals complete - check if document requires signatures
+        if document_has_pending_signatures?
+          self.status = "pending_signatures"
+          record_history("pending_signatures", actor, { message: "Esperando firmas del documento" })
+        else
+          self.status = "approved"
+        end
         self.approved_at = Time.current
         self.current_approver_role = nil
       end
@@ -224,7 +272,11 @@ module Legal
     end
 
     def activate!(actor: nil)
-      raise InvalidStateError, "Solo se pueden activar contratos aprobados" unless approved?
+      raise InvalidStateError, "Solo se pueden activar contratos aprobados" unless can_activate?
+
+      if pending_signatures? && !document_all_signed?
+        raise InvalidStateError, "El documento tiene firmas pendientes"
+      end
 
       self.status = "active"
       record_history("activated", actor) if actor
@@ -252,6 +304,34 @@ module Legal
 
       self.status = "expired"
       record_history("expired", nil, { expired_on: Date.current })
+      save!
+    end
+
+    def archive!(actor:)
+      # Can archive completed contracts (active, expired, terminated, cancelled)
+      archivable_statuses = %w[active expired terminated cancelled]
+      raise InvalidStateError, "Solo se pueden archivar contratos completados" unless archivable_statuses.include?(status)
+
+      self.status = "archived"
+      record_history("archived", actor, { archived_at: Time.current })
+      save!
+    end
+
+    def unarchive!(actor:)
+      raise InvalidStateError, "El contrato no está archivado" unless archived?
+
+      # Restore to expired status (safest default for archived contracts)
+      self.status = "expired"
+      record_history("unarchived", actor, { unarchived_at: Time.current })
+      save!
+    end
+
+    def complete_signatures!(actor:)
+      raise InvalidStateError, "Solo aplica para contratos pendientes de firmas" unless pending_signatures?
+      raise InvalidStateError, "El documento tiene firmas pendientes" unless document_all_signed?
+
+      self.status = "approved"
+      record_history("signatures_completed", actor, { message: "Todas las firmas han sido completadas" })
       save!
     end
 

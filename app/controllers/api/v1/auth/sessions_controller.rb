@@ -91,6 +91,7 @@ module Api
             title: user.title,
             roles: user.role_names,
             permissions: user.permission_names,
+            permission_level: user.permission_level,
             organization_id: user.organization_id&.to_s,
             time_zone: user.time_zone,
             locale: user.locale,

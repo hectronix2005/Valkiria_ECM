@@ -107,6 +107,9 @@ module Templates
       y = box[:y]  # y from top of document
       width = box[:width]
       height = box[:height]
+      show_label = box[:show_label].nil? ? true : box[:show_label]
+      show_signer_name = box[:show_signer_name] || false
+      date_position = box[:date_position] || "right"
 
       # Create temp image file
       img_file = Tempfile.new(["sig", ".png"])
@@ -126,18 +129,36 @@ module Templates
         # So bottom of signature box is at: page_height - y - height
         y_from_bottom = page_height - y - height
 
+        # Calculate text space needed
+        text_lines = 0
+        text_lines += 1 if show_label
+        text_lines += 1 if show_signer_name
+        text_lines += 1 if date_position != "none"
+        text_space = text_lines * 12
+
         # Draw signature image at absolute position
-        pdf.image img_file.path, at: [x, y_from_bottom + height], fit: [width, height - 25]
+        pdf.image img_file.path, at: [x, y_from_bottom + height], fit: [width, height - text_space]
 
-        # Add label below signature
-        label_y = y_from_bottom + 20
-        pdf.draw_text signatory.label, at: [x + (width / 2) - 40, label_y], size: 8
+        # Add optional elements below signature
+        current_y = y_from_bottom + text_space - 5
 
-        # Add date
-        date_y = y_from_bottom + 8
-        pdf.fill_color "666666"
-        pdf.draw_text "Firmado: #{format_date(sig_entry['signed_at'])}", at: [x + (width / 2) - 50, date_y], size: 7
-        pdf.fill_color "000000"
+        if show_label
+          pdf.draw_text signatory.label, at: [x + (width / 2) - 40, current_y], size: 8
+          current_y -= 12
+        end
+
+        if show_signer_name && sig_entry["signed_by_name"].present?
+          pdf.fill_color "333333"
+          pdf.draw_text "Firmado por: #{sig_entry['signed_by_name']}", at: [x + (width / 2) - 50, current_y], size: 7
+          pdf.fill_color "000000"
+          current_y -= 12
+        end
+
+        if date_position != "none"
+          pdf.fill_color "666666"
+          pdf.draw_text "Firmado: #{format_date(sig_entry['signed_at'])}", at: [x + (width / 2) - 50, current_y], size: 7
+          pdf.fill_color "000000"
+        end
 
         pdf.render
       ensure

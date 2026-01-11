@@ -75,6 +75,18 @@ module Templates
     # Variable mappings: { "Nombre Empleado" => "employee.full_name", ... }
     field :variable_mappings, type: Hash, default: {}
 
+    # Default third party type for this template (provider, client, contractor, partner, other)
+    field :default_third_party_type, type: String
+
+    # Preview settings for signature positioning
+    field :preview_scale, type: Float, default: 0.7
+    field :preview_page_height, type: Integer, default: 792  # Letter size height
+
+    # Actual PDF dimensions (extracted from uploaded file)
+    field :pdf_width, type: Float
+    field :pdf_height, type: Float
+    field :pdf_page_count, type: Integer, default: 1
+
     # Associations
     belongs_to :organization, class_name: "Identity::Organization"
     belongs_to :created_by, class_name: "Identity::User", optional: true
@@ -221,6 +233,9 @@ module Templates
       # Extract variables from the uploaded document
       extract_variables! if file_name&.end_with?(".docx")
 
+      # Extract PDF dimensions after saving (need to convert docx to PDF first if needed)
+      extract_pdf_dimensions!
+
       save!
     end
 
@@ -245,6 +260,84 @@ module Templates
 
       # Auto-assign mappings from system variables
       auto_assign_mappings!
+    end
+
+    def extract_pdf_dimensions!
+      return unless file_id
+
+      begin
+        content = file_content
+        return unless content
+
+        # Get PDF content - either directly or by converting docx
+        pdf_content = if file_name&.end_with?(".pdf")
+                        content
+                      elsif file_name&.end_with?(".docx")
+                        convert_docx_to_pdf_for_dimensions(content)
+                      end
+
+        return unless pdf_content
+
+        require "combine_pdf"
+        pdf = CombinePDF.parse(pdf_content)
+        return if pdf.pages.empty?
+
+        first_page = pdf.pages.first
+        mediabox = first_page.mediabox
+
+        self.pdf_width = mediabox[2].to_f
+        self.pdf_height = mediabox[3].to_f
+        self.pdf_page_count = pdf.pages.count
+
+        # Also update preview_page_height to match actual PDF
+        self.preview_page_height = pdf_height.to_i if pdf_height.present?
+
+        Rails.logger.info "Extracted PDF dimensions: #{pdf_width}x#{pdf_height}, #{pdf_page_count} pages"
+      rescue StandardError => e
+        Rails.logger.warn "Could not extract PDF dimensions: #{e.message}"
+        Rails.logger.warn e.backtrace.first(3).join("\n")
+        # Set default Letter size if extraction fails
+        self.pdf_width ||= 612.0
+        self.pdf_height ||= 792.0
+        self.pdf_page_count ||= 1
+      end
+    end
+
+    def convert_docx_to_pdf_for_dimensions(docx_content)
+      require "tempfile"
+      require "fileutils"
+
+      # Write DOCX to temp file
+      docx_temp = Tempfile.new(["template", ".docx"])
+      docx_temp.binmode
+      docx_temp.write(docx_content)
+      docx_temp.close
+
+      temp_dir = Dir.mktmpdir
+
+      begin
+        # Find LibreOffice
+        soffice_path = `which soffice`.strip
+        soffice_path = "/opt/homebrew/bin/soffice" if soffice_path.empty? && File.exist?("/opt/homebrew/bin/soffice")
+        soffice_path = "/usr/bin/soffice" if soffice_path.empty? && File.exist?("/usr/bin/soffice")
+
+        unless File.exist?(soffice_path.to_s)
+          Rails.logger.warn "LibreOffice not found for PDF conversion"
+          return nil
+        end
+
+        # Convert to PDF
+        system(soffice_path, "--headless", "--convert-to", "pdf", "--outdir", temp_dir, docx_temp.path)
+
+        pdf_path = File.join(temp_dir, File.basename(docx_temp.path).sub(".docx", ".pdf"))
+
+        return nil unless File.exist?(pdf_path)
+
+        File.binread(pdf_path)
+      ensure
+        docx_temp.unlink
+        FileUtils.rm_rf(temp_dir)
+      end
     end
 
     # Auto-assign template variables to system mappings based on name equivalence
@@ -302,6 +395,84 @@ module Templates
     # Get grouped mappings for UI
     def self.grouped_variable_mappings(organization = nil)
       VariableMapping.grouped_for(organization)
+    end
+
+    # Get required third party fields based on template variables
+    # Returns array of field info: [{ key: "business_name", label: "Razón Social", required: true }, ...]
+    def required_third_party_fields
+      return [] if variables.blank?
+
+      # Map of variable keys to third party fields
+      variable_to_field_map = {
+        "third_party.display_name" => { field: "business_name", label: "Razón Social/Nombre", person_type: nil },
+        "third_party.business_name" => { field: "business_name", label: "Razón Social", person_type: "juridical" },
+        "third_party.trade_name" => { field: "trade_name", label: "Nombre Comercial", person_type: nil },
+        "third_party.first_name" => { field: "first_name", label: "Nombre", person_type: "natural" },
+        "third_party.last_name" => { field: "last_name", label: "Apellido", person_type: "natural" },
+        "third_party.identification_number" => { field: "identification_number", label: "Número de Identificación", person_type: nil },
+        "third_party.identification_type" => { field: "identification_type", label: "Tipo de Identificación", person_type: nil },
+        "third_party.full_identification" => { field: "identification_number", label: "Identificación Completa", person_type: nil },
+        "third_party.verification_digit" => { field: "verification_digit", label: "Dígito de Verificación", person_type: "juridical" },
+        "third_party.email" => { field: "email", label: "Correo Electrónico", person_type: nil },
+        "third_party.phone" => { field: "phone", label: "Teléfono", person_type: nil },
+        "third_party.mobile" => { field: "mobile", label: "Celular", person_type: nil },
+        "third_party.address" => { field: "address", label: "Dirección", person_type: nil },
+        "third_party.city" => { field: "city", label: "Ciudad", person_type: nil },
+        "third_party.state" => { field: "state", label: "Departamento/Estado", person_type: nil },
+        "third_party.country" => { field: "country", label: "País", person_type: nil },
+        "third_party.legal_rep_name" => { field: "legal_rep_name", label: "Nombre Representante Legal", person_type: "juridical" },
+        "third_party.legal_rep_id" => { field: "legal_rep_id_number", label: "Cédula Representante Legal", person_type: "juridical" },
+        "third_party.legal_rep_id_number" => { field: "legal_rep_id_number", label: "Cédula Representante Legal", person_type: "juridical" },
+        "third_party.legal_rep_id_type" => { field: "legal_rep_id_type", label: "Tipo ID Representante Legal", person_type: "juridical" },
+        "third_party.legal_rep_id_city" => { field: "legal_rep_id_city", label: "Ciudad Expedición Cédula Rep. Legal", person_type: "juridical" },
+        "third_party.legal_rep_email" => { field: "legal_rep_email", label: "Email Representante Legal", person_type: "juridical" },
+        "third_party.legal_rep_phone" => { field: "legal_rep_phone", label: "Teléfono Representante Legal", person_type: "juridical" },
+        "third_party.bank_name" => { field: "bank_name", label: "Banco", person_type: nil },
+        "third_party.bank_account_type" => { field: "bank_account_type", label: "Tipo de Cuenta", person_type: nil },
+        "third_party.bank_account_number" => { field: "bank_account_number", label: "Número de Cuenta", person_type: nil },
+        "third_party.tax_regime" => { field: "tax_regime", label: "Régimen Tributario", person_type: nil },
+        "third_party.industry" => { field: "industry", label: "Industria/Sector", person_type: nil },
+        "third_party.website" => { field: "website", label: "Sitio Web", person_type: nil }
+      }
+
+      required_fields = []
+      variables.each do |variable|
+        mapping_key = variable_mappings[variable]
+        next unless mapping_key&.start_with?("third_party.")
+
+        field_info = variable_to_field_map[mapping_key]
+        next unless field_info
+
+        # Avoid duplicates
+        next if required_fields.any? { |f| f[:field] == field_info[:field] }
+
+        required_fields << {
+          field: field_info[:field],
+          label: field_info[:label],
+          variable: variable,
+          person_type: field_info[:person_type],
+          required: true
+        }
+      end
+
+      required_fields
+    end
+
+    # Check if template uses third party variables
+    def uses_third_party_variables?
+      return false if variable_mappings.blank?
+      variable_mappings.values.any? { |v| v&.start_with?("third_party.") }
+    end
+
+    # Get suggested person_type based on required fields
+    def suggested_person_type
+      fields = required_third_party_fields
+      has_juridical = fields.any? { |f| f[:person_type] == "juridical" }
+      has_natural = fields.any? { |f| f[:person_type] == "natural" }
+
+      return "juridical" if has_juridical && !has_natural
+      return "natural" if has_natural && !has_juridical
+      nil # Both or neither - let user choose
     end
 
     class InvalidStateError < StandardError; end

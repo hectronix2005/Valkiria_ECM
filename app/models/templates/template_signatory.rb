@@ -44,6 +44,18 @@ module Templates
     field :width, type: Float, default: 200.0
     field :height, type: Float, default: 60.0
 
+    # Date position relative to signature
+    # right: fecha a la derecha (default, firma usa 75% ancho)
+    # below: fecha debajo (firma usa 100% ancho, 80% alto)
+    # above: fecha arriba (firma usa 100% ancho, 80% alto)
+    # none: sin fecha (firma usa 100% del espacio)
+    DATE_POSITIONS = %w[right below above none].freeze
+    field :date_position, type: String, default: "right"
+
+    # Display options for signature rendering
+    field :show_label, type: Boolean, default: true      # Show label (e.g., "Representante Legal")
+    field :show_signer_name, type: Boolean, default: false # Show "Firmado por: [nombre]"
+
     # For custom role - specific user or email
     field :custom_user_id, type: BSON::ObjectId
     field :custom_email, type: String
@@ -62,6 +74,7 @@ module Templates
     validates :x_position, :y_position, :width, :height,
               numericality: { greater_than_or_equal_to: 0 }
     validates :custom_email, format: { with: URI::MailTo::EMAIL_REGEXP }, allow_blank: true
+    validates :date_position, inclusion: { in: DATE_POSITIONS }, allow_blank: true
 
     # Scopes
     scope :required, -> { where(required: true) }
@@ -109,14 +122,29 @@ module Templates
         context[:employee]&.user
       when SUPERVISOR, "supervisor"
         context[:employee]&.supervisor&.user
-      when HR, HR_MANAGER, "hr"
-        find_hr_user(context[:organization])
+      when HR, "hr"
+        find_user_with_role("hr", context[:organization])
+      when HR_MANAGER, "hr_manager"
+        find_user_with_role("hr_manager", context[:organization]) || find_user_with_role("hr", context[:organization])
       when LEGAL, "legal"
-        find_legal_user(context[:organization])
+        find_user_with_role("legal", context[:organization])
+      when "legal_representative"
+        find_user_with_role("legal_representative", context[:organization])
+      when "general_manager"
+        find_user_with_role("general_manager", context[:organization])
+      when "ceo"
+        find_user_with_role("ceo", context[:organization])
+      when "accountant"
+        find_user_with_role("accountant", context[:organization])
+      when "manager", "area_manager"
+        find_user_with_role("manager", context[:organization])
       when ADMIN, "admin"
-        find_admin_user(context[:organization])
+        find_user_with_role("admin", context[:organization])
       when CUSTOM, "custom"
         find_custom_signatory
+      else
+        # Try to find by role name directly
+        find_user_with_role(effective_role, context[:organization])
       end
     end
 
@@ -127,7 +155,10 @@ module Templates
         y: y_position,
         width: width,
         height: height,
-        page: page_number
+        page: page_number,
+        date_position: date_position || "right",
+        show_label: show_label.nil? ? true : show_label,
+        show_signer_name: show_signer_name || false
       }
     end
 
@@ -165,42 +196,16 @@ module Templates
       end
     end
 
-    def find_hr_user(organization)
+    # Generic method to find a user with a specific role in an organization
+    def find_user_with_role(role_name, organization)
       return nil unless organization
 
-      # Find user with HR role in organization
-      hr_role = Identity::Role.where(name: "hr").first
-      return nil unless hr_role
+      role = Identity::Role.where(name: role_name).first
+      return nil unless role
 
       Identity::User.where(
         organization_id: organization.id,
-        :role_ids.in => [hr_role.id],
-        active: true
-      ).first
-    end
-
-    def find_legal_user(organization)
-      return nil unless organization
-
-      legal_role = Identity::Role.where(name: "legal").first
-      return nil unless legal_role
-
-      Identity::User.where(
-        organization_id: organization.id,
-        :role_ids.in => [legal_role.id],
-        active: true
-      ).first
-    end
-
-    def find_admin_user(organization)
-      return nil unless organization
-
-      admin_role = Identity::Role.where(name: "admin").first
-      return nil unless admin_role
-
-      Identity::User.where(
-        organization_id: organization.id,
-        :role_ids.in => [admin_role.id],
+        :role_ids.in => [role.id],
         active: true
       ).first
     end

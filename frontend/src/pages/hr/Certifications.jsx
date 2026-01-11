@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { certificationService } from '../../services/api'
@@ -78,20 +78,31 @@ const estimatedDays = {
   custom: 3,
 }
 
-function CertificationForm({ onSubmit, onCancel, loading }) {
+function CertificationForm({ onSubmit, onCancel, loading, initialType }) {
   const [formData, setFormData] = useState({
-    certification_type: 'employment',
+    certification_type: initialType || 'employment',
     purpose: 'bank',
     purpose_details: '',
     language: 'es',
     delivery_method: 'digital',
     addressee: '',
-    include_salary: false,
+    include_salary: initialType === 'salary' || initialType === 'full',
     include_position: true,
     include_start_date: true,
     include_department: false,
     special_instructions: '',
   })
+
+  // Update form when initialType changes (when clicking info cards)
+  useEffect(() => {
+    if (initialType) {
+      setFormData(prev => ({
+        ...prev,
+        certification_type: initialType,
+        include_salary: initialType === 'salary' || initialType === 'full',
+      }))
+    }
+  }, [initialType])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -106,7 +117,12 @@ function CertificationForm({ onSubmit, onCancel, loading }) {
         label="Tipo de Certificación"
         options={certificationTypes}
         value={formData.certification_type}
-        onChange={(e) => setFormData({ ...formData, certification_type: e.target.value })}
+        onChange={(e) => {
+          const newType = e.target.value
+          // Reset include_salary if type is not salary or full
+          const newIncludeSalary = (newType === 'salary' || newType === 'full') ? formData.include_salary : false
+          setFormData({ ...formData, certification_type: newType, include_salary: newIncludeSalary })
+        }}
         required
       />
 
@@ -191,15 +207,17 @@ function CertificationForm({ onSubmit, onCancel, loading }) {
             />
             <span className="text-sm">Departamento</span>
           </label>
-          <label className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
-            <input
-              type="checkbox"
-              checked={formData.include_salary}
-              onChange={(e) => setFormData({ ...formData, include_salary: e.target.checked })}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-sm">Información salarial</span>
-          </label>
+          {(formData.certification_type === 'salary' || formData.certification_type === 'full') && (
+            <label className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
+              <input
+                type="checkbox"
+                checked={formData.include_salary}
+                onChange={(e) => setFormData({ ...formData, include_salary: e.target.checked })}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm">Información salarial</span>
+            </label>
+          )}
         </div>
       </div>
 
@@ -248,6 +266,9 @@ export default function Certifications() {
   const [generatingId, setGeneratingId] = useState(null)
   const [downloadingId, setDownloadingId] = useState(null)
   const [signingId, setSigningId] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewingId, setPreviewingId] = useState(null)
+  const [initialType, setInitialType] = useState(null)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { isHR, isAdmin } = useAuth()
@@ -370,6 +391,33 @@ export default function Certifications() {
     }
   }
 
+  const handlePreviewDocument = async (certification) => {
+    try {
+      setPreviewingId(certification.id)
+      const response = await certificationService.downloadDocument(certification.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl(url)
+    } catch (error) {
+      console.error('Error previewing document:', error)
+      const errorData = error.response?.data
+      if (errorData?.error) {
+        alert(errorData.error)
+      } else {
+        alert('Error al previsualizar documento')
+      }
+    } finally {
+      setPreviewingId(null)
+    }
+  }
+
+  const handleClosePreview = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl)
+    }
+    setPreviewUrl(null)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -405,9 +453,12 @@ export default function Certifications() {
         </CardContent>
       </Card>
 
-      {/* Info Cards */}
+      {/* Info Cards - Clickable shortcuts */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-blue-50 border-blue-200">
+        <Card
+          className="bg-blue-50 border-blue-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
+          onClick={() => { setInitialType('employment'); setShowNewModal(true); }}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <FileText className="w-8 h-8 text-blue-600" />
@@ -418,7 +469,10 @@ export default function Certifications() {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-green-50 border-green-200">
+        <Card
+          className="bg-green-50 border-green-200 cursor-pointer hover:shadow-md hover:border-green-300 transition-all"
+          onClick={() => { setInitialType('salary'); setShowNewModal(true); }}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <CheckCircle className="w-8 h-8 text-green-600" />
@@ -429,13 +483,16 @@ export default function Certifications() {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-purple-50 border-purple-200">
+        <Card
+          className="bg-purple-50 border-purple-200 cursor-pointer hover:shadow-md hover:border-purple-300 transition-all"
+          onClick={() => { setInitialType('full'); setShowNewModal(true); }}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <Clock className="w-8 h-8 text-purple-600" />
               <div>
-                <p className="font-medium text-purple-900">Entrega Rápida</p>
-                <p className="text-sm text-purple-700">1-3 días hábiles según el tipo</p>
+                <p className="font-medium text-purple-900">Certificación Completa</p>
+                <p className="text-sm text-purple-700">Incluye toda tu información laboral</p>
               </div>
             </div>
           </CardContent>
@@ -546,6 +603,21 @@ export default function Certifications() {
                             )}
                           </button>
                         )}
+                        {/* Botón previsualizar (cuando hay documento y puede descargar) */}
+                        {certification.document_uuid && certification.document_info?.can_download && (
+                          <button
+                            onClick={() => handlePreviewDocument(certification)}
+                            disabled={previewingId === certification.id}
+                            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
+                            title="Previsualizar"
+                          >
+                            {previewingId === certification.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                         {/* Botón descargar (cuando hay documento y puede descargar) */}
                         {certification.document_uuid && certification.document_info?.can_download && (
                           <button
@@ -645,14 +717,15 @@ export default function Certifications() {
       {/* New Certification Modal */}
       <Modal
         isOpen={showNewModal}
-        onClose={() => setShowNewModal(false)}
+        onClose={() => { setShowNewModal(false); setInitialType(null); }}
         title="Nueva Solicitud de Certificación"
         size="lg"
       >
         <CertificationForm
           onSubmit={(data) => createMutation.mutate(data)}
-          onCancel={() => setShowNewModal(false)}
+          onCancel={() => { setShowNewModal(false); setInitialType(null); }}
           loading={createMutation.isPending}
+          initialType={initialType}
         />
       </Modal>
 
@@ -731,11 +804,25 @@ export default function Certifications() {
               </div>
             )}
 
-            {/* Download button for completed certifications */}
-            {selectedCertification.status === 'completed' && selectedCertification.document_uuid && (
-              <div className="pt-4 border-t">
-                <Button className="w-full" variant="primary" onClick={() => handleDownloadDocument(selectedCertification)}>
-                  <FileText className="w-4 h-4" />
+            {/* Preview and Download buttons for certifications with document */}
+            {selectedCertification.document_uuid && selectedCertification.document_info?.can_download && (
+              <div className="pt-4 border-t space-y-2">
+                <Button
+                  className="w-full"
+                  variant="primary"
+                  onClick={() => handlePreviewDocument(selectedCertification)}
+                  loading={previewingId === selectedCertification.id}
+                >
+                  <Eye className="w-4 h-4" />
+                  Previsualizar Documento
+                </Button>
+                <Button
+                  className="w-full"
+                  variant="secondary"
+                  onClick={() => handleDownloadDocument(selectedCertification)}
+                  loading={downloadingId === selectedCertification.id}
+                >
+                  <Download className="w-4 h-4" />
                   Descargar Certificación
                 </Button>
               </div>
@@ -875,6 +962,30 @@ export default function Certifications() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* PDF Preview Modal */}
+      <Modal
+        isOpen={!!previewUrl}
+        onClose={handleClosePreview}
+        title="Previsualización de Documento"
+        size="full"
+      >
+        <div className="flex flex-col h-[80vh]">
+          {previewUrl && (
+            <iframe
+              src={previewUrl}
+              className="w-full flex-1 border rounded-lg bg-gray-100"
+              title="Vista previa del documento"
+            />
+          )}
+          <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+            <Button variant="secondary" onClick={handleClosePreview}>
+              <X className="w-4 h-4" />
+              Cerrar
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

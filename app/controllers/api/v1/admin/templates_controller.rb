@@ -145,13 +145,36 @@ module Api
           # Group subcategories by main category for easier frontend consumption
           grouped = subcategories.group_by { |s| s[:main_category] }
 
+          # Third party types for legal module
+          third_party_types = ::Legal::ThirdParty::TYPES.map do |type|
+            { value: type, label: I18n.t("legal.third_party.types.#{type}", default: type.humanize) }
+          end
+
           render json: {
             data: subcategories, # Legacy: flat list of subcategories
             modules: modules,
             main_categories: main_categories,
             subcategories: subcategories,
             grouped: grouped,
-            category_to_module: ::Templates::Template::CATEGORY_TO_MODULE
+            category_to_module: ::Templates::Template::CATEGORY_TO_MODULE,
+            third_party_types: third_party_types
+          }
+        end
+
+        # GET /api/v1/admin/templates/:id/third_party_requirements
+        def third_party_requirements
+          set_template
+          return unless @template
+
+          render json: {
+            data: {
+              template_id: @template.uuid,
+              template_name: @template.name,
+              default_third_party_type: @template.default_third_party_type,
+              suggested_person_type: @template.suggested_person_type,
+              required_fields: @template.required_third_party_fields,
+              uses_third_party: @template.uses_third_party_variables?
+            }
           }
         end
 
@@ -284,6 +307,9 @@ module Api
             :module_type,
             :main_category,
             :category,
+            :default_third_party_type,
+            :preview_scale,
+            :preview_page_height,
             variable_mappings: {}
           )
         end
@@ -327,6 +353,13 @@ module Api
             file_size: template.file_size,
             variables: template.variables,
             signatories_count: template.signatories.count,
+            default_third_party_type: template.default_third_party_type,
+            uses_third_party: template.uses_third_party_variables?,
+            preview_scale: template.preview_scale || 0.7,
+            preview_page_height: template.preview_page_height || 842,
+            pdf_width: template.pdf_width || 612,
+            pdf_height: template.pdf_height || 792,
+            pdf_page_count: template.pdf_page_count || 1,
             created_at: template.created_at.iso8601,
             updated_at: template.updated_at.iso8601
           }
@@ -335,6 +368,8 @@ module Api
             json[:variable_mappings] = template.variable_mappings
             json[:signatories] = template.signatories.by_position.map { |s| signatory_json(s) }
             json[:available_mappings] = ::Templates::Template.available_variable_mappings(current_organization)
+            json[:required_third_party_fields] = template.required_third_party_fields
+            json[:suggested_person_type] = template.suggested_person_type
           end
 
           json
@@ -344,15 +379,21 @@ module Api
           {
             id: signatory.uuid,
             role: signatory.role,
+            signatory_type_code: signatory.signatory_type_code,
+            effective_code: signatory.effective_code,
             role_label: signatory.role_label,
             label: signatory.label,
             position: signatory.position,
             required: signatory.required,
+            placeholder_text: signatory.placeholder_text,
             page_number: signatory.page_number,
             x_position: signatory.x_position,
             y_position: signatory.y_position,
             width: signatory.width,
-            height: signatory.height
+            height: signatory.height,
+            date_position: signatory.date_position || "right",
+            show_label: signatory.show_label.nil? ? true : signatory.show_label,
+            show_signer_name: signatory.show_signer_name || false
           }
         end
       end

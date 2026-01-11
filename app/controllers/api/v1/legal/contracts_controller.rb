@@ -4,7 +4,7 @@ module Api
   module V1
     module Legal
       class ContractsController < BaseController
-        before_action :set_contract, only: %i[show update destroy submit activate terminate cancel generate_document download_document]
+        before_action :set_contract, only: %i[show update destroy submit activate terminate cancel archive unarchive generate_document download_document sign_document]
 
         # GET /api/v1/legal/contracts
         def index
@@ -14,9 +14,16 @@ module Api
             .includes(:third_party, :requested_by)
             .order(created_at: :desc)
 
+          # Archived filter - by default hide archived, show only archived when requested
+          if params[:archived] == "true"
+            contracts = contracts.archived
+          elsif params[:include_archived] != "true"
+            contracts = contracts.not_archived
+          end
+
           # Filters
           contracts = contracts.by_type(params[:type]) if params[:type].present?
-          contracts = contracts.where(status: params[:status]) if params[:status].present?
+          contracts = contracts.where(status: params[:status]) if params[:status].present? && params[:status] != "archived"
           contracts = contracts.by_third_party(params[:third_party_id]) if params[:third_party_id].present?
           contracts = contracts.search(params[:search]) if params[:search].present?
 
@@ -72,6 +79,12 @@ module Api
         # DELETE /api/v1/legal/contracts/:id
         def destroy
           authorize @contract
+
+          # Also delete associated generated document if exists
+          if @contract.document_uuid
+            doc = ::Templates::GeneratedDocument.find_by(uuid: @contract.document_uuid)
+            doc&.destroy
+          end
 
           if @contract.destroy
             render json: { message: "Contrato eliminado correctamente" }
@@ -178,6 +191,32 @@ module Api
           render json: { error: e.message }, status: :unprocessable_entity
         end
 
+        # POST /api/v1/legal/contracts/:id/archive
+        def archive
+          authorize @contract
+
+          @contract.archive!(actor: current_user)
+          render json: {
+            data: contract_json(@contract),
+            message: "Contrato archivado"
+          }
+        rescue ::Legal::Contract::InvalidStateError => e
+          render json: { error: e.message }, status: :unprocessable_entity
+        end
+
+        # POST /api/v1/legal/contracts/:id/unarchive
+        def unarchive
+          authorize @contract
+
+          @contract.unarchive!(actor: current_user)
+          render json: {
+            data: contract_json(@contract),
+            message: "Contrato restaurado del archivo"
+          }
+        rescue ::Legal::Contract::InvalidStateError => e
+          render json: { error: e.message }, status: :unprocessable_entity
+        end
+
         # POST /api/v1/legal/contracts/:id/generate_document
         def generate_document
           authorize @contract
@@ -205,11 +244,18 @@ module Api
 
           @contract.update!(document_uuid: doc.uuid)
 
+          # Initialize signature workflow if template has signatories
+          if template.signatories.any?
+            doc.initialize_signatures!
+          end
+
           render json: {
             data: contract_json(@contract),
             document: {
               uuid: doc.uuid,
-              status: doc.status
+              status: doc.status,
+              pending_signatures: doc.pending_signatures_count,
+              signatures: doc.signatures
             },
             message: "Documento generado correctamente"
           }
@@ -257,6 +303,7 @@ module Api
             end_date: params[:end_date],
             description: params[:description],
             payment_terms: params[:payment_terms],
+            payment_frequency: params[:payment_frequency],
             organization: current_organization,
             third_party: third_party
           )
@@ -317,6 +364,51 @@ module Api
                     filename: generated_doc.file_name
         end
 
+        # POST /api/v1/legal/contracts/:id/sign_document
+        # Signs the contract document with the current user's digital signature
+        def sign_document
+          authorize @contract
+
+          unless @contract.pending_signatures?
+            return render json: { error: "Este contrato no está pendiente de firmas" }, status: :unprocessable_entity
+          end
+
+          doc = @contract.generated_document
+          unless doc
+            return render json: { error: "Este contrato no tiene documento generado" }, status: :not_found
+          end
+
+          unless doc.can_be_signed_by?(current_user)
+            return render json: { error: "No tienes firma pendiente en este documento" }, status: :forbidden
+          end
+
+          # Get user's default signature
+          signature = current_user.signatures.active.default_signature.first || current_user.signatures.active.first
+          unless signature
+            return render json: { error: "No tienes una firma digital configurada. Configura tu firma en tu perfil." }, status: :unprocessable_entity
+          end
+
+          doc.sign!(user: current_user, signature: signature)
+
+          # Refresh document to get updated signature status
+          doc.reload
+
+          # If all signatures complete and contract is still pending_signatures, mark complete
+          if doc.all_required_signed? && @contract.pending_signatures?
+            @contract.complete_signatures!(actor: current_user)
+          end
+
+          @contract.reload
+
+          render json: {
+            data: contract_json(@contract, detailed: true),
+            message: "Documento firmado exitosamente",
+            all_signed: doc.all_required_signed?
+          }
+        rescue ::Templates::GeneratedDocument::SignatureError => e
+          render json: { error: e.message }, status: :unprocessable_entity
+        end
+
         private
 
         def set_contract
@@ -374,10 +466,25 @@ module Api
               name: contract.requested_by.full_name
             } : nil,
             created_at: contract.created_at,
-            updated_at: contract.updated_at
+            updated_at: contract.updated_at,
+            can_delete: ::Legal::ContractPolicy.new(current_user, contract).destroy?
           }
 
           if detailed
+            doc = contract.generated_document
+            doc_signatures = doc ? doc.signatures.map do |sig|
+              {
+                signatory_label: sig["signatory_label"],
+                signatory_type_code: sig["signatory_type_code"],
+                user_name: sig["user_name"],
+                user_id: sig["user_id"],
+                status: sig["status"],
+                required: sig["required"],
+                signed_at: sig["signed_at"],
+                signed_by_name: sig["signed_by_name"]
+              }
+            end : []
+
             data.merge!(
               description: contract.description,
               signature_date: contract.signature_date,
@@ -404,10 +511,15 @@ module Api
                   reason: a.reason
                 }
               },
+              document_signatures: doc_signatures,
+              document_signatures_status: contract.document_signatures_status,
+              can_sign_document: doc&.can_be_signed_by?(current_user) || false,
               history: contract.history.last(20),
               editable: contract.editable?,
               can_submit: contract.can_submit?,
-              can_activate: contract.can_activate?
+              can_activate: contract.can_activate?,
+              can_archive: ::Legal::ContractPolicy.new(current_user, contract).archive?,
+              can_unarchive: ::Legal::ContractPolicy.new(current_user, contract).unarchive?
             )
           end
 

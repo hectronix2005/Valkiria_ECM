@@ -9,20 +9,24 @@ import Vacations from './pages/hr/Vacations'
 import Approvals from './pages/hr/Approvals'
 import Employees from './pages/hr/Employees'
 import Certifications from './pages/hr/Certifications'
+import MyRequests from './pages/hr/MyRequests'
 import HRDashboard from './pages/hr/HRDashboard'
 import Orgchart from './pages/hr/Orgchart'
+import HRDocuments from './pages/hr/HRDocuments'
 import Templates from './pages/admin/Templates'
 import TemplateEdit from './pages/admin/TemplateEdit'
-import HRVariables from './pages/hr/HRVariables'
+// HRVariables is now integrated into HRDocuments.jsx
 import SignatoryTypes from './pages/admin/SignatoryTypes'
 import Settings from './pages/admin/Settings'
 import Departments from './pages/admin/Departments'
+import AdminUsers from './pages/admin/Users'
 import Documents from './pages/Documents'
 import Folders from './pages/Folders'
 import ThirdParties from './pages/legal/ThirdParties'
+// ThirdPartyTypes is now integrated into ThirdParties.jsx
 import Contracts from './pages/legal/Contracts'
 import ContractApprovals from './pages/legal/ContractApprovals'
-import LegalVariables from './pages/legal/LegalVariables'
+// LegalVariables is now integrated into Contracts.jsx
 
 // Protected Route wrapper
 function ProtectedRoute({ children, requireHR = false, requireApprover = false, requireAdmin = false }) {
@@ -104,33 +108,27 @@ export default function App() {
         }
       />
 
-      {/* HR - Vacations */}
+      {/* HR - My Requests (unified vacations + certifications) */}
       <Route
-        path="/hr/vacations"
+        path="/hr/my-requests"
         element={
           <ProtectedRoute>
-            <Vacations />
+            <MyRequests />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/hr/vacations/new"
+        path="/hr/my-requests/:tab"
         element={
           <ProtectedRoute>
-            <Vacations />
+            <MyRequests />
           </ProtectedRoute>
         }
       />
-
-      {/* HR - Certifications */}
-      <Route
-        path="/hr/certifications"
-        element={
-          <ProtectedRoute>
-            <Certifications />
-          </ProtectedRoute>
-        }
-      />
+      {/* Legacy routes - redirect to my-requests */}
+      <Route path="/hr/vacations" element={<Navigate to="/hr/my-requests/vacations" replace />} />
+      <Route path="/hr/vacations/new" element={<Navigate to="/hr/my-requests/vacations" replace />} />
+      <Route path="/hr/certifications" element={<Navigate to="/hr/my-requests/certifications" replace />} />
 
       {/* HR - Approvals (supervisors/HR only) */}
       <Route
@@ -168,6 +166,16 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Orgchart />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* HR - Documentacion */}
+      <Route
+        path="/hr/documents"
+        element={
+          <ProtectedRoute requireApprover>
+            <HRDocuments />
           </ProtectedRoute>
         }
       />
@@ -222,6 +230,16 @@ export default function App() {
         }
       />
 
+      {/* Admin - Users */}
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute requireAdmin>
+            <AdminUsers />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Admin - Templates */}
       <Route
         path="/admin/templates"
@@ -236,16 +254,6 @@ export default function App() {
         element={
           <ProtectedRoute requireAdmin>
             <TemplateEdit />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* HR - Variables */}
-      <Route
-        path="/hr/variables"
-        element={
-          <ProtectedRoute requireHR>
-            <HRVariables />
           </ProtectedRoute>
         }
       />
@@ -286,16 +294,6 @@ export default function App() {
         element={
           <ProtectedRoute requireApprover>
             <ContractApprovals />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Legal - Variables */}
-      <Route
-        path="/legal/variables"
-        element={
-          <ProtectedRoute requireHR>
-            <LegalVariables />
           </ProtectedRoute>
         }
       />

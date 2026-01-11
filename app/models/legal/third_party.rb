@@ -51,6 +51,7 @@ module Legal
     field :legal_rep_name, type: String
     field :legal_rep_id_type, type: String
     field :legal_rep_id_number, type: String
+    field :legal_rep_id_city, type: String
     field :legal_rep_email, type: String
     field :legal_rep_phone, type: String
 
@@ -74,7 +75,8 @@ module Legal
     has_many :contracts, class_name: "Legal::Contract", dependent: :restrict_with_error
 
     # Validations
-    validates :third_party_type, presence: true, inclusion: { in: TYPES }
+    validates :third_party_type, presence: true
+    validate :valid_third_party_type
     validates :person_type, presence: true, inclusion: { in: PERSON_TYPES }
     validates :status, presence: true, inclusion: { in: STATUSES }
     validates :identification_type, inclusion: { in: IDENTIFICATION_TYPES }, allow_blank: true
@@ -117,6 +119,23 @@ module Legal
         { code: regex }
       )
     }
+
+    # Custom validations
+    def valid_third_party_type
+      return if third_party_type.blank?
+
+      # Check if it's a default type
+      return if TYPES.include?(third_party_type)
+
+      # Check if it's a custom type from ThirdPartyType model
+      return if organization_id && ThirdPartyType.where(
+        organization_id: organization_id,
+        code: third_party_type,
+        active: true
+      ).exists?
+
+      errors.add(:third_party_type, "is not a valid type")
+    end
 
     # Instance methods
     def display_name

@@ -39,8 +39,12 @@ Rails.application.routes.draw do
 
       # Documents (generated from templates)
       resources :documents, only: [:index, :show, :destroy] do
+        collection do
+          get :pending_signatures
+        end
         member do
           get :download
+          post :sign
         end
       end
 
@@ -57,6 +61,18 @@ Rails.application.routes.draw do
 
       namespace :admin do
         resource :settings, only: [:show, :update]
+
+        # Users management
+        resources :users do
+          member do
+            post :toggle_active
+            post :assign_roles
+          end
+          collection do
+            get :roles
+            get :stats
+          end
+        end
 
         # Departments (areas) management
         resources :departments do
@@ -105,6 +121,7 @@ Rails.application.routes.draw do
             post :reassign_mappings
             get :download
             get :preview
+            get :third_party_requirements
           end
           collection do
             get :categories
@@ -196,16 +213,20 @@ Rails.application.routes.draw do
             post :activate
             post :terminate
             post :cancel
+            post :archive
+            post :unarchive
             post :generate_document
+            post :sign_document
             get :download_document
           end
         end
 
-        # Contract approvals (for approvers)
+        # Contract approvals (for approvers and signatories)
         resources :contract_approvals, only: [:index, :show] do
           member do
             post :approve
             post :reject
+            post :sign
           end
         end
 

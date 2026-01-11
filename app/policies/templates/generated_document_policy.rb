@@ -18,6 +18,11 @@ module Templates
       admin? # Only admins can delete generated documents
     end
 
+    def sign?
+      # User can sign if they have a pending signature on this document
+      record.can_be_signed_by?(user)
+    end
+
     class Scope < ApplicationPolicy::Scope
       def resolve
         if user.admin? || hr_staff?

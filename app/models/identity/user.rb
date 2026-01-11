@@ -130,6 +130,52 @@ module Identity
       roles.by_level.first
     end
 
+    # Permission level methods (1-5 scale)
+    def permission_level
+      highest_role&.level_value || 0
+    end
+
+    def level_name
+      highest_role&.level_name || "None"
+    end
+
+    def at_least_level?(min_level)
+      permission_level >= min_level
+    end
+
+    def at_most_level?(max_level)
+      permission_level <= max_level
+    end
+
+    def higher_level_than?(other_user)
+      permission_level > other_user.permission_level
+    end
+
+    def same_level_as?(other_user)
+      permission_level == other_user.permission_level
+    end
+
+    def lower_level_than?(other_user)
+      permission_level < other_user.permission_level
+    end
+
+    # Level-specific helpers using constants
+    def viewer?
+      has_role?(Identity::Role::VIEWER) || permission_level >= Identity::Role::LEVEL_VIEWER
+    end
+
+    def employee?
+      has_role?(Identity::Role::EMPLOYEE) || permission_level >= Identity::Role::LEVEL_EMPLOYEE
+    end
+
+    def hr?
+      has_role?(Identity::Role::HR) || permission_level >= Identity::Role::LEVEL_HR
+    end
+
+    def legal?
+      has_role?(Identity::Role::LEGAL) || permission_level >= Identity::Role::LEVEL_LEGAL
+    end
+
     def activate!
       update!(active: true)
     end
@@ -162,6 +208,7 @@ module Identity
         "user_id" => id.to_s,
         "email" => email,
         "roles" => role_names,
+        "permission_level" => permission_level,
         "organization_id" => organization_id&.to_s,
         "must_change_password" => must_change_password
       }

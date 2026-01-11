@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { employeeService, templateService } from '../../services/api'
+import { employeeService, templateService, generatedDocumentService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -133,6 +133,31 @@ const numberToWords = (amount) => {
   return parts.join(' ').trim() + ' pesos'
 }
 
+// Función para calcular la duración entre dos fechas
+const calculateDuration = (startDate, endDate) => {
+  if (!startDate || !endDate) return null
+
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+
+  if (end <= start) return null
+
+  // Calcular diferencia en meses
+  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
+  const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+
+  // Determinar la mejor unidad
+  if (months >= 12 && months % 12 === 0) {
+    return { value: months / 12, unit: 'years' }
+  } else if (months >= 1) {
+    return { value: months, unit: 'months' }
+  } else if (days >= 7 && days % 7 === 0) {
+    return { value: days / 7, unit: 'weeks' }
+  } else {
+    return { value: days, unit: 'days' }
+  }
+}
+
 const contractTypeLabels = {
   indefinite: 'Termino Indefinido',
   fixed_term: 'Termino Fijo',
@@ -207,6 +232,8 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
     salary: '',
     food_allowance: '',
     transport_allowance: '',
+    payment_frequency: 'monthly',
+    work_city: '',
     // Personal identification
     identification_type: 'CC',
     identification_number: '',
@@ -248,6 +275,8 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
         salary: employee.salary || '',
         food_allowance: employee.food_allowance || '',
         transport_allowance: employee.transport_allowance || '',
+        payment_frequency: employee.payment_frequency || 'monthly',
+        work_city: employee.work_city || '',
         // Personal identification
         identification_type: employee.identification_type || 'CC',
         identification_number: employee.identification_number || '',
@@ -259,6 +288,18 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
       })
     }
   }, [employee])
+
+  // Auto-calcular duración cuando cambien las fechas
+  useEffect(() => {
+    const duration = calculateDuration(formData.contract_start_date, formData.contract_end_date)
+    if (duration) {
+      setFormData(prev => ({
+        ...prev,
+        contract_duration_value: duration.value.toString(),
+        contract_duration_unit: duration.unit
+      }))
+    }
+  }, [formData.contract_start_date, formData.contract_end_date])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -401,6 +442,28 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
       {/* Tab: Contrato */}
       {activeTab === 'contrato' && (
         <div className="space-y-4">
+          {/* Info sobre tipo de contrato */}
+          {formData.contract_type === 'indefinite' && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+              <strong>Contrato a Término Indefinido:</strong> No requiere fecha de finalización ni duración específica.
+            </div>
+          )}
+          {formData.contract_type === 'fixed_term' && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+              <strong>Contrato a Término Fijo:</strong> Requiere fecha de finalización y duración del contrato.
+            </div>
+          )}
+          {formData.contract_type === 'work_or_labor' && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-700">
+              <strong>Contrato por Obra o Labor:</strong> Vinculado a la duración de una obra o labor específica.
+            </div>
+          )}
+          {formData.contract_type === 'apprentice' && (
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+              <strong>Contrato de Aprendizaje:</strong> Para practicantes y aprendices en formación.
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Tipo de Contrato"
@@ -410,7 +473,15 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
                 if (contractTemplates.length > 0) {
                   setFormData({ ...formData, contract_template_id: e.target.value })
                 } else {
-                  setFormData({ ...formData, contract_type: e.target.value })
+                  // Al cambiar tipo de contrato, limpiar campos no aplicables
+                  const newType = e.target.value
+                  const updates = { contract_type: newType }
+                  if (newType === 'indefinite') {
+                    updates.contract_end_date = ''
+                    updates.contract_duration_value = ''
+                    updates.contract_duration_unit = 'months'
+                  }
+                  setFormData({ ...formData, ...updates })
                 }
               }}
             />
@@ -419,41 +490,46 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
               type="number"
               value={formData.trial_period_days}
               onChange={(e) => setFormData({ ...formData, trial_period_days: e.target.value })}
-              placeholder="60"
+              placeholder={formData.contract_type === 'apprentice' ? '0' : '60'}
             />
             <Input
               label="Fecha de Inicio del Contrato"
               type="date"
               value={formData.contract_start_date}
               onChange={(e) => setFormData({ ...formData, contract_start_date: e.target.value })}
+              required
             />
-            {(formData.contract_type === 'fixed_term' || formData.contract_type === 'work_or_labor') && (
-              <>
-                <Input
-                  label="Fecha de Fin del Contrato"
-                  type="date"
-                  value={formData.contract_end_date}
-                  onChange={(e) => setFormData({ ...formData, contract_end_date: e.target.value })}
-                />
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Duracion del Contrato</label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      value={formData.contract_duration_value}
-                      onChange={(e) => setFormData({ ...formData, contract_duration_value: e.target.value })}
-                      placeholder="12"
-                      className="flex-1"
-                    />
-                    <Select
-                      options={durationUnitOptions}
-                      value={formData.contract_duration_unit}
-                      onChange={(e) => setFormData({ ...formData, contract_duration_unit: e.target.value })}
-                      className="w-32"
-                    />
-                  </div>
+            {/* Fecha de fin solo para contratos con término */}
+            {formData.contract_type !== 'indefinite' && (
+              <Input
+                label="Fecha de Fin del Contrato"
+                type="date"
+                value={formData.contract_end_date}
+                onChange={(e) => setFormData({ ...formData, contract_end_date: e.target.value })}
+                min={formData.contract_start_date}
+                required={formData.contract_type === 'fixed_term'}
+              />
+            )}
+            {/* Duración solo para contratos con término */}
+            {formData.contract_type !== 'indefinite' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Duración del Contrato</label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={formData.contract_duration_value}
+                    onChange={(e) => setFormData({ ...formData, contract_duration_value: e.target.value })}
+                    placeholder="12"
+                    className="flex-1"
+                  />
+                  <Select
+                    options={durationUnitOptions}
+                    value={formData.contract_duration_unit}
+                    onChange={(e) => setFormData({ ...formData, contract_duration_unit: e.target.value })}
+                    className="w-32"
+                  />
                 </div>
-              </>
+              </div>
             )}
             {formData.employment_status === 'terminated' && (
               <Input
@@ -508,6 +584,26 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
               )}
             </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              label="Periodicidad de Pago"
+              options={[
+                { value: 'weekly', label: 'Semanal' },
+                { value: 'biweekly', label: 'Quincenal' },
+                { value: 'monthly', label: 'Mensual' },
+              ]}
+              value={formData.payment_frequency}
+              onChange={(e) => setFormData({ ...formData, payment_frequency: e.target.value })}
+            />
+            <Input
+              label="Ciudad de Labores"
+              value={formData.work_city}
+              onChange={(e) => setFormData({ ...formData, work_city: e.target.value })}
+              placeholder="Ej: Bogotá D.C."
+            />
+          </div>
+
           {(formData.salary || formData.food_allowance || formData.transport_allowance) && (
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-sm text-green-700">
@@ -661,6 +757,8 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
     salary: '',
     food_allowance: '',
     transport_allowance: '',
+    payment_frequency: 'monthly',
+    work_city: '',
     // Personal
     date_of_birth: '',
     place_of_birth: '',
@@ -673,6 +771,18 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
 
   const [activeTab, setActiveTab] = useState('basico')
   const [validationErrors, setValidationErrors] = useState({})
+
+  // Auto-calcular duración cuando cambien las fechas
+  useEffect(() => {
+    const duration = calculateDuration(formData.contract_start_date, formData.contract_end_date)
+    if (duration) {
+      setFormData(prev => ({
+        ...prev,
+        contract_duration_value: duration.value.toString(),
+        contract_duration_unit: duration.unit
+      }))
+    }
+  }, [formData.contract_start_date, formData.contract_end_date])
 
   const validateForm = () => {
     const errors = {}
@@ -896,6 +1006,28 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
       {/* Tab: Contrato */}
       {activeTab === 'contrato' && (
         <div className="space-y-4">
+          {/* Info sobre tipo de contrato */}
+          {formData.contract_type === 'indefinite' && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+              <strong>Contrato a Término Indefinido:</strong> No requiere fecha de finalización ni duración específica.
+            </div>
+          )}
+          {formData.contract_type === 'fixed_term' && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+              <strong>Contrato a Término Fijo:</strong> Requiere fecha de finalización y duración del contrato.
+            </div>
+          )}
+          {formData.contract_type === 'work_or_labor' && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-700">
+              <strong>Contrato por Obra o Labor:</strong> Vinculado a la duración de una obra o labor específica.
+            </div>
+          )}
+          {formData.contract_type === 'apprentice' && (
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+              <strong>Contrato de Aprendizaje:</strong> Para practicantes y aprendices en formación.
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Tipo de Contrato"
@@ -905,7 +1037,15 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
                 if (contractTemplates.length > 0) {
                   setFormData({ ...formData, contract_template_id: e.target.value })
                 } else {
-                  setFormData({ ...formData, contract_type: e.target.value })
+                  // Al cambiar tipo de contrato, limpiar campos no aplicables
+                  const newType = e.target.value
+                  const updates = { contract_type: newType }
+                  if (newType === 'indefinite') {
+                    updates.contract_end_date = ''
+                    updates.contract_duration_value = ''
+                    updates.contract_duration_unit = 'months'
+                  }
+                  setFormData({ ...formData, ...updates })
                 }
               }}
             />
@@ -914,41 +1054,46 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
               type="number"
               value={formData.trial_period_days}
               onChange={(e) => setFormData({ ...formData, trial_period_days: e.target.value })}
-              placeholder="60"
+              placeholder={formData.contract_type === 'apprentice' ? '0' : '60'}
             />
             <Input
               label="Fecha de Inicio del Contrato"
               type="date"
               value={formData.contract_start_date}
               onChange={(e) => setFormData({ ...formData, contract_start_date: e.target.value })}
+              required
             />
-            {(formData.contract_type === 'fixed_term' || formData.contract_type === 'work_or_labor') && (
-              <>
-                <Input
-                  label="Fecha de Fin del Contrato"
-                  type="date"
-                  value={formData.contract_end_date}
-                  onChange={(e) => setFormData({ ...formData, contract_end_date: e.target.value })}
-                />
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Duración del Contrato</label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      value={formData.contract_duration_value}
-                      onChange={(e) => setFormData({ ...formData, contract_duration_value: e.target.value })}
-                      placeholder="12"
-                      className="flex-1"
-                    />
-                    <Select
-                      options={durationUnitOptions}
-                      value={formData.contract_duration_unit}
-                      onChange={(e) => setFormData({ ...formData, contract_duration_unit: e.target.value })}
-                      className="w-32"
-                    />
-                  </div>
+            {/* Fecha de fin solo para contratos con término */}
+            {formData.contract_type !== 'indefinite' && (
+              <Input
+                label="Fecha de Fin del Contrato"
+                type="date"
+                value={formData.contract_end_date}
+                onChange={(e) => setFormData({ ...formData, contract_end_date: e.target.value })}
+                min={formData.contract_start_date}
+                required={formData.contract_type === 'fixed_term'}
+              />
+            )}
+            {/* Duración solo para contratos con término */}
+            {formData.contract_type !== 'indefinite' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Duración del Contrato</label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={formData.contract_duration_value}
+                    onChange={(e) => setFormData({ ...formData, contract_duration_value: e.target.value })}
+                    placeholder="12"
+                    className="flex-1"
+                  />
+                  <Select
+                    options={durationUnitOptions}
+                    value={formData.contract_duration_unit}
+                    onChange={(e) => setFormData({ ...formData, contract_duration_unit: e.target.value })}
+                    className="w-32"
+                  />
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -995,6 +1140,26 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
               )}
             </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              label="Periodicidad de Pago"
+              options={[
+                { value: 'weekly', label: 'Semanal' },
+                { value: 'biweekly', label: 'Quincenal' },
+                { value: 'monthly', label: 'Mensual' },
+              ]}
+              value={formData.payment_frequency}
+              onChange={(e) => setFormData({ ...formData, payment_frequency: e.target.value })}
+            />
+            <Input
+              label="Ciudad de Labores"
+              value={formData.work_city}
+              onChange={(e) => setFormData({ ...formData, work_city: e.target.value })}
+              placeholder="Ej: Bogotá D.C."
+            />
+          </div>
+
           {(formData.salary || formData.food_allowance || formData.transport_allowance) && (
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-sm text-green-700">
@@ -1233,6 +1398,8 @@ export default function Employees() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [showContractModal, setShowContractModal] = useState(false)
+  const [selectedContract, setSelectedContract] = useState(null)
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [updateError, setUpdateError] = useState('')
   const [createError, setCreateError] = useState('')
@@ -1313,7 +1480,15 @@ export default function Employees() {
       alert(response.data.message || 'Documento generado exitosamente. Puede descargarlo desde la sección de documentos.')
     },
     onError: (error) => {
-      alert(error.response?.data?.error || 'Error al generar el documento')
+      const errorData = error.response?.data
+      if (errorData?.missing_variables) {
+        // Close template modal and open edit modal
+        setShowTemplateModal(false)
+        setUpdateError(`Faltan datos requeridos para generar el documento:\n${errorData.missing_variables}`)
+        setShowEditModal(true)
+      } else {
+        alert(errorData?.error || 'Error al generar el documento')
+      }
     }
   })
 
@@ -1324,6 +1499,29 @@ export default function Employees() {
   })
 
   const contractTemplates = templatesData?.data?.data || []
+
+  // Query for employee's generated documents (contracts)
+  const { data: employeeDocumentsData } = useQuery({
+    queryKey: ['employee-documents', selectedEmployee?.id],
+    queryFn: () => generatedDocumentService.list({
+      employee_id: selectedEmployee.id,
+      category: 'contract,employee_contract,employee'
+    }),
+    enabled: !!selectedEmployee?.id && showDetailModal,
+  })
+
+  const employeeDocuments = employeeDocumentsData?.data?.data || []
+  const hasGeneratedContract = employeeDocuments.length > 0
+  const latestContract = employeeDocuments[0] // Documents are ordered by created_at desc
+
+  // Query for full contract details (including signatures)
+  const { data: contractDetailData } = useQuery({
+    queryKey: ['contract-detail', selectedContract?.id],
+    queryFn: () => generatedDocumentService.get(selectedContract.id),
+    enabled: !!selectedContract?.id && showContractModal,
+  })
+
+  const contractDetail = contractDetailData?.data?.data || selectedContract
 
   // Build contract type options from templates
   const contractTypeOptionsFromTemplates = contractTemplates.map(t => ({
@@ -1427,6 +1625,28 @@ export default function Employees() {
 
   const handleOpenTemplateModal = () => {
     setShowTemplateModal(true)
+  }
+
+  const handleViewContract = (contract) => {
+    setSelectedContract(contract)
+    setShowContractModal(true)
+  }
+
+  const handleDownloadContract = async (contractId) => {
+    try {
+      const response = await generatedDocumentService.download(contractId)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `contrato-${selectedEmployee?.full_name || 'documento'}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading contract:', error)
+    }
   }
 
   const handleGenerateDocument = (templateId) => {
@@ -1709,10 +1929,17 @@ export default function Employees() {
               <div className="flex items-center gap-2">
                 {canEdit && (
                   <>
-                    <Button variant="secondary" size="sm" onClick={handleOpenTemplateModal}>
-                      <FileDown className="w-4 h-4" />
-                      Generar Contrato
-                    </Button>
+                    {hasGeneratedContract ? (
+                      <Button variant="secondary" size="sm" onClick={() => handleViewContract(latestContract)}>
+                        <Eye className="w-4 h-4" />
+                        Ver Contrato
+                      </Button>
+                    ) : (
+                      <Button variant="secondary" size="sm" onClick={handleOpenTemplateModal}>
+                        <FileDown className="w-4 h-4" />
+                        Generar Contrato
+                      </Button>
+                    )}
                     <Button variant="secondary" size="sm" onClick={handleEdit}>
                       <Edit className="w-4 h-4" />
                       Editar
@@ -2164,6 +2391,157 @@ export default function Employees() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Contract Detail Modal */}
+      <Modal
+        isOpen={showContractModal}
+        onClose={() => { setShowContractModal(false); setSelectedContract(null) }}
+        title="Detalle del Contrato"
+        size="lg"
+      >
+        {selectedContract && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{contractDetail.name}</h3>
+                <p className="text-sm text-gray-500">
+                  Generado el {new Date(contractDetail.created_at).toLocaleDateString('es-CO', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                  })}
+                </p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                contractDetail.status === 'completed' ? 'bg-green-100 text-green-700' :
+                contractDetail.status === 'pending_signatures' ? 'bg-yellow-100 text-yellow-700' :
+                contractDetail.status === 'draft' ? 'bg-gray-100 text-gray-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                {contractDetail.status === 'completed' ? 'Completado' :
+                 contractDetail.status === 'pending_signatures' ? 'Pendiente de Firmas' :
+                 contractDetail.status === 'draft' ? 'Borrador' :
+                 contractDetail.status}
+              </span>
+            </div>
+
+            {/* Signature Progress */}
+            {contractDetail.pending_signatures_count !== undefined && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-800">Progreso de Firmas</span>
+                  <span className="text-sm text-blue-600">
+                    {contractDetail.completed_signatures_count || 0} de {contractDetail.total_required_signatures || 0} firmas
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all"
+                    style={{
+                      width: `${contractDetail.total_required_signatures ? ((contractDetail.completed_signatures_count || 0) / contractDetail.total_required_signatures) * 100 : 0}%`
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500">Empleado</p>
+                <p className="font-medium text-gray-900">{contractDetail.employee_name || employeeDetail?.full_name}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500">Template</p>
+                <p className="font-medium text-gray-900">{contractDetail.template_name || 'N/A'}</p>
+              </div>
+            </div>
+
+            {/* Signatures */}
+            {contractDetail.signatures && contractDetail.signatures.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Firmas Requeridas</h4>
+                <div className="space-y-2">
+                  {contractDetail.signatures.map((sig, idx) => (
+                    <div key={idx} className={`flex items-center justify-between p-3 rounded-lg border ${
+                      sig.status === 'signed' ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        {sig.status === 'signed' ? (
+                          <CheckCircle className="w-5 h-5 text-green-500" />
+                        ) : (
+                          <div className="w-5 h-5 border-2 border-yellow-400 rounded-full flex items-center justify-center">
+                            <div className="w-2 h-2 bg-yellow-400 rounded-full" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-medium text-gray-900">{sig.signatory_label}</p>
+                          <p className="text-sm text-gray-600">
+                            {sig.status === 'signed' ? (
+                              <>Firmado por <strong>{sig.signed_by_name}</strong> el {new Date(sig.signed_at).toLocaleDateString('es-CO')}</>
+                            ) : (
+                              <>Pendiente de firma por: <strong>{sig.user_name || 'Sin asignar'}</strong></>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        sig.status === 'signed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {sig.status === 'signed' ? 'Firmado' : 'Pendiente'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* All employee documents */}
+            {employeeDocuments.length > 1 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Historial de Documentos ({employeeDocuments.length})</h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {employeeDocuments.map((doc) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => setSelectedContract(doc)}
+                      className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
+                        doc.id === selectedContract.id ? 'bg-primary-50 border border-primary-200' : 'hover:bg-gray-50 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm text-gray-900">{doc.name}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {new Date(doc.created_at).toLocaleDateString('es-CO')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-4 border-t">
+              <Button variant="secondary" onClick={() => handleOpenTemplateModal()}>
+                <FileDown className="w-4 h-4" />
+                Generar Nuevo Contrato
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" onClick={() => { setShowContractModal(false); setSelectedContract(null) }}>
+                  Cerrar
+                </Button>
+                <Button onClick={() => handleDownloadContract(selectedContract.id)}>
+                  <FileDown className="w-4 h-4" />
+                  Descargar PDF
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Create Employee Modal */}

@@ -114,6 +114,8 @@ export const generatedDocumentService = {
   get: (id) => api.get(`/documents/${id}`),
   download: (id) => api.get(`/documents/${id}/download`, { responseType: 'blob' }),
   delete: (id) => api.delete(`/documents/${id}`),
+  pendingSignatures: () => api.get('/documents/pending_signatures'),
+  sign: (id) => api.post(`/documents/${id}/sign`),
 }
 
 // Folders
@@ -214,6 +216,8 @@ export const templateService = {
   updateSignatory: (templateId, sigId, data) => api.patch(`/admin/templates/${templateId}/signatories/${sigId}`, { signatory: data }),
   deleteSignatory: (templateId, sigId) => api.delete(`/admin/templates/${templateId}/signatories/${sigId}`),
   reorderSignatories: (templateId, ids) => api.post(`/admin/templates/${templateId}/signatories/reorder`, { ids }),
+  // Third party requirements for legal templates
+  getThirdPartyRequirements: (id) => api.get(`/admin/templates/${id}/third_party_requirements`),
 }
 
 // Legal - Third Party Types (admin-managed)
@@ -249,7 +253,10 @@ export const contractService = {
   activate: (id) => api.post(`/legal/contracts/${id}/activate`),
   terminate: (id, reason) => api.post(`/legal/contracts/${id}/terminate`, { reason }),
   cancel: (id, reason) => api.post(`/legal/contracts/${id}/cancel`, { reason }),
+  archive: (id) => api.post(`/legal/contracts/${id}/archive`),
+  unarchive: (id) => api.post(`/legal/contracts/${id}/unarchive`),
   generateDocument: (id, templateId) => api.post(`/legal/contracts/${id}/generate_document`, { template_id: templateId }),
+  signDocument: (id) => api.post(`/legal/contracts/${id}/sign_document`),
   downloadDocument: (id) => api.get(`/legal/contracts/${id}/download_document`, { responseType: 'blob' }),
   validateTemplate: (data) => api.post('/legal/contracts/validate_template', data),
 }
@@ -260,6 +267,7 @@ export const contractApprovalService = {
   get: (id) => api.get(`/legal/contract_approvals/${id}`),
   approve: (id, notes) => api.post(`/legal/contract_approvals/${id}/approve`, { notes }),
   reject: (id, reason) => api.post(`/legal/contract_approvals/${id}/reject`, { reason }),
+  sign: (id, position) => api.post(`/legal/contract_approvals/${id}/sign`, { signature_position: position }),
 }
 
 // Legal - Dashboard
@@ -281,6 +289,19 @@ export const departmentService = {
   update: (id, data) => api.patch(`/admin/departments/${id}`, { department: data }),
   delete: (id) => api.delete(`/admin/departments/${id}`),
   toggleActive: (id) => api.post(`/admin/departments/${id}/toggle_active`),
+}
+
+// Admin - Users
+export const userService = {
+  list: (params) => api.get('/admin/users', { params }),
+  get: (id) => api.get(`/admin/users/${id}`),
+  create: (data) => api.post('/admin/users', { user: data }),
+  update: (id, data) => api.patch(`/admin/users/${id}`, { user: data }),
+  delete: (id) => api.delete(`/admin/users/${id}`),
+  toggleActive: (id) => api.post(`/admin/users/${id}/toggle_active`),
+  assignRoles: (id, roleNames) => api.post(`/admin/users/${id}/assign_roles`, { role_names: roleNames }),
+  getRoles: () => api.get('/admin/users/roles'),
+  getStats: () => api.get('/admin/users/stats'),
 }
 
 export default api

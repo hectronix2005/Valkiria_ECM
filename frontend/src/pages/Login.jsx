@@ -6,14 +6,14 @@ import Input from '../components/ui/Input'
 import { FileText, AlertCircle, Users, Eye, EyeOff } from 'lucide-react'
 
 const TEST_USERS = [
-  { email: 'admin@valkyria.com', password: 'Admin123!', role: 'Admin', color: 'bg-red-100 text-red-700' },
-  { email: 'hr.manager@valkyria.com', password: 'HrManager123!', role: 'Gerente RRHH', color: 'bg-purple-100 text-purple-700' },
-  { email: 'hr.staff@valkyria.com', password: 'HrStaff123!', role: 'Staff RRHH', color: 'bg-indigo-100 text-indigo-700' },
-  { email: 'supervisor@valkyria.com', password: 'Supervisor123!', role: 'Supervisor', color: 'bg-blue-100 text-blue-700' },
-  { email: 'employee1@valkyria.com', password: 'Employee123!', role: 'Empleado', color: 'bg-green-100 text-green-700' },
-  { email: 'employee2@valkyria.com', password: 'Employee123!', role: 'Empleado', color: 'bg-green-100 text-green-700' },
-  { email: 'legal@valkyria.com', password: 'Legal123!', role: 'Legal', color: 'bg-amber-100 text-amber-700' },
-  { email: 'viewer@valkyria.com', password: 'Viewer123!', role: 'Viewer', color: 'bg-gray-100 text-gray-700' },
+  { email: 'admin@valkyria.com', password: 'Admin123', role: 'Admin', color: 'bg-red-100 text-red-700' },
+  { email: 'hr.manager@valkyria.com', password: 'HrManager123', role: 'Gerente RRHH', color: 'bg-purple-100 text-purple-700' },
+  { email: 'hr.staff@valkyria.com', password: 'HrStaff123', role: 'Staff RRHH', color: 'bg-indigo-100 text-indigo-700' },
+  { email: 'supervisor@valkyria.com', password: 'Supervisor123', role: 'Supervisor', color: 'bg-blue-100 text-blue-700' },
+  { email: 'employee1@valkyria.com', password: 'Employee123', role: 'Empleado', color: 'bg-green-100 text-green-700' },
+  { email: 'employee2@valkyria.com', password: 'Employee123', role: 'Empleado', color: 'bg-green-100 text-green-700' },
+  { email: 'legal@valkyria.com', password: 'Legal123', role: 'Legal', color: 'bg-amber-100 text-amber-700' },
+  { email: 'viewer@valkyria.com', password: 'Viewer123', role: 'Viewer', color: 'bg-gray-100 text-gray-700' },
 ]
 
 export default function Login() {

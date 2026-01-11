@@ -28,29 +28,27 @@ import {
   PenTool
 } from 'lucide-react'
 
-// PDF A4 dimensions in points (72 DPI)
-const PDF_WIDTH = 595
-const PDF_HEIGHT = 842
+// Default PDF dimensions (Letter size) in points (72 DPI)
+const DEFAULT_PDF_WIDTH = 612
+const DEFAULT_PDF_HEIGHT = 792
 
-// Signature Preview Component - Shows real PDF with draggable signature fields
-function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSelect, onUpdatePosition, scale = 0.6, numPages, onPagesChange }) {
+// Signature Preview Component - Shows page layout with draggable signature fields
+function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSelect, onUpdatePosition, onUpdateSize, scale = 0.6, numPages = 1, customPageHeight, customPageWidth }) {
+  // Use actual PDF dimensions from template, with Letter size defaults
+  const PDF_WIDTH = customPageWidth || DEFAULT_PDF_WIDTH
+  const PDF_HEIGHT = customPageHeight || DEFAULT_PDF_HEIGHT
+  const PAGE_HEIGHT = PDF_HEIGHT // Alias for backward compatibility
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
   const [dragging, setDragging] = useState(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [resizing, setResizing] = useState(null)
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
-  const [pdfError, setPdfError] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Handle page change
-  const handleSetNumPages = (pages) => {
-    if (onPagesChange) {
-      onPagesChange(pages)
-    }
-  }
-
-  // Load PDF preview
+  // Load PDF URL for "View PDF" button
   useEffect(() => {
     if (!templateId || !hasFile) {
       setPdfUrl(null)
@@ -58,28 +56,27 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
     }
 
     let isMounted = true
+    let currentUrl = null
     setPdfLoading(true)
-    setPdfError(null)
 
     templateService.preview(templateId)
       .then(response => {
         if (!isMounted) return
         const blob = new Blob([response.data], { type: 'application/pdf' })
-        const url = URL.createObjectURL(blob)
-        setPdfUrl(url)
+        currentUrl = URL.createObjectURL(blob)
+        setPdfUrl(currentUrl)
         setPdfLoading(false)
       })
       .catch(err => {
         if (!isMounted) return
         console.error('Error loading PDF preview:', err)
-        setPdfError(err.response?.data?.error || 'Error al cargar el preview')
         setPdfLoading(false)
       })
 
     return () => {
       isMounted = false
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl)
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl)
       }
     }
   }, [templateId, hasFile])
@@ -87,47 +84,85 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
   // Track scroll position to update current page indicator
   const handleScroll = useCallback((e) => {
     const scrollTop = e.target.scrollTop
-    const pageHeight = PDF_HEIGHT * scale
-    const page = Math.floor(scrollTop / pageHeight) + 1
+    const scaledPageHeight = PAGE_HEIGHT * scale
+    const page = Math.floor(scrollTop / scaledPageHeight) + 1
     setCurrentPage(Math.min(page, numPages))
-  }, [scale, numPages])
+  }, [scale, numPages, PAGE_HEIGHT])
 
   const handleMouseDown = (e, sig) => {
     e.preventDefault()
     e.stopPropagation()
     const rect = containerRef.current.getBoundingClientRect()
-    const scrollTop = scrollContainerRef.current?.scrollTop || 0
-    const sigX = (sig.x_position || 350) * scale
-    const sigY = (sig.y_position || 700) * scale - scrollTop
+    // Mouse position relative to the scaled container, converted to native PDF coords
+    const mouseXInPdf = (e.clientX - rect.left) / scale
+    const mouseYInPdf = (e.clientY - rect.top) / scale
     setDragOffset({
-      x: e.clientX - rect.left - sigX,
-      y: e.clientY - rect.top - sigY
+      x: mouseXInPdf - (sig.x_position || 350),
+      y: mouseYInPdf - (sig.y_position || 700)
     })
     setDragging(sig.id)
     onSelect(sig.id)
   }
 
   const handleMouseMove = useCallback((e) => {
-    if (!dragging || !containerRef.current) return
+    if (!containerRef.current) return
 
     const rect = containerRef.current.getBoundingClientRect()
-    const scrollTop = scrollContainerRef.current?.scrollTop || 0
+
+    // Handle resizing
+    if (resizing && onUpdateSize) {
+      const mouseXInPdf = (e.clientX - rect.left) / scale
+      const mouseYInPdf = (e.clientY - rect.top) / scale
+
+      const deltaX = mouseXInPdf - resizeStart.x
+      const deltaY = mouseYInPdf - resizeStart.y
+
+      const newWidth = Math.max(50, Math.min(400, resizeStart.width + deltaX))
+      const newHeight = Math.max(25, Math.min(200, resizeStart.height + deltaY))
+
+      onUpdateSize(resizing, Math.round(newWidth), Math.round(newHeight))
+      return
+    }
+
+    // Handle dragging
+    if (!dragging) return
+
     const sig = signatories.find(s => s.id === dragging)
     if (!sig) return
 
     // Calculate total document height (all pages)
-    const totalHeight = PDF_HEIGHT * numPages
+    const totalHeight = PAGE_HEIGHT * numPages
 
-    const newX = Math.max(0, Math.min(PDF_WIDTH - (sig.width || 200),
-      (e.clientX - rect.left - dragOffset.x) / scale))
-    const newY = Math.max(0, Math.min(totalHeight - (sig.height || 80),
-      (e.clientY - rect.top + scrollTop - dragOffset.y) / scale))
+    // Convert mouse position to native PDF coordinates
+    const mouseXInPdf = (e.clientX - rect.left) / scale
+    const mouseYInPdf = (e.clientY - rect.top) / scale
+
+    const newX = Math.max(0, Math.min(PDF_WIDTH - (sig.width || 200), mouseXInPdf - dragOffset.x))
+    const newY = Math.max(0, Math.min(totalHeight - (sig.height || 80), mouseYInPdf - dragOffset.y))
 
     onUpdatePosition(dragging, Math.round(newX), Math.round(newY))
-  }, [dragging, dragOffset, scale, signatories, onUpdatePosition, numPages])
+  }, [dragging, dragOffset, resizing, resizeStart, scale, signatories, onUpdatePosition, onUpdateSize, numPages, PAGE_HEIGHT])
 
   const handleMouseUp = () => {
     setDragging(null)
+    setResizing(null)
+  }
+
+  // Handle resize start
+  const handleResizeStart = (e, sig) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = containerRef.current.getBoundingClientRect()
+    const mouseXInPdf = (e.clientX - rect.left) / scale
+    const mouseYInPdf = (e.clientY - rect.top) / scale
+    setResizeStart({
+      x: mouseXInPdf,
+      y: mouseYInPdf,
+      width: sig.width || 200,
+      height: sig.height || 80
+    })
+    setResizing(sig.id)
+    onSelect(sig.id)
   }
 
   // Signature field colors by role type
@@ -147,10 +182,10 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
   }
 
   // Calculate page from Y position
-  const getPageFromY = (y) => Math.floor(y / PDF_HEIGHT) + 1
+  const getPageFromY = (y) => Math.floor(y / PAGE_HEIGHT) + 1
 
   const displayWidth = PDF_WIDTH * scale
-  const displayHeight = PDF_HEIGHT * scale
+  const displayHeight = PAGE_HEIGHT * scale
   const totalHeight = displayHeight * numPages
 
   // Scroll to specific page
@@ -164,29 +199,31 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
   return (
     <div className="relative">
       {/* Page Controls */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-end mb-2 gap-3">
+        {/* View PDF button */}
+        {hasFile && pdfUrl && (
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+          >
+            <Eye className="w-3 h-3" />
+            Ver PDF
+          </a>
+        )}
+        {pdfLoading && (
+          <span className="text-xs text-gray-400 animate-pulse">Cargando PDF...</span>
+        )}
+        {!pdfLoading && hasFile && !pdfUrl && (
+          <span className="text-xs text-red-400">Error al cargar PDF</span>
+        )}
+        {/* Page indicator and navigation */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Páginas:</span>
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(p => (
-              <button
-                key={p}
-                onClick={() => {
-                  handleSetNumPages(p)
-                  if (currentPage > p) setCurrentPage(p)
-                }}
-                className={`w-5 h-5 text-[10px] rounded ${numPages === p ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-        {numPages > 1 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">
-              Página {currentPage} de {numPages}
-            </span>
+          <span className="text-xs text-gray-500">
+            Página {currentPage} de {numPages}
+          </span>
+          {numPages > 1 && (
             <div className="flex gap-1">
               {[...Array(numPages)].map((_, i) => (
                 <button
@@ -198,93 +235,154 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Scrollable PDF Container */}
+      {/* Scrollable PDF Container - maintains A4 aspect ratio */}
       <div
         ref={scrollContainerRef}
-        className="mx-auto border-2 border-gray-300 rounded-lg shadow-lg overflow-y-auto overflow-x-hidden bg-gray-200"
+        className="mx-auto border-2 border-gray-300 rounded-lg shadow-lg overflow-auto bg-gray-100"
         style={{
-          width: displayWidth + 16,
-          height: Math.min(totalHeight, 550) // Visible area - scrollable
+          width: displayWidth + 24, // Extra space for padding and shadows
+          maxHeight: 650, // Visible scroll area
+          padding: 10,
         }}
         onScroll={handleScroll}
       >
-        <div
-          ref={containerRef}
-          className="relative bg-gray-100"
-          style={{
-            width: displayWidth,
-            height: displayHeight * numPages // Total height for all pages
-          }}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          {/* PDF Display */}
-          {pdfLoading ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-white">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">Cargando documento...</p>
-              </div>
-            </div>
-          ) : pdfError ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-white">
-              <div className="text-center text-red-500 p-4">
-                <AlertCircle className="w-8 h-8 mx-auto mb-2" />
-                <p className="text-sm">{pdfError}</p>
-              </div>
-            </div>
-          ) : pdfUrl ? (
+        {/* Wrapper to maintain scroll height (CSS transform doesn't affect document flow) */}
+        <div style={{ width: displayWidth, height: totalHeight, margin: '0 auto' }}>
+          {/* Scaled container - renders at full PDF size then transforms down */}
+          <div
+            ref={containerRef}
+            className="relative origin-top-left"
+            style={{
+              width: PDF_WIDTH,
+              height: PAGE_HEIGHT * numPages, // Full height for all pages at native size
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+          {/* PDF Background - show actual PDF if available */}
+          {pdfUrl && hasFile && (
             <iframe
               src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-              className="absolute inset-0 w-full h-full pointer-events-none border-0"
-              style={{ background: 'white' }}
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                width: PDF_WIDTH,
+                height: PAGE_HEIGHT * numPages,
+                border: 'none',
+              }}
               title="PDF Preview"
             />
-          ) : !hasFile ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-white">
+          )}
+
+          {/* Render page placeholders with correct A4 proportions */}
+          {[...Array(numPages)].map((_, pageIndex) => (
+            <div
+              key={pageIndex}
+              className={`border border-gray-300 ${pdfUrl ? 'bg-transparent' : 'bg-white'}`}
+              style={{
+                width: PDF_WIDTH,
+                height: PAGE_HEIGHT,
+                position: 'absolute',
+                top: pageIndex * PAGE_HEIGHT,
+                left: 0,
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+              }}
+            >
+              {/* Page number indicator */}
+              <div className="absolute top-2 right-2 bg-gray-100/80 text-gray-500 text-xs px-2 py-1 rounded">
+                Página {pageIndex + 1}
+              </div>
+              {/* Visual grid lines to help with positioning - only show if no PDF */}
+              {!pdfUrl && (
+                <>
+                  <div className="absolute inset-4 border border-dashed border-gray-200 pointer-events-none opacity-50" />
+                  {/* Center guides */}
+                  <div className="absolute left-1/2 top-4 bottom-4 w-px bg-gray-100 pointer-events-none" />
+                  <div className="absolute top-1/2 left-4 right-4 h-px bg-gray-100 pointer-events-none" />
+                </>
+              )}
+            </div>
+          ))}
+
+          {/* No file state */}
+          {!hasFile && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
               <div className="text-center text-gray-400 p-4">
                 <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Sube un archivo Word para ver el preview</p>
               </div>
             </div>
-          ) : null}
+          )}
 
-          {/* Page separators */}
+          {/* Page separators - at native PDF dimensions */}
           {numPages > 1 && [...Array(numPages - 1)].map((_, i) => (
             <div
               key={i}
               className="absolute left-0 right-0 border-t-2 border-dashed border-gray-400 pointer-events-none"
-              style={{ top: displayHeight * (i + 1) }}
+              style={{ top: PAGE_HEIGHT * (i + 1) }}
             >
-              <span className="absolute left-2 -top-3 bg-gray-200 px-2 text-xs text-gray-500 rounded">
+              <span className="absolute left-2 -top-4 bg-gray-200 px-2 py-0.5 text-xs text-gray-500 rounded">
                 Página {i + 2}
               </span>
             </div>
           ))}
 
-          {/* Signature Fields Overlay */}
+          {/* Signature Fields Overlay - uses native PDF coordinates */}
           <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
             {signatories.map((sig) => {
-              const colors = getSignatureColor(sig.role || sig.signatory_type_code)
+              const colors = getSignatureColor(sig.effective_code || sig.role || sig.signatory_type_code)
               const isSelected = selectedId === sig.id
               const isDragging = dragging === sig.id
               const sigPage = getPageFromY(sig.y_position || 700)
+              const sigWidth = sig.width || 200
+              const sigHeight = sig.height || 80
+              const datePosition = sig.date_position || 'right'
+
+              // Calculate actual signature area based on date position (matching PDF rendering)
+              let actualSigWidth = sigWidth
+              let actualSigHeight = sigHeight
+              let sigAreaStyle = {}
+              let dateAreaStyle = {}
+
+              switch (datePosition) {
+                case 'right':
+                  actualSigWidth = sigWidth * 0.75
+                  sigAreaStyle = { width: '75%', height: '100%', left: 0, top: 0 }
+                  dateAreaStyle = { width: '25%', height: '100%', right: 0, top: 0 }
+                  break
+                case 'below':
+                  actualSigHeight = sigHeight * 0.80
+                  sigAreaStyle = { width: '100%', height: '80%', left: 0, top: 0 }
+                  dateAreaStyle = { width: '100%', height: '20%', left: 0, bottom: 0 }
+                  break
+                case 'above':
+                  actualSigHeight = sigHeight * 0.80
+                  sigAreaStyle = { width: '100%', height: '80%', left: 0, bottom: 0 }
+                  dateAreaStyle = { width: '100%', height: '20%', left: 0, top: 0 }
+                  break
+                case 'none':
+                default:
+                  sigAreaStyle = { width: '100%', height: '100%', left: 0, top: 0 }
+                  dateAreaStyle = null
+                  break
+              }
 
               return (
                 <div
                   key={sig.id}
                   className="absolute cursor-move transition-all duration-100"
                   style={{
-                    left: (sig.x_position || 350) * scale,
-                    top: (sig.y_position || 700) * scale,
-                    width: (sig.width || 200) * scale,
-                    height: (sig.height || 80) * scale,
-                    backgroundColor: colors.bg,
+                    left: sig.x_position || 350,
+                    top: sig.y_position || 700,
+                    width: sigWidth,
+                    height: sigHeight,
+                    backgroundColor: 'transparent',
                     border: `2px dashed ${colors.border}`,
                     borderRadius: 4,
                     boxShadow: isSelected ? `0 0 0 3px ${colors.border}40, 0 4px 12px rgba(0,0,0,0.15)` : isDragging ? '0 8px 20px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
@@ -294,28 +392,51 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
                   }}
                   onMouseDown={(e) => handleMouseDown(e, sig)}
                 >
-                  {/* Signature field content */}
-                  <div className="h-full flex flex-col items-center justify-center p-1">
+                  {/* Signature area - shows actual signature space */}
+                  <div
+                    className="absolute flex flex-col items-center justify-center"
+                    style={{
+                      ...sigAreaStyle,
+                      backgroundColor: colors.bg,
+                      borderRadius: 2
+                    }}
+                  >
                     <PenTool
-                      style={{ width: 14 * scale, height: 14 * scale, color: colors.text, opacity: 0.6 }}
+                      style={{ width: 16, height: 16, color: colors.text, opacity: 0.6 }}
                     />
                     <span
                       className="font-medium text-center truncate w-full px-1"
-                      style={{ fontSize: Math.max(9, 11 * scale), color: colors.text }}
+                      style={{ fontSize: 10, color: colors.text }}
                     >
                       {sig.label || sig.role_label}
                     </span>
                     {sig.required && (
-                      <span style={{ fontSize: Math.max(7, 9 * scale), color: '#ef4444', fontWeight: 'bold' }}>
+                      <span style={{ fontSize: 8, color: '#ef4444', fontWeight: 'bold' }}>
                         *Req
                       </span>
                     )}
                   </div>
 
+                  {/* Date area - shows where date will appear */}
+                  {dateAreaStyle && (
+                    <div
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        ...dateAreaStyle,
+                        backgroundColor: 'rgba(100, 100, 100, 0.15)',
+                        borderRadius: 2
+                      }}
+                    >
+                      <span style={{ fontSize: 8, color: '#666', opacity: 0.8 }}>
+                        {datePosition === 'right' ? '📅' : 'Fecha'}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Page indicator */}
                   {numPages > 1 && (
                     <div
-                      className="absolute -left-1 -top-1 w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold"
+                      className="absolute -left-2 -top-2 w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
                       style={{ backgroundColor: colors.border }}
                     >
                       {sigPage}
@@ -325,16 +446,24 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
                   {/* Move indicator */}
                   {isSelected && (
                     <div
-                      className="absolute -top-2 -right-2 rounded-full p-1"
+                      className="absolute -top-3 -right-3 rounded-full p-1"
                       style={{ backgroundColor: colors.border }}
                     >
-                      <Move className="w-3 h-3 text-white" />
+                      <Move className="w-4 h-4 text-white" />
                     </div>
                   )}
 
-                  {/* Resize handles (visual only for now) */}
+                  {/* Resize handle - functional */}
                   {isSelected && (
-                    <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-white border-2" style={{ borderColor: colors.border }} />
+                    <div
+                      className="absolute -bottom-2 -right-2 w-5 h-5 rounded-full bg-white border-2 cursor-se-resize hover:scale-110 transition-transform flex items-center justify-center"
+                      style={{ borderColor: colors.border }}
+                      onMouseDown={(e) => handleResizeStart(e, sig)}
+                    >
+                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                        <path d="M7 1L1 7M7 4L4 7M7 7L7 7" stroke={colors.border} strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </div>
                   )}
                 </div>
               )
@@ -351,13 +480,15 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
             )}
           </div>
         </div>
+        {/* End wrapper div */}
+        </div>
       </div>
 
       {/* Legend */}
       {signatories.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2 justify-center">
           {signatories.map((sig) => {
-            const colors = getSignatureColor(sig.role || sig.signatory_type_code)
+            const colors = getSignatureColor(sig.effective_code || sig.role || sig.signatory_type_code)
             const sigPage = getPageFromY(sig.y_position || 700)
             return (
               <button
@@ -410,7 +541,15 @@ const LEGACY_ROLES = {
   custom: 'Personalizado',
 }
 
-function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages = 1, onSuccess }) {
+// Date position options for signature field
+const DATE_POSITION_OPTIONS = [
+  { value: 'right', label: 'Derecha', desc: 'Fecha a la derecha (firma usa 75% ancho)' },
+  { value: 'below', label: 'Abajo', desc: 'Fecha debajo (firma usa 100% ancho)' },
+  { value: 'above', label: 'Arriba', desc: 'Fecha arriba (firma usa 100% ancho)' },
+  { value: 'none', label: 'Sin fecha', desc: 'Sin fecha (firma usa 100% del espacio)' },
+]
+
+function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages = 1, onSuccess, pdfWidth = DEFAULT_PDF_WIDTH, pdfHeight = DEFAULT_PDF_HEIGHT }) {
   const queryClient = useQueryClient()
   const [label, setLabel] = useState(signatory?.label || '')
   const [required, setRequired] = useState(signatory?.required ?? true)
@@ -419,7 +558,14 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
   const [yInPage, setYInPage] = useState(700)
   const [width, setWidth] = useState(signatory?.width || 200)
   const [height, setHeight] = useState(signatory?.height || 80)
+  const [datePosition, setDatePosition] = useState(signatory?.date_position || 'right')
+  const [showLabel, setShowLabel] = useState(signatory?.show_label ?? true)
+  const [showSignerName, setShowSignerName] = useState(signatory?.show_signer_name ?? false)
   const [error, setError] = useState('')
+
+  // Use provided PDF dimensions
+  const PDF_WIDTH = pdfWidth
+  const PDF_HEIGHT = pdfHeight
 
   // Sync form with signatory when modal opens
   useEffect(() => {
@@ -429,18 +575,21 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
       setXPosition(signatory.x_position || 350)
       setWidth(signatory.width || 200)
       setHeight(signatory.height || 80)
+      setDatePosition(signatory.date_position || 'right')
+      setShowLabel(signatory.show_label ?? true)
+      setShowSignerName(signatory.show_signer_name ?? false)
 
       // Calculate page and Y position within page
       const absY = signatory.y_position || 700
-      const page = Math.floor(absY / PDF_HEIGHT) + 1
-      const yInPageVal = absY % PDF_HEIGHT
+      const page = Math.floor(absY / pdfHeight) + 1
+      const yInPageVal = absY % pdfHeight
       setSelectedPage(Math.min(page, numPages))
       setYInPage(yInPageVal)
     }
-  }, [signatory, isOpen, numPages])
+  }, [signatory, isOpen, numPages, pdfHeight])
 
   // Calculate absolute Y from page + position in page
-  const absoluteY = (selectedPage - 1) * PDF_HEIGHT + yInPage
+  const absoluteY = (selectedPage - 1) * pdfHeight + yInPage
 
   const updateMutation = useMutation({
     mutationFn: (data) => templateService.updateSignatory(templateId, signatory?.id, data),
@@ -462,7 +611,10 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
       x_position: xPosition,
       y_position: absoluteY,
       width,
-      height
+      height,
+      date_position: datePosition,
+      show_label: showLabel,
+      show_signer_name: showSignerName
     })
   }
 
@@ -657,9 +809,63 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
               </div>
             </div>
 
+            {/* Date Position */}
+            <div className="mt-4 border-t pt-4">
+              <label className="block text-xs text-gray-500 mb-2">Posición de la fecha</label>
+              <div className="grid grid-cols-2 gap-2">
+                {DATE_POSITION_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setDatePosition(opt.value)}
+                    className={`p-2 text-left rounded-lg border-2 transition-all ${
+                      datePosition === opt.value
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className={`text-sm font-medium ${datePosition === opt.value ? 'text-primary-700' : 'text-gray-700'}`}>
+                      {opt.label}
+                    </p>
+                    <p className="text-xs text-gray-500">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Display Options */}
+            <div className="mt-4 border-t pt-4">
+              <label className="block text-xs text-gray-500 mb-2">Elementos a mostrar en la firma</label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showLabel}
+                    onChange={(e) => setShowLabel(e.target.checked)}
+                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700">Mostrar etiqueta</span>
+                  <span className="text-xs text-gray-400">({signatory?.label || 'Ej: Representante Legal'})</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showSignerName}
+                    onChange={(e) => setShowSignerName(e.target.checked)}
+                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700">Mostrar nombre del firmante</span>
+                  <span className="text-xs text-gray-400">(Ej: Juan Pérez)</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                La fecha se controla con la opción "Posición de la fecha" arriba.
+              </p>
+            </div>
+
             {/* Position Summary */}
             <div className="mt-3 p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
-              <span className="font-medium">Resumen:</span> Página {selectedPage}, posición ({xPosition}, {yInPage}) → Y absoluta: {absoluteY}, tamaño {width}×{height}
+              <span className="font-medium">Resumen:</span> Página {selectedPage}, posición ({xPosition}, {yInPage}) → Y absoluta: {absoluteY}, tamaño {width}×{height}, fecha: {DATE_POSITION_OPTIONS.find(o => o.value === datePosition)?.label}
             </div>
           </div>
 
@@ -678,15 +884,19 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
   )
 }
 
-function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess }) {
+function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = DEFAULT_PDF_WIDTH, pdfHeight = DEFAULT_PDF_HEIGHT, totalPages = 1 }) {
   const queryClient = useQueryClient()
   const [typeCode, setTypeCode] = useState('')
   const [label, setLabel] = useState('')
   const [required, setRequired] = useState(true)
+  const [pageNumber, setPageNumber] = useState(1)
   const [xPosition, setXPosition] = useState(350)
   const [yPosition, setYPosition] = useState(700)
   const [width, setWidth] = useState(200)
   const [height, setHeight] = useState(80)
+  const [datePosition, setDatePosition] = useState('right')
+  const [showLabel, setShowLabel] = useState(true)
+  const [showSignerName, setShowSignerName] = useState(false)
   const [error, setError] = useState('')
 
   // Fetch signatory types from API
@@ -715,10 +925,14 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess }) {
     setTypeCode('')
     setLabel('')
     setRequired(true)
+    setPageNumber(1)
     setXPosition(350)
     setYPosition(700)
     setWidth(200)
     setHeight(80)
+    setDatePosition('right')
+    setShowLabel(true)
+    setShowSignerName(false)
     setError('')
     onClose()
   }
@@ -734,10 +948,14 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess }) {
       signatory_type_code: typeCode,
       label: label || selectedType?.name || 'Firma',
       required,
+      page_number: pageNumber,
       x_position: xPosition,
       y_position: yPosition,
       width,
-      height
+      height,
+      date_position: datePosition,
+      show_label: showLabel,
+      show_signer_name: showSignerName
     })
   }
 
@@ -811,7 +1029,44 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess }) {
 
           {/* Position Configuration */}
           <div className="border-t pt-4 mt-4">
-            <p className="text-sm font-medium text-gray-700 mb-3">Posición del campo de firma (en puntos PDF)</p>
+            <p className="text-sm font-medium text-gray-700 mb-3">Posición del campo de firma</p>
+
+            {/* Page Number */}
+            <div className="mb-3">
+              <label className="block text-xs text-gray-500 mb-1">Número de página</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={pageNumber}
+                  onChange={(e) => setPageNumber(Math.max(1, Math.min(totalPages, Number(e.target.value))))}
+                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center"
+                  min="1"
+                  max={totalPages}
+                />
+                <span className="text-xs text-gray-500">de {totalPages} {totalPages === 1 ? 'página' : 'páginas'}</span>
+                {totalPages > 1 && (
+                  <div className="flex gap-1 ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setPageNumber(1)}
+                      className={`px-2 py-1 text-xs rounded ${pageNumber === 1 ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      Primera
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPageNumber(totalPages)}
+                      className={`px-2 py-1 text-xs rounded ${pageNumber === totalPages ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      Última
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Coordinates */}
+            <p className="text-xs text-gray-500 mb-2">Coordenadas (en puntos PDF)</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">X (horizontal)</label>
@@ -825,14 +1080,14 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess }) {
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Y (desde arriba)</label>
+                <label className="block text-xs text-gray-500 mb-1">Y (desde arriba de la página)</label>
                 <input
                   type="number"
                   value={yPosition}
                   onChange={(e) => setYPosition(Number(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   min="0"
-                  max="850"
+                  max={pdfHeight}
                 />
               </div>
               <div>
@@ -859,7 +1114,59 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess }) {
               </div>
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              PDF A4: 595 x 842 puntos. Valores típicos: X=350, Y=700 (parte inferior derecha)
+              PDF: {pdfWidth} x {pdfHeight} puntos. Valores típicos: X={Math.round(pdfWidth/2)}, Y={Math.round(pdfHeight * 0.85)} (parte inferior)
+            </p>
+          </div>
+
+          {/* Date Position */}
+          <div className="border-t pt-4 mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Posición de la fecha</label>
+            <div className="grid grid-cols-2 gap-2">
+              {DATE_POSITION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setDatePosition(opt.value)}
+                  className={`p-2 text-left rounded-lg border-2 transition-all ${
+                    datePosition === opt.value
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <p className={`text-sm font-medium ${datePosition === opt.value ? 'text-primary-700' : 'text-gray-700'}`}>
+                    {opt.label}
+                  </p>
+                  <p className="text-xs text-gray-500">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Display Options */}
+          <div className="border-t pt-4 mt-4">
+            <label className="block text-xs text-gray-500 mb-2">Elementos a mostrar en la firma</label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showLabel}
+                  onChange={(e) => setShowLabel(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Mostrar etiqueta (ej: "Representante Legal")</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showSignerName}
+                  onChange={(e) => setShowSignerName(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Mostrar nombre del firmante</span>
+              </label>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              La fecha se controla con "Posición de la fecha" arriba. Usa "Sin fecha" para ocultarla.
             </p>
           </div>
 
@@ -892,44 +1199,82 @@ export default function TemplateEdit() {
   const [localSignatories, setLocalSignatories] = useState([])
   const [hasPositionChanges, setHasPositionChanges] = useState(false)
   const [documentPages, setDocumentPages] = useState(1)
+  const [previewScale, setPreviewScale] = useState(0.7)
+  const [pageHeight, setPageHeight] = useState(792) // Letter default in points
+  const [pageWidth, setPageWidth] = useState(612) // Letter default in points
 
   const { data: templateData, isLoading } = useQuery({
     queryKey: ['template', id],
-    queryFn: () => templateService.get(id),
-    onSuccess: (data) => {
-      // Sync local signatories when template loads
-      if (data?.data?.data?.signatories) {
-        setLocalSignatories(data.data.data.signatories)
-        setHasPositionChanges(false)
-      }
-    }
+    queryFn: () => templateService.get(id)
   })
 
   const template = templateData?.data?.data
 
   // Sync local signatories when template data changes
+  // Use JSON stringify to detect deep changes in the signatories array
+  const signatoriesJson = JSON.stringify(template?.signatories || [])
   useEffect(() => {
-    if (template?.signatories) {
-      setLocalSignatories(template.signatories)
-      setHasPositionChanges(false)
+    const signatories = template?.signatories || []
+    setLocalSignatories(signatories)
+    setHasPositionChanges(false)
+  }, [signatoriesJson])
+
+  // Load preview settings and PDF dimensions from template
+  useEffect(() => {
+    if (template) {
+      if (template.preview_scale) setPreviewScale(template.preview_scale)
+      // Use actual PDF dimensions from template, fallback to preview_page_height or defaults
+      if (template.pdf_height) {
+        setPageHeight(template.pdf_height)
+      } else if (template.preview_page_height) {
+        setPageHeight(template.preview_page_height)
+      }
+      if (template.pdf_width) {
+        setPageWidth(template.pdf_width)
+      }
+      if (template.pdf_page_count) {
+        setDocumentPages(template.pdf_page_count)
+      }
     }
-  }, [template?.signatories])
+  }, [template?.id])
 
   // Handle position update from drag
-  const handleUpdateSignatoryPosition = useCallback((sigId, x, y) => {
+  // Store absolute Y position - backend will calculate page and relative position
+  const handleUpdateSignatoryPosition = useCallback((sigId, x, absoluteY) => {
     setLocalSignatories(prev =>
       prev.map(sig =>
         sig.id === sigId
-          ? { ...sig, x_position: x, y_position: y }
+          ? { ...sig, x_position: x, y_position: absoluteY }
           : sig
       )
     )
     setHasPositionChanges(true)
   }, [])
 
-  // Save all position changes to backend
+  // Handle size update from resize
+  const handleUpdateSignatorySize = useCallback((sigId, width, height) => {
+    setLocalSignatories(prev =>
+      prev.map(sig =>
+        sig.id === sigId
+          ? { ...sig, width, height }
+          : sig
+      )
+    )
+    setHasPositionChanges(true)
+  }, [])
+
+  // Save all position changes and preview settings to backend
   const savePositionsMutation = useMutation({
     mutationFn: async () => {
+      // Save preview settings (scale and page height)
+      await templateService.update(id, {
+        template: {
+          preview_scale: previewScale,
+          preview_page_height: pageHeight
+        }
+      })
+
+      // Save signatory positions and sizes (absolute Y - backend calculates page)
       const updates = localSignatories.map(sig => ({
         id: sig.id,
         x_position: sig.x_position,
@@ -937,7 +1282,6 @@ export default function TemplateEdit() {
         width: sig.width,
         height: sig.height
       }))
-      // Update each signatory
       for (const update of updates) {
         await templateService.updateSignatory(id, update.id, update)
       }
@@ -1189,32 +1533,32 @@ export default function TemplateEdit() {
                             <optgroup label="Empleado">
                               {Object.entries(availableMappings)
                                 .filter(([, path]) => path.startsWith('employee.'))
-                                .map(([label, path]) => (
-                                  <option key={path} value={path}>{label}</option>
+                                .map(([label, path], idx) => (
+                                  <option key={`employee-${idx}-${path}`} value={path}>{label}</option>
                                 ))
                               }
                             </optgroup>
                             <optgroup label="Organizacion">
                               {Object.entries(availableMappings)
                                 .filter(([, path]) => path.startsWith('organization.'))
-                                .map(([label, path]) => (
-                                  <option key={path} value={path}>{label}</option>
+                                .map(([label, path], idx) => (
+                                  <option key={`organization-${idx}-${path}`} value={path}>{label}</option>
                                 ))
                               }
                             </optgroup>
                             <optgroup label="Sistema">
                               {Object.entries(availableMappings)
                                 .filter(([, path]) => path.startsWith('system.'))
-                                .map(([label, path]) => (
-                                  <option key={path} value={path}>{label}</option>
+                                .map(([label, path], idx) => (
+                                  <option key={`system-${idx}-${path}`} value={path}>{label}</option>
                                 ))
                               }
                             </optgroup>
                             <optgroup label="Solicitud">
                               {Object.entries(availableMappings)
                                 .filter(([, path]) => path.startsWith('request.'))
-                                .map(([label, path]) => (
-                                  <option key={path} value={path}>{label}</option>
+                                .map(([label, path], idx) => (
+                                  <option key={`request-${idx}-${path}`} value={path}>{label}</option>
                                 ))
                               }
                             </optgroup>
@@ -1237,14 +1581,16 @@ export default function TemplateEdit() {
                   Vista Previa de Firmas
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  {hasPositionChanges && (
+                  {(hasPositionChanges ||
+                    previewScale !== (template?.preview_scale || 0.7) ||
+                    pageHeight !== (template?.preview_page_height || 842)) && (
                     <Button
                       size="sm"
                       onClick={() => savePositionsMutation.mutate()}
                       loading={savePositionsMutation.isPending}
                     >
                       <Save className="w-4 h-4" />
-                      Guardar Posiciones
+                      Guardar Cambios
                     </Button>
                   )}
                   <Button size="sm" variant="secondary" onClick={() => setShowAddSignatory(true)}>
@@ -1255,9 +1601,38 @@ export default function TemplateEdit() {
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-gray-500 mb-4">
-                Arrastra los campos de firma para posicionarlos. Haz clic para seleccionar y editar.
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <p className="text-sm text-gray-500">
+                  Arrastra los campos de firma para posicionarlos.
+                </p>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500">Escala:</label>
+                    <input
+                      type="number"
+                      min="0.3"
+                      max="2"
+                      step="0.05"
+                      value={previewScale}
+                      onChange={(e) => setPreviewScale(parseFloat(e.target.value) || 0.7)}
+                      className="w-16 px-2 py-1 text-xs border rounded text-center"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500">Alto página:</label>
+                    <input
+                      type="number"
+                      min="500"
+                      max="1500"
+                      step="10"
+                      value={pageHeight}
+                      onChange={(e) => setPageHeight(parseInt(e.target.value) || 842)}
+                      className="w-20 px-2 py-1 text-xs border rounded text-center"
+                    />
+                    <span className="text-xs text-gray-400">pts</span>
+                  </div>
+                </div>
+              </div>
               <SignaturePreview
                 templateId={id}
                 hasFile={!!template.file_name}
@@ -1265,9 +1640,11 @@ export default function TemplateEdit() {
                 selectedId={selectedSignatoryId}
                 onSelect={(id) => setSelectedSignatoryId(id)}
                 onUpdatePosition={handleUpdateSignatoryPosition}
-                scale={0.65}
+                onUpdateSize={handleUpdateSignatorySize}
+                scale={previewScale}
                 numPages={documentPages}
-                onPagesChange={setDocumentPages}
+                customPageHeight={pageHeight}
+                customPageWidth={pageWidth}
               />
 
               {/* Selected signatory details */}
@@ -1284,7 +1661,7 @@ export default function TemplateEdit() {
                             Posición: X={sig.x_position || 350}, Y={sig.y_position || 700}
                           </p>
                           <p className="text-xs text-gray-400">
-                            Tamaño: {sig.width || 200} x {sig.height || 80} px
+                            Tamaño: {sig.width || 200} x {sig.height || 80} px | Fecha: {DATE_POSITION_OPTIONS.find(o => o.value === (sig.date_position || 'right'))?.label || 'Derecha'}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1433,6 +1810,9 @@ export default function TemplateEdit() {
         isOpen={showAddSignatory}
         onClose={() => setShowAddSignatory(false)}
         templateId={id}
+        pdfWidth={pageWidth}
+        pdfHeight={pageHeight}
+        totalPages={documentPages}
         onSuccess={() => {}}
       />
 
@@ -1443,6 +1823,8 @@ export default function TemplateEdit() {
         templateId={id}
         signatory={editingSignatory}
         numPages={documentPages}
+        pdfWidth={pageWidth}
+        pdfHeight={pageHeight}
         onSuccess={() => {}}
       />
     </div>

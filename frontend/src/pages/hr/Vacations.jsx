@@ -136,14 +136,127 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
     }
   }
 
-  // Calcular días automáticamente
+  // Calcular Domingo de Pascua (Algoritmo de Butcher)
+  const getEasterSunday = (year) => {
+    const a = year % 19
+    const b = Math.floor(year / 100)
+    const c = year % 100
+    const d = Math.floor(b / 4)
+    const e = b % 4
+    const f = Math.floor((b + 8) / 25)
+    const g = Math.floor((b - f + 1) / 3)
+    const h = (19 * a + b - d - g + 15) % 30
+    const i = Math.floor(c / 4)
+    const k = c % 4
+    const l = (32 + 2 * e + 2 * i - h - k) % 7
+    const m = Math.floor((a + 11 * h + 22 * l) / 451)
+    const month = Math.floor((h + l - 7 * m + 114) / 31)
+    const day = ((h + l - 7 * m + 114) % 31) + 1
+    return new Date(year, month - 1, day)
+  }
+
+  // Mover al siguiente lunes (Ley Emiliani)
+  const moveToNextMonday = (date) => {
+    const d = new Date(date)
+    const dayOfWeek = d.getDay()
+    if (dayOfWeek === 0) { // Domingo
+      d.setDate(d.getDate() + 1)
+    } else if (dayOfWeek !== 1) { // No es lunes
+      d.setDate(d.getDate() + (8 - dayOfWeek))
+    }
+    return d
+  }
+
+  // Obtener festivos colombianos para un año
+  const getColombianHolidays = (year) => {
+    const holidays = []
+    const easter = getEasterSunday(year)
+
+    // Festivos fijos
+    holidays.push(new Date(year, 0, 1))   // Año Nuevo
+    holidays.push(new Date(year, 4, 1))   // Día del Trabajo
+    holidays.push(new Date(year, 6, 20))  // Día de la Independencia
+    holidays.push(new Date(year, 7, 7))   // Batalla de Boyacá
+    holidays.push(new Date(year, 11, 8))  // Inmaculada Concepción
+    holidays.push(new Date(year, 11, 25)) // Navidad
+
+    // Festivos Ley Emiliani (se trasladan al lunes)
+    holidays.push(moveToNextMonday(new Date(year, 0, 6)))   // Reyes Magos
+    holidays.push(moveToNextMonday(new Date(year, 2, 19)))  // San José
+    holidays.push(moveToNextMonday(new Date(year, 5, 29)))  // San Pedro y San Pablo
+    holidays.push(moveToNextMonday(new Date(year, 7, 15)))  // Asunción de la Virgen
+    holidays.push(moveToNextMonday(new Date(year, 9, 12)))  // Día de la Raza
+    holidays.push(moveToNextMonday(new Date(year, 10, 1)))  // Todos los Santos
+    holidays.push(moveToNextMonday(new Date(year, 10, 11))) // Independencia de Cartagena
+
+    // Festivos basados en Semana Santa
+    const holyThursday = new Date(easter)
+    holyThursday.setDate(easter.getDate() - 3)
+    holidays.push(holyThursday) // Jueves Santo
+
+    const goodFriday = new Date(easter)
+    goodFriday.setDate(easter.getDate() - 2)
+    holidays.push(goodFriday) // Viernes Santo
+
+    // Ascensión del Señor (39 días después de Pascua, trasladado al lunes)
+    const ascension = new Date(easter)
+    ascension.setDate(easter.getDate() + 39)
+    holidays.push(moveToNextMonday(ascension))
+
+    // Corpus Christi (60 días después de Pascua, trasladado al lunes)
+    const corpusChristi = new Date(easter)
+    corpusChristi.setDate(easter.getDate() + 60)
+    holidays.push(moveToNextMonday(corpusChristi))
+
+    // Sagrado Corazón (68 días después de Pascua, trasladado al lunes)
+    const sacredHeart = new Date(easter)
+    sacredHeart.setDate(easter.getDate() + 68)
+    holidays.push(moveToNextMonday(sacredHeart))
+
+    return holidays
+  }
+
+  // Verificar si una fecha es festivo
+  const isHoliday = (date, holidays) => {
+    const dateStr = date.toISOString().split('T')[0]
+    return holidays.some(h => h.toISOString().split('T')[0] === dateStr)
+  }
+
+  // Calcular días laborales (excluyendo fines de semana y festivos)
+  const countBusinessDays = (startDate, endDate) => {
+    let count = 0
+    const current = new Date(startDate)
+    const end = new Date(endDate)
+
+    // Obtener festivos de los años involucrados
+    const startYear = current.getFullYear()
+    const endYear = end.getFullYear()
+    let holidays = []
+    for (let year = startYear; year <= endYear; year++) {
+      holidays = holidays.concat(getColombianHolidays(year))
+    }
+
+    while (current <= end) {
+      const dayOfWeek = current.getDay()
+      // Excluir fines de semana y festivos
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !isHoliday(current, holidays)) {
+        count++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    return count
+  }
+
+  // Calcular días automáticamente (solo días laborales)
   useEffect(() => {
     if (formData.start_date && formData.end_date) {
-      const start = new Date(formData.start_date)
-      const end = new Date(formData.end_date)
-      const diffTime = Math.abs(end - start)
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
-      setFormData(prev => ({ ...prev, days_requested: diffDays.toString() }))
+      const start = new Date(formData.start_date + 'T00:00:00')
+      const end = new Date(formData.end_date + 'T00:00:00')
+
+      if (end >= start) {
+        const businessDays = countBusinessDays(start, end)
+        setFormData(prev => ({ ...prev, days_requested: businessDays.toString() }))
+      }
     }
   }, [formData.start_date, formData.end_date])
 
@@ -253,6 +366,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
               label="Fecha Inicio"
               type="date"
               value={formData.start_date}
+              min={new Date().toISOString().split('T')[0]}
               onChange={(e) => { setFormData({ ...formData, start_date: e.target.value }); setSignError(''); }}
               required
             />
@@ -260,6 +374,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
               label="Fecha Fin"
               type="date"
               value={formData.end_date}
+              min={formData.start_date || new Date().toISOString().split('T')[0]}
               onChange={(e) => { setFormData({ ...formData, end_date: e.target.value }); setSignError(''); }}
               required
             />

@@ -1,21 +1,34 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { thirdPartyService } from '../../services/api'
+import { thirdPartyService, thirdPartyTypeService } from '../../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
 import Modal from '../../components/ui/Modal'
 import Badge from '../../components/ui/Badge'
-import { Plus, Search, Building2, User, MoreVertical, Edit, Trash2, Ban, CheckCircle, XCircle } from 'lucide-react'
-
-const THIRD_PARTY_TYPES = [
-  { value: 'provider', label: 'Proveedor' },
-  { value: 'client', label: 'Cliente' },
-  { value: 'contractor', label: 'Contratista' },
-  { value: 'partner', label: 'Aliado' },
-  { value: 'other', label: 'Otro' },
-]
+import {
+  Plus,
+  Search,
+  Building2,
+  User,
+  MoreVertical,
+  Edit,
+  Edit2,
+  Trash2,
+  Ban,
+  CheckCircle,
+  XCircle,
+  Settings,
+  ToggleLeft,
+  ToggleRight,
+  Lock,
+  Truck,
+  Users,
+  Briefcase,
+  Handshake,
+  X
+} from 'lucide-react'
 
 const PERSON_TYPES = [
   { value: 'juridical', label: 'Persona Jurídica' },
@@ -36,7 +49,374 @@ const STATUS_COLORS = {
   blocked: 'red',
 }
 
-function ThirdPartyForm({ thirdParty, onSubmit, onCancel, isLoading }) {
+// Third Party Types Management
+const TYPE_COLORS = [
+  { value: 'gray', label: 'Gris' },
+  { value: 'blue', label: 'Azul' },
+  { value: 'green', label: 'Verde' },
+  { value: 'purple', label: 'Morado' },
+  { value: 'orange', label: 'Naranja' },
+  { value: 'red', label: 'Rojo' },
+  { value: 'yellow', label: 'Amarillo' },
+  { value: 'indigo', label: 'Indigo' },
+]
+
+const TYPE_ICONS = [
+  { value: 'building', label: 'Edificio', Icon: Building2 },
+  { value: 'truck', label: 'Camion', Icon: Truck },
+  { value: 'users', label: 'Usuarios', Icon: Users },
+  { value: 'briefcase', label: 'Maletin', Icon: Briefcase },
+  { value: 'handshake', label: 'Alianza', Icon: Handshake },
+]
+
+const getTypeIconComponent = (iconName) => {
+  const found = TYPE_ICONS.find(i => i.value === iconName)
+  return found?.Icon || Building2
+}
+
+function TypeForm({ type, onSubmit, onCancel, isLoading }) {
+  const [formData, setFormData] = useState(type || {
+    code: '',
+    name: '',
+    description: '',
+    color: 'gray',
+    icon: 'building',
+    active: true,
+  })
+  const [errors, setErrors] = useState({})
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: null }))
+    }
+  }
+
+  const validate = () => {
+    const newErrors = {}
+    if (!formData.code?.trim()) newErrors.code = 'Codigo requerido'
+    if (!formData.name?.trim()) newErrors.name = 'Nombre requerido'
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (validate()) {
+      onSubmit(formData)
+    }
+  }
+
+  const IconComponent = getTypeIconComponent(formData.icon)
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Codigo"
+          value={formData.code}
+          onChange={(e) => handleChange('code', e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+          placeholder="ej: provider"
+          error={errors.code}
+          disabled={!!type?.is_system}
+          required
+        />
+        <Input
+          label="Nombre"
+          value={formData.name}
+          onChange={(e) => handleChange('name', e.target.value)}
+          placeholder="ej: Proveedor"
+          error={errors.name}
+          required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
+        <textarea
+          value={formData.description || ''}
+          onChange={(e) => handleChange('description', e.target.value)}
+          rows={2}
+          placeholder="Descripcion del tipo de tercero..."
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Select
+          label="Color"
+          value={formData.color}
+          onChange={(e) => handleChange('color', e.target.value)}
+          options={TYPE_COLORS}
+        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Icono</label>
+          <div className="flex gap-2">
+            {TYPE_ICONS.map(({ value, label, Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => handleChange('icon', value)}
+                className={`p-2 rounded-lg border-2 transition-all ${
+                  formData.icon === value
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+                title={label}
+              >
+                <Icon className={`h-5 w-5 ${formData.icon === value ? 'text-indigo-600' : 'text-gray-500'}`} />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="bg-gray-50 rounded-lg p-4">
+        <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Vista previa</p>
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg bg-${formData.color}-100`}>
+            <IconComponent className={`h-5 w-5 text-${formData.color}-600`} />
+          </div>
+          <div>
+            <p className="font-medium text-gray-900">{formData.name || 'Nombre del tipo'}</p>
+            <p className="text-sm text-gray-500">{formData.code || 'codigo'}</p>
+          </div>
+          <Badge status={formData.color}>{formData.name || 'Tipo'}</Badge>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button type="submit" loading={isLoading}>
+          {type ? 'Actualizar' : 'Crear'} Tipo
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function ThirdPartyTypesPanel({ isOpen, onClose }) {
+  const [search, setSearch] = useState('')
+  const [showTypeModal, setShowTypeModal] = useState(false)
+  const [editingType, setEditingType] = useState(null)
+
+  const queryClient = useQueryClient()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['third-party-types'],
+    queryFn: () => thirdPartyTypeService.list(),
+    enabled: isOpen,
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => thirdPartyTypeService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['third-party-types'])
+      setShowTypeModal(false)
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => thirdPartyTypeService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['third-party-types'])
+      setShowTypeModal(false)
+      setEditingType(null)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => thirdPartyTypeService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['third-party-types'])
+    },
+  })
+
+  const toggleMutation = useMutation({
+    mutationFn: (id) => thirdPartyTypeService.toggleActive(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['third-party-types'])
+    },
+  })
+
+  const types = data?.data?.data || []
+
+  const filteredTypes = types.filter(t =>
+    !search ||
+    t.name.toLowerCase().includes(search.toLowerCase()) ||
+    t.code.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const handleEdit = (type) => {
+    setEditingType(type)
+    setShowTypeModal(true)
+  }
+
+  const handleSubmit = (formData) => {
+    if (editingType) {
+      updateMutation.mutate({ id: editingType.id, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
+  }
+
+  const handleDelete = (id) => {
+    if (confirm('Estas seguro de eliminar este tipo de tercero?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Tipos de Terceros</h2>
+            <p className="text-sm text-gray-500">Gestiona las categorias de terceros</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => { setEditingType(null); setShowTypeModal(true) }}>
+              <Plus className="h-4 w-4 mr-1" />
+              Nuevo Tipo
+            </Button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <X className="h-5 w-5 text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="p-4 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre o codigo..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-4">
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse h-16 bg-gray-100 rounded-lg" />
+              ))}
+            </div>
+          ) : filteredTypes.length === 0 ? (
+            <div className="text-center py-12">
+              <Building2 className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {search ? 'No se encontraron tipos' : 'No hay tipos de terceros'}
+              </h3>
+              <p className="text-gray-500 mb-4">
+                {search ? 'Intenta con otros terminos' : 'Crea tu primer tipo de tercero'}
+              </p>
+              {!search && (
+                <Button onClick={() => setShowTypeModal(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nuevo Tipo
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredTypes.map((type) => {
+                const IconComponent = getTypeIconComponent(type.icon)
+                return (
+                  <div
+                    key={type.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg bg-${type.color}-100`}>
+                        <IconComponent className={`h-5 w-5 text-${type.color}-600`} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">{type.name}</p>
+                          {type.is_system && (
+                            <Lock className="h-3 w-3 text-gray-400" title="Tipo del sistema" />
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 font-mono">{type.code}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-500">
+                        {type.third_parties_count || 0} terceros
+                      </span>
+                      <button
+                        onClick={() => toggleMutation.mutate(type.id)}
+                        className={`p-1 rounded transition-colors ${
+                          type.active
+                            ? 'text-green-600 hover:bg-green-50'
+                            : 'text-gray-400 hover:bg-gray-200'
+                        }`}
+                        title={type.active ? 'Activo' : 'Inactivo'}
+                      >
+                        {type.active ? (
+                          <ToggleRight className="h-5 w-5" />
+                        ) : (
+                          <ToggleLeft className="h-5 w-5" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleEdit(type)}
+                        className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-lg transition-colors"
+                        title="Editar"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      {type.deletable && (
+                        <button
+                          onClick={() => handleDelete(type.id)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Type Form Modal */}
+        <Modal
+          isOpen={showTypeModal}
+          onClose={() => { setShowTypeModal(false); setEditingType(null) }}
+          title={editingType ? 'Editar Tipo de Tercero' : 'Nuevo Tipo de Tercero'}
+        >
+          <TypeForm
+            type={editingType}
+            onSubmit={handleSubmit}
+            onCancel={() => { setShowTypeModal(false); setEditingType(null) }}
+            isLoading={createMutation.isPending || updateMutation.isPending}
+          />
+        </Modal>
+      </div>
+    </div>
+  )
+}
+
+function ThirdPartyForm({ thirdParty, thirdPartyTypes, onSubmit, onCancel, isLoading }) {
   const [formData, setFormData] = useState(thirdParty || {
     third_party_type: 'provider',
     person_type: 'juridical',
@@ -79,7 +459,7 @@ function ThirdPartyForm({ thirdParty, onSubmit, onCancel, isLoading }) {
           label="Tipo de Tercero"
           value={formData.third_party_type}
           onChange={(e) => handleChange('third_party_type', e.target.value)}
-          options={THIRD_PARTY_TYPES}
+          options={thirdPartyTypes.map(t => ({ value: t.code, label: t.name }))}
           required
         />
         <Select
@@ -358,6 +738,7 @@ export default function ThirdParties() {
   const [statusFilter, setStatusFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingThirdParty, setEditingThirdParty] = useState(null)
+  const [showTypesPanel, setShowTypesPanel] = useState(false)
 
   const queryClient = useQueryClient()
 
@@ -368,6 +749,11 @@ export default function ThirdParties() {
       type: typeFilter || undefined,
       status: statusFilter || undefined,
     }),
+  })
+
+  const { data: thirdPartyTypesData } = useQuery({
+    queryKey: ['third-party-types'],
+    queryFn: () => thirdPartyTypeService.list(),
   })
 
   const createMutation = useMutation({
@@ -406,6 +792,7 @@ export default function ThirdParties() {
   })
 
   const thirdParties = data?.data?.data || []
+  const thirdPartyTypes = thirdPartyTypesData?.data?.data || []
 
   const handleEdit = (tp) => {
     setEditingThirdParty(tp)
@@ -428,10 +815,16 @@ export default function ThirdParties() {
           <h1 className="text-2xl font-bold text-gray-900">Terceros</h1>
           <p className="text-gray-500">Proveedores, clientes, contratistas y aliados</p>
         </div>
-        <Button onClick={() => { setEditingThirdParty(null); setShowModal(true) }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Tercero
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setShowTypesPanel(true)}>
+            <Settings className="h-4 w-4 mr-2" />
+            Tipos
+          </Button>
+          <Button onClick={() => { setEditingThirdParty(null); setShowModal(true) }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Tercero
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -451,7 +844,7 @@ export default function ThirdParties() {
             <Select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              options={[{ value: '', label: 'Todos los tipos' }, ...THIRD_PARTY_TYPES]}
+              options={[{ value: '', label: 'Todos los tipos' }, ...thirdPartyTypes.map(t => ({ value: t.code, label: t.name }))]}
               className="w-48"
             />
             <Select
@@ -531,11 +924,18 @@ export default function ThirdParties() {
       >
         <ThirdPartyForm
           thirdParty={editingThirdParty}
+          thirdPartyTypes={thirdPartyTypes}
           onSubmit={handleSubmit}
           onCancel={() => { setShowModal(false); setEditingThirdParty(null) }}
           isLoading={createMutation.isPending || updateMutation.isPending}
         />
       </Modal>
+
+      {/* Types Management Panel */}
+      <ThirdPartyTypesPanel
+        isOpen={showTypesPanel}
+        onClose={() => setShowTypesPanel(false)}
+      />
     </div>
   )
 }

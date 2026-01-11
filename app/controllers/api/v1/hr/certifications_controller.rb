@@ -252,7 +252,6 @@ module Api
             :include_position,
             :include_department,
             :include_start_date,
-            :additional_info,
             :special_instructions
           )
         end
@@ -301,7 +300,6 @@ module Api
               include_position: certification.include_position,
               include_department: certification.include_department,
               include_start_date: certification.include_start_date,
-              additional_info: certification.additional_info,
               completed_at: certification.completed_at&.iso8601,
               rejection_reason: certification.rejection_reason,
               processed_by: certification.processed_by ? employee_summary(certification.processed_by) : nil

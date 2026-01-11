@@ -53,6 +53,7 @@ module Identity
 
     # Associations
     has_many :users, class_name: "Identity::User", inverse_of: :organization
+    has_many :third_party_types, class_name: "Legal::ThirdPartyType", dependent: :destroy
 
     # Validations
     validates :name, presence: true, length: { minimum: 2, maximum: 100 }

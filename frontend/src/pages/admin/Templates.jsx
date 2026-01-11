@@ -23,7 +23,8 @@ import {
   AlertCircle,
   FileUp,
   Pencil,
-  Download
+  Download,
+  Users
 } from 'lucide-react'
 
 const STATUS_LABELS = {
@@ -621,10 +622,18 @@ export default function Templates() {
           <h1 className="text-2xl font-bold text-gray-900">Templates de Documentos</h1>
           <p className="text-gray-500">Gestiona los templates para generacion de documentos</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="w-4 h-4" />
-          Nuevo Template
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link to="/admin/signatory-types">
+            <Button variant="secondary">
+              <Users className="w-4 h-4" />
+              Tipos de Firmantes
+            </Button>
+          </Link>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4" />
+            Nuevo Template
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

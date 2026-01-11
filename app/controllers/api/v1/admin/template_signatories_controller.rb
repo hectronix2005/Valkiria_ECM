@@ -124,6 +124,9 @@ module Api
             :y_position,
             :width,
             :height,
+            :date_position,
+            :show_label,
+            :show_signer_name,
             :custom_user_id,
             :custom_email
           )
@@ -145,6 +148,9 @@ module Api
             y_position: signatory.y_position,
             width: signatory.width,
             height: signatory.height,
+            date_position: signatory.date_position || "right",
+            show_label: signatory.show_label.nil? ? true : signatory.show_label,
+            show_signer_name: signatory.show_signer_name || false,
             custom_user_id: signatory.custom_user_id&.to_s,
             custom_email: signatory.custom_email,
             created_at: signatory.created_at.iso8601

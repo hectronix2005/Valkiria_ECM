@@ -70,6 +70,8 @@ module Hr
     field :salary, type: BigDecimal  # Monthly salary
     field :food_allowance, type: BigDecimal, default: 0  # Auxilio de alimentacion
     field :transport_allowance, type: BigDecimal, default: 0  # Auxilio de transporte
+    field :payment_frequency, type: String, default: "monthly"  # weekly, biweekly, monthly
+    field :work_city, type: String  # Ciudad donde labora
 
     # Personal identification
     field :identification_type, type: String, default: "CC"  # CC, CE, PA, etc.
