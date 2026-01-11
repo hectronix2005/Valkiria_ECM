@@ -245,7 +245,16 @@ module Api
             return render json: { error: "No se pudo obtener el archivo" }, status: :internal_server_error
           end
 
-          # Convert Word to PDF using LibreOffice
+          # Check if we're in production/Heroku environment where LibreOffice may not work
+          if Rails.env.production? && ENV["DYNO"].present?
+            # On Heroku, return the Word file directly for download instead of PDF preview
+            return send_data file_content,
+                      filename: @template.file_name || "#{@template.name}.docx",
+                      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                      disposition: "attachment"
+          end
+
+          # Convert Word to PDF using LibreOffice (local development)
           temp_dir = Dir.mktmpdir
           begin
             # Write Word file
@@ -265,7 +274,11 @@ module Api
             soffice_path = soffice_paths.find { |p| p.present? && File.exist?(p) }
 
             unless soffice_path
-              return render json: { error: "LibreOffice no está instalado para previsualización" }, status: :service_unavailable
+              # Fallback: return Word file for download
+              return send_data file_content,
+                        filename: @template.file_name || "#{@template.name}.docx",
+                        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        disposition: "attachment"
             end
 
             system(soffice_path, "--headless", "--convert-to", "pdf", "--outdir", temp_dir, docx_path)
@@ -273,7 +286,11 @@ module Api
             pdf_path = File.join(temp_dir, "template.pdf")
 
             unless File.exist?(pdf_path)
-              return render json: { error: "Error al convertir el documento a PDF" }, status: :internal_server_error
+              # Fallback: return Word file for download
+              return send_data file_content,
+                        filename: @template.file_name || "#{@template.name}.docx",
+                        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        disposition: "attachment"
             end
 
             pdf_content = File.binread(pdf_path)
