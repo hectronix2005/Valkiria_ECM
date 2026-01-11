@@ -262,7 +262,7 @@ export default function Layout({ children }) {
           {/* Only show elevated sections when NOT in employee mode */}
           {!employeeMode && (
             <>
-              {(isAdmin || isHR) && (
+              {isAdmin && (
                 <CollapsibleSection
                   id="legal"
                   title="Gestión Legal"
