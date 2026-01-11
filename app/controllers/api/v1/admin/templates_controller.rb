@@ -239,19 +239,32 @@ module Api
             return render json: { error: "El template no tiene archivo adjunto" }, status: :not_found
           end
 
+          # First, try to use stored PDF preview (works on Heroku without LibreOffice)
+          if @template.preview_file_id
+            preview_content = @template.preview_content
+            if preview_content
+              return send_data preview_content,
+                        filename: "#{@template.name || 'preview'}.pdf",
+                        type: "application/pdf",
+                        disposition: "inline"
+            end
+          end
+
+          # If file is already a PDF, serve it directly
+          if @template.file_name&.end_with?(".pdf")
+            file_content = @template.file_content
+            if file_content
+              return send_data file_content,
+                        filename: @template.file_name,
+                        type: "application/pdf",
+                        disposition: "inline"
+            end
+          end
+
           file_content = @template.file_content
 
           unless file_content
             return render json: { error: "No se pudo obtener el archivo" }, status: :internal_server_error
-          end
-
-          # Check if we're in production/Heroku environment where LibreOffice may not work
-          if Rails.env.production? && ENV["DYNO"].present?
-            # On Heroku, return the Word file directly for download instead of PDF preview
-            return send_data file_content,
-                      filename: @template.file_name || "#{@template.name}.docx",
-                      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                      disposition: "attachment"
           end
 
           # Convert Word to PDF using LibreOffice (local development)
@@ -262,23 +275,17 @@ module Api
             File.binwrite(docx_path, file_content)
 
             # Convert to PDF using LibreOffice
-            # Try multiple paths for LibreOffice
             soffice_paths = [
               `which soffice`.strip,
               "/opt/homebrew/bin/soffice",           # macOS Homebrew
               "/usr/bin/soffice",                    # Linux standard
-              "/app/.apt/usr/bin/soffice",          # Heroku apt buildpack
-              "/app/.apt/usr/lib/libreoffice/program/soffice" # Heroku alt path
             ]
 
             soffice_path = soffice_paths.find { |p| p.present? && File.exist?(p) }
 
             unless soffice_path
-              # Fallback: return Word file for download
-              return send_data file_content,
-                        filename: @template.file_name || "#{@template.name}.docx",
-                        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        disposition: "attachment"
+              # No LibreOffice and no stored preview - return error
+              return render json: { error: "Preview PDF no disponible. Re-sube el archivo desde un entorno con LibreOffice." }, status: :service_unavailable
             end
 
             system(soffice_path, "--headless", "--convert-to", "pdf", "--outdir", temp_dir, docx_path)
@@ -286,14 +293,14 @@ module Api
             pdf_path = File.join(temp_dir, "template.pdf")
 
             unless File.exist?(pdf_path)
-              # Fallback: return Word file for download
-              return send_data file_content,
-                        filename: @template.file_name || "#{@template.name}.docx",
-                        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        disposition: "attachment"
+              return render json: { error: "Error al convertir el documento a PDF" }, status: :internal_server_error
             end
 
             pdf_content = File.binread(pdf_path)
+
+            # Store this preview for future use
+            @template.store_pdf_preview!(pdf_content)
+            @template.save
 
             send_data pdf_content,
                       filename: "#{@template.name || 'preview'}.pdf",

@@ -69,6 +69,9 @@ module Templates
     field :file_content_type, type: String
     field :file_size, type: Integer
 
+    # PDF preview file (generated from Word for preview on servers without LibreOffice)
+    field :preview_file_id, type: BSON::ObjectId
+
     # Extracted variables from template
     field :variables, type: Array, default: []
 
@@ -278,6 +281,11 @@ module Templates
 
         return unless pdf_content
 
+        # Store the PDF preview in GridFS for servers without LibreOffice
+        if file_name&.end_with?(".docx")
+          store_pdf_preview!(pdf_content)
+        end
+
         require "combine_pdf"
         pdf = CombinePDF.parse(pdf_content)
         return if pdf.pages.empty?
@@ -301,6 +309,39 @@ module Templates
         self.pdf_height ||= 792.0
         self.pdf_page_count ||= 1
       end
+    end
+
+    def store_pdf_preview!(pdf_content)
+      return unless pdf_content
+
+      # Delete old preview if exists
+      if preview_file_id
+        begin
+          Mongoid::GridFs.delete(preview_file_id)
+        rescue StandardError
+          nil
+        end
+      end
+
+      # Store new PDF preview
+      preview_filename = file_name&.sub(/\.docx$/i, ".pdf") || "preview.pdf"
+      file = Mongoid::GridFs.put(
+        StringIO.new(pdf_content),
+        filename: preview_filename,
+        content_type: "application/pdf"
+      )
+
+      self.preview_file_id = file.id
+      Rails.logger.info "Stored PDF preview: #{preview_filename} (#{pdf_content.bytesize} bytes)"
+    end
+
+    def preview_content
+      return nil unless preview_file_id
+
+      file = Mongoid::GridFs.get(preview_file_id)
+      file.data
+    rescue Mongoid::Errors::DocumentNotFound
+      nil
     end
 
     def convert_docx_to_pdf_for_dimensions(docx_content)
