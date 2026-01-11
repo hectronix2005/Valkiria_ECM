@@ -937,14 +937,13 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
     onClose()
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
+  const handleSubmit = () => {
     if (!typeCode) {
       setError('Seleccione un tipo de firmante')
       return
     }
     const selectedType = signatoryTypes.find(t => t.code === typeCode)
-    createMutation.mutate({
+    const data = {
       signatory_type_code: typeCode,
       label: label || selectedType?.name || 'Firma',
       required,
@@ -956,7 +955,9 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
       date_position: datePosition,
       show_label: showLabel,
       show_signer_name: showSignerName
-    })
+    }
+    console.log('Creating signatory with data:', data)
+    createMutation.mutate(data)
   }
 
   if (!isOpen) return null
