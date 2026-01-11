@@ -189,6 +189,81 @@ namespace :db do
       puts "✅ Collection '#{collection}' synced from local."
     end
 
+    desc "Generate PDF previews for templates uploaded in production"
+    task generate_previews: :environment do
+      puts "\n" + "=" * 60
+      puts "🖼️  GENERATE PDF PREVIEWS"
+      puts "=" * 60
+      puts "\nThis will:"
+      puts "  1. Sync templates from production"
+      puts "  2. Generate PDF previews locally (requires LibreOffice)"
+      puts "  3. Sync previews back to production\n"
+
+      # Step 1: Sync from production
+      puts "\n📥 Step 1: Syncing templates and files from production..."
+      %w[templates fs.files fs.chunks].each do |col|
+        sync_collection_from_production(col)
+        puts "   ✓ #{col}"
+      end
+
+      # Step 2: Find templates without previews
+      puts "\n🔍 Step 2: Finding templates without PDF previews..."
+      templates_without_preview = Templates::Template.where(:file_id.ne => nil, :preview_file_id => nil)
+        .select { |t| t.file_name&.end_with?(".docx") }
+
+      if templates_without_preview.empty?
+        puts "   ✓ All templates already have PDF previews!"
+        puts "\n" + "=" * 60
+        next
+      end
+
+      puts "   Found #{templates_without_preview.count} template(s) without preview:"
+      templates_without_preview.each { |t| puts "   - #{t.name}" }
+
+      # Step 3: Generate previews
+      puts "\n🖨️  Step 3: Generating PDF previews (using LibreOffice)..."
+      generated = 0
+      templates_without_preview.each do |template|
+        print "   Generating: #{template.name}..."
+
+        content = template.file_content
+        unless content
+          puts " ⚠️  No file content, skipped"
+          next
+        end
+
+        begin
+          pdf_content = template.send(:convert_docx_to_pdf_for_dimensions, content)
+          if pdf_content
+            template.store_pdf_preview!(pdf_content)
+            template.save!
+            generated += 1
+            puts " ✓ (#{pdf_content.bytesize} bytes)"
+          else
+            puts " ⚠️  Conversion failed"
+          end
+        rescue StandardError => e
+          puts " ❌ Error: #{e.message}"
+        end
+      end
+
+      puts "   Generated #{generated} preview(s)"
+
+      # Step 4: Sync back to production
+      if generated > 0
+        puts "\n📤 Step 4: Syncing previews to production..."
+        %w[templates fs.files fs.chunks].each do |col|
+          sync_collection_to_production(col)
+          puts "   ✓ #{col}"
+        end
+        puts "\n✅ Done! #{generated} PDF preview(s) generated and synced to production."
+      else
+        puts "\n⚠️  No previews were generated."
+      end
+
+      puts "=" * 60 + "\n"
+    end
+
     namespace :backup do
       desc "Backup local database"
       task local: :environment do
