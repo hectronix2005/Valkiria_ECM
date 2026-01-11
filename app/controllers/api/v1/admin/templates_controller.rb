@@ -253,10 +253,18 @@ module Api
             File.binwrite(docx_path, file_content)
 
             # Convert to PDF using LibreOffice
-            soffice_path = `which soffice`.strip
-            soffice_path = "/opt/homebrew/bin/soffice" if soffice_path.empty?
+            # Try multiple paths for LibreOffice
+            soffice_paths = [
+              `which soffice`.strip,
+              "/opt/homebrew/bin/soffice",           # macOS Homebrew
+              "/usr/bin/soffice",                    # Linux standard
+              "/app/.apt/usr/bin/soffice",          # Heroku apt buildpack
+              "/app/.apt/usr/lib/libreoffice/program/soffice" # Heroku alt path
+            ]
 
-            unless File.exist?(soffice_path)
+            soffice_path = soffice_paths.find { |p| p.present? && File.exist?(p) }
+
+            unless soffice_path
               return render json: { error: "LibreOffice no está instalado para previsualización" }, status: :service_unavailable
             end
 
