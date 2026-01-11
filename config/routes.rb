@@ -257,4 +257,8 @@ Rails.application.routes.draw do
       end
     end
   end
+
+  # Serve SPA frontend - catch all non-API routes
+  get "*path", to: "frontend#index", constraints: ->(req) { !req.path.start_with?("/api", "/api-docs", "/up") }
+  root to: "frontend#index"
 end

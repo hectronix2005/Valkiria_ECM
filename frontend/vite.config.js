@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: process.env.GITHUB_PAGES ? '/Valkiria_ECM/' : '/',
+  base: '/',
   server: {
     host: '127.0.0.1',
     port: 5173,
@@ -16,7 +16,14 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../public/frontend',
-    emptyOutDir: true,
+    outDir: '../public',
+    emptyOutDir: false,
+    rollupOptions: {
+      output: {
+        assetFileNames: 'assets/[name]-[hash][extname]',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+      },
+    },
   },
 })
