@@ -1,7 +1,12 @@
 import axios from 'axios'
 
+// Use Heroku API in production (GitHub Pages), local proxy in development
+const API_BASE_URL = import.meta.env.PROD
+  ? 'https://valkyria-776bbe51369f.herokuapp.com/api/v1'
+  : '/api/v1'
+
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
