@@ -1280,7 +1280,9 @@ export default function TemplateEdit() {
   const handleSaveMappings = async () => {
     setIsSavingMappings(true)
     try {
-      await updateMutation.mutateAsync({ variable_mappings: editingMappings })
+      // Merge existing mappings with edited ones to preserve unchanged values
+      const allMappings = { ...template.variable_mappings, ...editingMappings }
+      await updateMutation.mutateAsync({ variable_mappings: allMappings })
     } finally {
       setIsSavingMappings(false)
     }
