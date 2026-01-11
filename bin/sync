@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Quick database sync script for VALKYRIA ECM
+# Usage: bin/sync [to|from|status]
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+case "$1" in
+  to|push)
+    echo "Syncing local → production..."
+    bundle exec rake db:sync:to_production
+    ;;
+  from|pull)
+    echo "Syncing production → local..."
+    bundle exec rake db:sync:from_production
+    ;;
+  status|s)
+    bundle exec rake db:sync:status
+    ;;
+  backup)
+    if [ "$2" == "local" ]; then
+      bundle exec rake db:sync:backup:local
+    elif [ "$2" == "production" ] || [ "$2" == "prod" ]; then
+      bundle exec rake db:sync:backup:production
+    else
+      echo "Usage: bin/sync backup [local|production]"
+    fi
+    ;;
+  collection)
+    if [ -z "$2" ] || [ -z "$3" ]; then
+      echo "Usage: bin/sync collection [to|from] collection_name"
+      exit 1
+    fi
+    if [ "$2" == "to" ]; then
+      bundle exec rake "db:sync:collection_to_production[$3]"
+    else
+      bundle exec rake "db:sync:collection_from_production[$3]"
+    fi
+    ;;
+  *)
+    echo "VALKYRIA ECM Database Sync"
+    echo ""
+    echo "Usage: bin/sync [command]"
+    echo ""
+    echo "Commands:"
+    echo "  to, push     Sync local → production"
+    echo "  from, pull   Sync production → local"
+    echo "  status, s    Show sync status"
+    echo "  backup       Backup database (local|production)"
+    echo "  collection   Sync specific collection"
+    echo ""
+    echo "Examples:"
+    echo "  bin/sync to                           # Push local to production"
+    echo "  bin/sync from                         # Pull production to local"
+    echo "  bin/sync backup production            # Backup production"
+    echo "  bin/sync collection to identity_users # Sync users to production"
+    ;;
+esac
