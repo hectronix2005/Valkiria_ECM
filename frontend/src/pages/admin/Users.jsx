@@ -9,7 +9,9 @@ import Badge from '../../components/ui/Badge'
 import {
   Users, Plus, Search, Edit2, Trash2, Shield,
   AlertCircle, CheckCircle, UserX, UserCheck,
-  Mail, Building2, ChevronDown, Filter
+  Mail, Building2, ChevronDown, ChevronRight, Filter,
+  Settings, Home, FileText, Folder, Scale, BarChart3,
+  Network, Check, X, Lock, Unlock
 } from 'lucide-react'
 
 const LEVEL_COLORS = {
@@ -28,6 +30,464 @@ const LEVEL_BADGES = {
   1: 'secondary',
 }
 
+// Estructura completa de módulos, submódulos y funciones del sistema
+const SYSTEM_MODULES = [
+  {
+    id: 'general',
+    name: 'General',
+    icon: Home,
+    description: 'Módulos generales del sistema',
+    submodules: [
+      {
+        id: 'dashboard',
+        name: 'Inicio / Dashboard',
+        functions: [
+          { id: 'view', name: 'Ver dashboard', defaultLevels: [1, 2, 3, 4, 5] },
+          { id: 'view_stats', name: 'Ver estadísticas', defaultLevels: [2, 3, 4, 5] },
+        ]
+      },
+      {
+        id: 'documents',
+        name: 'Documentos',
+        functions: [
+          { id: 'view', name: 'Ver documentos', defaultLevels: [1, 2, 3, 4, 5] },
+          { id: 'create', name: 'Crear documentos', defaultLevels: [2, 3, 4, 5] },
+          { id: 'edit', name: 'Editar documentos', defaultLevels: [3, 4, 5] },
+          { id: 'delete', name: 'Eliminar documentos', defaultLevels: [4, 5] },
+          { id: 'download', name: 'Descargar documentos', defaultLevels: [1, 2, 3, 4, 5] },
+        ]
+      },
+      {
+        id: 'folders',
+        name: 'Carpetas',
+        functions: [
+          { id: 'view', name: 'Ver carpetas', defaultLevels: [1, 2, 3, 4, 5] },
+          { id: 'create', name: 'Crear carpetas', defaultLevels: [2, 3, 4, 5] },
+          { id: 'edit', name: 'Editar carpetas', defaultLevels: [3, 4, 5] },
+          { id: 'delete', name: 'Eliminar carpetas', defaultLevels: [4, 5] },
+        ]
+      },
+      {
+        id: 'profile',
+        name: 'Mi Perfil',
+        functions: [
+          { id: 'view', name: 'Ver perfil', defaultLevels: [1, 2, 3, 4, 5] },
+          { id: 'edit', name: 'Editar perfil', defaultLevels: [1, 2, 3, 4, 5] },
+          { id: 'change_password', name: 'Cambiar contraseña', defaultLevels: [1, 2, 3, 4, 5] },
+          { id: 'manage_signatures', name: 'Gestionar firmas', defaultLevels: [2, 3, 4, 5] },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'hr',
+    name: 'Recursos Humanos',
+    icon: Users,
+    description: 'Gestión de recursos humanos',
+    submodules: [
+      {
+        id: 'my_requests',
+        name: 'Mis Solicitudes',
+        functions: [
+          { id: 'view', name: 'Ver mis solicitudes', defaultLevels: [1, 2, 3, 4, 5] },
+          { id: 'create_vacation', name: 'Solicitar vacaciones', defaultLevels: [2, 3, 4, 5] },
+          { id: 'create_certification', name: 'Solicitar certificaciones', defaultLevels: [2, 3, 4, 5] },
+          { id: 'cancel', name: 'Cancelar solicitudes', defaultLevels: [2, 3, 4, 5] },
+        ]
+      },
+      {
+        id: 'organigrama',
+        name: 'Organigrama',
+        functions: [
+          { id: 'view', name: 'Ver organigrama', defaultLevels: [1, 2, 3, 4, 5] },
+        ]
+      },
+      {
+        id: 'approvals',
+        name: 'Aprobaciones',
+        functions: [
+          { id: 'view', name: 'Ver aprobaciones pendientes', defaultLevels: [3, 4, 5] },
+          { id: 'approve', name: 'Aprobar solicitudes', defaultLevels: [3, 4, 5] },
+          { id: 'reject', name: 'Rechazar solicitudes', defaultLevels: [3, 4, 5] },
+        ]
+      },
+      {
+        id: 'employees',
+        name: 'Empleados',
+        functions: [
+          { id: 'view', name: 'Ver empleados', defaultLevels: [3, 4, 5] },
+          { id: 'create', name: 'Crear empleados', defaultLevels: [3, 5] },
+          { id: 'edit', name: 'Editar empleados', defaultLevels: [3, 5] },
+          { id: 'view_balance', name: 'Ver saldo vacaciones', defaultLevels: [3, 4, 5] },
+          { id: 'generate_docs', name: 'Generar documentos', defaultLevels: [3, 5] },
+          { id: 'create_account', name: 'Crear cuenta de usuario', defaultLevels: [3, 5] },
+        ]
+      },
+      {
+        id: 'hr_documents',
+        name: 'Documentación HR',
+        functions: [
+          { id: 'view', name: 'Ver documentación', defaultLevels: [3, 5] },
+          { id: 'manage_variables', name: 'Gestionar variables', defaultLevels: [3, 5] },
+        ]
+      },
+      {
+        id: 'hr_dashboard',
+        name: 'Dashboard HR',
+        functions: [
+          { id: 'view', name: 'Ver dashboard HR', defaultLevels: [3, 5] },
+          { id: 'export', name: 'Exportar reportes', defaultLevels: [3, 5] },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'legal',
+    name: 'Gestión Legal',
+    icon: Scale,
+    description: 'Contratos y terceros',
+    submodules: [
+      {
+        id: 'contracts',
+        name: 'Contratos',
+        functions: [
+          { id: 'view', name: 'Ver contratos', defaultLevels: [4, 5] },
+          { id: 'create', name: 'Crear contratos', defaultLevels: [4, 5] },
+          { id: 'edit', name: 'Editar contratos', defaultLevels: [4, 5] },
+          { id: 'delete', name: 'Eliminar contratos', defaultLevels: [5] },
+          { id: 'submit', name: 'Enviar a aprobación', defaultLevels: [4, 5] },
+          { id: 'generate_doc', name: 'Generar documento', defaultLevels: [4, 5] },
+          { id: 'sign', name: 'Firmar contratos', defaultLevels: [4, 5] },
+        ]
+      },
+      {
+        id: 'legal_approvals',
+        name: 'Aprobaciones Legales',
+        functions: [
+          { id: 'view', name: 'Ver aprobaciones', defaultLevels: [4, 5] },
+          { id: 'approve', name: 'Aprobar contratos', defaultLevels: [4, 5] },
+          { id: 'reject', name: 'Rechazar contratos', defaultLevels: [4, 5] },
+        ]
+      },
+      {
+        id: 'third_parties',
+        name: 'Terceros',
+        functions: [
+          { id: 'view', name: 'Ver terceros', defaultLevels: [4, 5] },
+          { id: 'create', name: 'Crear terceros', defaultLevels: [4, 5] },
+          { id: 'edit', name: 'Editar terceros', defaultLevels: [4, 5] },
+          { id: 'delete', name: 'Eliminar terceros', defaultLevels: [5] },
+          { id: 'manage_types', name: 'Gestionar tipos', defaultLevels: [5] },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'system',
+    name: 'Sistema',
+    icon: Settings,
+    description: 'Configuración del sistema',
+    submodules: [
+      {
+        id: 'settings',
+        name: 'Configuración',
+        functions: [
+          { id: 'view', name: 'Ver configuración', defaultLevels: [5] },
+          { id: 'edit', name: 'Editar configuración', defaultLevels: [5] },
+        ]
+      },
+      {
+        id: 'users',
+        name: 'Usuarios',
+        functions: [
+          { id: 'view', name: 'Ver usuarios', defaultLevels: [5] },
+          { id: 'create', name: 'Crear usuarios', defaultLevels: [5] },
+          { id: 'edit', name: 'Editar usuarios', defaultLevels: [5] },
+          { id: 'delete', name: 'Eliminar usuarios', defaultLevels: [5] },
+          { id: 'toggle_active', name: 'Activar/Desactivar', defaultLevels: [5] },
+          { id: 'assign_roles', name: 'Asignar roles', defaultLevels: [5] },
+          { id: 'manage_permissions', name: 'Gestionar permisos', defaultLevels: [5] },
+        ]
+      },
+      {
+        id: 'departments',
+        name: 'Áreas / Departamentos',
+        functions: [
+          { id: 'view', name: 'Ver áreas', defaultLevels: [5] },
+          { id: 'create', name: 'Crear áreas', defaultLevels: [5] },
+          { id: 'edit', name: 'Editar áreas', defaultLevels: [5] },
+          { id: 'delete', name: 'Eliminar áreas', defaultLevels: [5] },
+        ]
+      },
+      {
+        id: 'templates',
+        name: 'Templates',
+        functions: [
+          { id: 'view', name: 'Ver templates', defaultLevels: [5] },
+          { id: 'create', name: 'Crear templates', defaultLevels: [5] },
+          { id: 'edit', name: 'Editar templates', defaultLevels: [5] },
+          { id: 'delete', name: 'Eliminar templates', defaultLevels: [5] },
+          { id: 'upload', name: 'Subir archivos', defaultLevels: [5] },
+          { id: 'manage_signatories', name: 'Gestionar firmantes', defaultLevels: [5] },
+          { id: 'manage_variables', name: 'Gestionar variables', defaultLevels: [5] },
+        ]
+      },
+    ]
+  },
+]
+
+// Componente para checkbox de permiso
+function PermissionCheckbox({ checked, onChange, disabled, level }) {
+  const levelColors = {
+    5: 'checked:bg-purple-500 checked:border-purple-500',
+    4: 'checked:bg-blue-500 checked:border-blue-500',
+    3: 'checked:bg-green-500 checked:border-green-500',
+    2: 'checked:bg-gray-500 checked:border-gray-500',
+    1: 'checked:bg-slate-400 checked:border-slate-400',
+  }
+
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      disabled={disabled}
+      className={`w-5 h-5 rounded border-2 border-gray-300 cursor-pointer transition-colors
+        ${levelColors[level] || ''}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-400'}
+      `}
+    />
+  )
+}
+
+// Componente de gestión de permisos
+function PermissionsManager({ permissions, onChange }) {
+  const [expandedModules, setExpandedModules] = useState(['general', 'hr', 'legal', 'system'])
+  const [expandedSubmodules, setExpandedSubmodules] = useState([])
+
+  const toggleModule = (moduleId) => {
+    setExpandedModules(prev =>
+      prev.includes(moduleId)
+        ? prev.filter(id => id !== moduleId)
+        : [...prev, moduleId]
+    )
+  }
+
+  const toggleSubmodule = (submoduleId) => {
+    setExpandedSubmodules(prev =>
+      prev.includes(submoduleId)
+        ? prev.filter(id => id !== submoduleId)
+        : [...prev, submoduleId]
+    )
+  }
+
+  const isPermissionEnabled = (moduleId, submoduleId, functionId, level) => {
+    const key = `${moduleId}.${submoduleId}.${functionId}`
+    return permissions[key]?.includes(level) ?? false
+  }
+
+  const togglePermission = (moduleId, submoduleId, functionId, level) => {
+    const key = `${moduleId}.${submoduleId}.${functionId}`
+    const currentLevels = permissions[key] || []
+
+    const newLevels = currentLevels.includes(level)
+      ? currentLevels.filter(l => l !== level)
+      : [...currentLevels, level].sort((a, b) => a - b)
+
+    onChange({
+      ...permissions,
+      [key]: newLevels
+    })
+  }
+
+  const toggleAllForLevel = (level) => {
+    const newPermissions = { ...permissions }
+
+    SYSTEM_MODULES.forEach(module => {
+      module.submodules.forEach(submodule => {
+        submodule.functions.forEach(func => {
+          const key = `${module.id}.${submodule.id}.${func.id}`
+          const currentLevels = newPermissions[key] || []
+
+          if (currentLevels.includes(level)) {
+            newPermissions[key] = currentLevels.filter(l => l !== level)
+          } else {
+            newPermissions[key] = [...currentLevels, level].sort((a, b) => a - b)
+          }
+        })
+      })
+    })
+
+    onChange(newPermissions)
+  }
+
+  const toggleAllForModule = (moduleId, level) => {
+    const module = SYSTEM_MODULES.find(m => m.id === moduleId)
+    if (!module) return
+
+    const newPermissions = { ...permissions }
+
+    module.submodules.forEach(submodule => {
+      submodule.functions.forEach(func => {
+        const key = `${moduleId}.${submodule.id}.${func.id}`
+        const currentLevels = newPermissions[key] || []
+
+        if (currentLevels.includes(level)) {
+          newPermissions[key] = currentLevels.filter(l => l !== level)
+        } else {
+          newPermissions[key] = [...currentLevels, level].sort((a, b) => a - b)
+        }
+      })
+    })
+
+    onChange(newPermissions)
+  }
+
+  const resetToDefaults = () => {
+    const defaultPermissions = {}
+
+    SYSTEM_MODULES.forEach(module => {
+      module.submodules.forEach(submodule => {
+        submodule.functions.forEach(func => {
+          const key = `${module.id}.${submodule.id}.${func.id}`
+          defaultPermissions[key] = [...func.defaultLevels]
+        })
+      })
+    })
+
+    onChange(defaultPermissions)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header con niveles */}
+      <div className="sticky top-0 bg-white z-10 pb-2 border-b">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold text-gray-700">Configuración de Permisos por Nivel</h4>
+          <Button variant="secondary" size="sm" onClick={resetToDefaults}>
+            Restaurar Predeterminados
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-[1fr_repeat(5,60px)] gap-2 items-center text-center">
+          <div className="text-left text-xs font-medium text-gray-500 uppercase">
+            Módulo / Función
+          </div>
+          {[5, 4, 3, 2, 1].map(level => (
+            <div key={level} className="flex flex-col items-center">
+              <button
+                onClick={() => toggleAllForLevel(level)}
+                className={`px-2 py-1 text-xs font-bold rounded-full border transition-colors hover:opacity-80 ${LEVEL_COLORS[level]}`}
+                title={`Toggle todos nivel ${level}`}
+              >
+                N{level}
+              </button>
+              <span className="text-[10px] text-gray-500 mt-0.5">
+                {LEVEL_NAMES[level]}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Módulos */}
+      <div className="space-y-2 max-h-[500px] overflow-y-auto">
+        {SYSTEM_MODULES.map(module => {
+          const ModuleIcon = module.icon
+          const isModuleExpanded = expandedModules.includes(module.id)
+
+          return (
+            <div key={module.id} className="border border-gray-200 rounded-lg overflow-hidden">
+              {/* Module Header */}
+              <div
+                className="flex items-center gap-3 p-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => toggleModule(module.id)}
+              >
+                {isModuleExpanded ? (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                )}
+                <ModuleIcon className="w-5 h-5 text-gray-600" />
+                <div className="flex-1">
+                  <span className="font-semibold text-gray-900">{module.name}</span>
+                  <span className="text-xs text-gray-500 ml-2">{module.description}</span>
+                </div>
+                {/* Quick toggle buttons for module */}
+                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                  {[5, 4, 3, 2, 1].map(level => (
+                    <button
+                      key={level}
+                      onClick={() => toggleAllForModule(module.id, level)}
+                      className={`w-6 h-6 rounded text-[10px] font-bold border transition-colors hover:opacity-80 ${LEVEL_COLORS[level]}`}
+                      title={`Toggle ${module.name} para nivel ${level}`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Submodules */}
+              {isModuleExpanded && (
+                <div className="border-t border-gray-200">
+                  {module.submodules.map(submodule => {
+                    const isSubExpanded = expandedSubmodules.includes(`${module.id}.${submodule.id}`)
+
+                    return (
+                      <div key={submodule.id} className="border-b border-gray-100 last:border-b-0">
+                        {/* Submodule Header */}
+                        <div
+                          className="flex items-center gap-3 p-2 pl-10 cursor-pointer hover:bg-gray-50 transition-colors"
+                          onClick={() => toggleSubmodule(`${module.id}.${submodule.id}`)}
+                        >
+                          {isSubExpanded ? (
+                            <ChevronDown className="w-3 h-3 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="w-3 h-3 text-gray-400" />
+                          )}
+                          <span className="flex-1 font-medium text-gray-700 text-sm">
+                            {submodule.name}
+                          </span>
+                        </div>
+
+                        {/* Functions */}
+                        {isSubExpanded && (
+                          <div className="bg-white">
+                            {submodule.functions.map(func => (
+                              <div
+                                key={func.id}
+                                className="grid grid-cols-[1fr_repeat(5,60px)] gap-2 items-center p-2 pl-16 hover:bg-gray-50 text-center"
+                              >
+                                <div className="text-left text-sm text-gray-600">
+                                  {func.name}
+                                </div>
+                                {[5, 4, 3, 2, 1].map(level => (
+                                  <div key={level} className="flex justify-center">
+                                    <PermissionCheckbox
+                                      checked={isPermissionEnabled(module.id, submodule.id, func.id, level)}
+                                      onChange={() => togglePermission(module.id, submodule.id, func.id, level)}
+                                      level={level}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminUsers() {
   const [search, setSearch] = useState('')
   const [filterLevel, setFilterLevel] = useState('')
@@ -35,6 +495,20 @@ export default function AdminUsers() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [showRolesModal, setShowRolesModal] = useState(null)
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false)
+  const [systemPermissions, setSystemPermissions] = useState(() => {
+    // Initialize with default permissions
+    const defaults = {}
+    SYSTEM_MODULES.forEach(module => {
+      module.submodules.forEach(submodule => {
+        submodule.functions.forEach(func => {
+          const key = `${module.id}.${submodule.id}.${func.id}`
+          defaults[key] = [...func.defaultLevels]
+        })
+      })
+    })
+    return defaults
+  })
   const [formData, setFormData] = useState({
     email: '',
     first_name: '',
@@ -201,6 +675,13 @@ export default function AdminUsers() {
     assignRolesMutation.mutate({ id: user.id, roleNames })
   }
 
+  const handleSavePermissions = () => {
+    // Here you would save to backend
+    console.log('Saving permissions:', systemPermissions)
+    setShowPermissionsModal(false)
+    alert('Permisos guardados correctamente')
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -214,14 +695,20 @@ export default function AdminUsers() {
             <p className="text-gray-500">Gestión de usuarios y niveles de permisos</p>
           </div>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Usuario
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setShowPermissionsModal(true)}>
+            <Lock className="h-4 w-4 mr-2" />
+            Gestionar Permisos
+          </Button>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Usuario
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gray-100 rounded-lg">
@@ -241,7 +728,7 @@ export default function AdminUsers() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">{stats.by_level?.[level] || 0}</p>
-                <p className="text-sm text-gray-500">Nivel {level}</p>
+                <p className="text-xs text-gray-500">{LEVEL_NAMES[level]}</p>
               </div>
             </div>
           </div>
@@ -640,6 +1127,42 @@ export default function AdminUsers() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Permissions Management Modal */}
+      <Modal
+        isOpen={showPermissionsModal}
+        onClose={() => setShowPermissionsModal(false)}
+        title="Gestión de Permisos del Sistema"
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Configuración de Permisos por Nivel
+            </h4>
+            <p className="text-sm text-purple-700 mt-1">
+              Define qué funcionalidades puede acceder cada nivel de usuario.
+              Los cambios afectarán a todos los usuarios según su nivel de permisos.
+            </p>
+          </div>
+
+          <PermissionsManager
+            permissions={systemPermissions}
+            onChange={setSystemPermissions}
+          />
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="secondary" onClick={() => setShowPermissionsModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSavePermissions}>
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Guardar Permisos
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )
