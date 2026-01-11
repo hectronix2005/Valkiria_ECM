@@ -339,10 +339,12 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
               const colors = getSignatureColor(sig.effective_code || sig.role || sig.signatory_type_code)
               const isSelected = selectedId === sig.id
               const isDragging = dragging === sig.id
-              const sigPage = getPageFromY(sig.y_position || 700)
+              const sigPage = sig.page_number || 1
               const sigWidth = sig.width || 200
               const sigHeight = sig.height || 80
               const datePosition = sig.date_position || 'right'
+              // Calculate absolute Y position: page offset + relative Y position
+              const absoluteY = ((sigPage - 1) * PAGE_HEIGHT) + (sig.y_position || 700)
 
               // Calculate actual signature area based on date position (matching PDF rendering)
               let actualSigWidth = sigWidth
@@ -379,7 +381,7 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
                   className="absolute cursor-move transition-all duration-100"
                   style={{
                     left: sig.x_position || 350,
-                    top: sig.y_position || 700,
+                    top: absoluteY,
                     width: sigWidth,
                     height: sigHeight,
                     backgroundColor: 'transparent',
