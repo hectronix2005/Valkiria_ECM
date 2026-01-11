@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 u = Identity::User.find_by(email: "legal@valkyria.com")
-u.password = "Admin123"
-u.must_change_password = false
+u.first_name = "Nathalia"
+u.last_name = "Mendoza"
 u.save!
-puts "Password reset for: #{u.email}"
+puts "Updated user: #{u.first_name} #{u.last_name} - #{u.email}"
