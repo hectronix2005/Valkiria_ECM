@@ -264,6 +264,46 @@ namespace :db do
       puts "=" * 60 + "\n"
     end
 
+    desc "Recalculate PDF dimensions for all templates with previews"
+    task recalculate_pdf_dimensions: :environment do
+      puts "\n" + "=" * 60
+      puts "RECALCULATE PDF DIMENSIONS"
+      puts "=" * 60
+
+      require "combine_pdf"
+
+      templates = Templates::Template.where(:preview_file_id.ne => nil)
+      puts "Found #{templates.count} template(s) with PDF previews\n\n"
+
+      updated = 0
+      templates.each do |template|
+        print "Processing: #{template.name}... "
+        begin
+          preview_content = template.preview_content
+          next unless preview_content
+
+          pdf = CombinePDF.parse(preview_content)
+          next if pdf.pages.empty?
+
+          first_page = pdf.pages.first
+          mediabox = first_page.mediabox
+
+          template.pdf_width = mediabox[2].to_f
+          template.pdf_height = mediabox[3].to_f
+          template.pdf_page_count = pdf.pages.count
+          template.save!
+
+          puts "#{pdf.pages.count} pages, #{mediabox[2]}x#{mediabox[3]}"
+          updated += 1
+        rescue StandardError => e
+          puts "ERROR: #{e.message}"
+        end
+      end
+
+      puts "\n✅ Updated #{updated} template(s)"
+      puts "=" * 60 + "\n"
+    end
+
     namespace :backup do
       desc "Backup local database"
       task local: :environment do
