@@ -47,11 +47,15 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [previewType, setPreviewType] = useState(null) // 'pdf' or 'word'
+  const [wordDownloadUrl, setWordDownloadUrl] = useState(null)
 
   // Load PDF URL for "View PDF" button
   useEffect(() => {
     if (!templateId || !hasFile) {
       setPdfUrl(null)
+      setPreviewType(null)
+      setWordDownloadUrl(null)
       return
     }
 
@@ -62,15 +66,35 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
     templateService.preview(templateId)
       .then(response => {
         if (!isMounted) return
-        const blob = new Blob([response.data], { type: 'application/pdf' })
-        currentUrl = URL.createObjectURL(blob)
-        setPdfUrl(currentUrl)
+        const contentType = response.headers['content-type'] || ''
+
+        if (contentType.includes('application/pdf')) {
+          // PDF preview available
+          const blob = new Blob([response.data], { type: 'application/pdf' })
+          currentUrl = URL.createObjectURL(blob)
+          setPdfUrl(currentUrl)
+          setPreviewType('pdf')
+        } else if (contentType.includes('application/vnd.openxmlformats') || contentType.includes('word')) {
+          // Word file returned (Heroku fallback)
+          const blob = new Blob([response.data], { type: contentType })
+          currentUrl = URL.createObjectURL(blob)
+          setWordDownloadUrl(currentUrl)
+          setPreviewType('word')
+          setPdfUrl(null)
+        } else {
+          // Unknown type, try as PDF
+          const blob = new Blob([response.data], { type: 'application/pdf' })
+          currentUrl = URL.createObjectURL(blob)
+          setPdfUrl(currentUrl)
+          setPreviewType('pdf')
+        }
         setPdfLoading(false)
       })
       .catch(err => {
         if (!isMounted) return
         console.error('Error loading PDF preview:', err)
         setPdfLoading(false)
+        setPreviewType(null)
       })
 
     return () => {
@@ -201,7 +225,7 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
       {/* Page Controls */}
       <div className="flex items-center justify-end mb-2 gap-3">
         {/* View PDF button */}
-        {hasFile && pdfUrl && (
+        {hasFile && previewType === 'pdf' && pdfUrl && (
           <a
             href={pdfUrl}
             target="_blank"
@@ -212,11 +236,22 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
             Ver PDF
           </a>
         )}
-        {pdfLoading && (
-          <span className="text-xs text-gray-400 animate-pulse">Cargando PDF...</span>
+        {/* Download Word button (Heroku fallback) */}
+        {hasFile && previewType === 'word' && wordDownloadUrl && (
+          <a
+            href={wordDownloadUrl}
+            download
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
+          >
+            <FileText className="w-3 h-3" />
+            Descargar Word
+          </a>
         )}
-        {!pdfLoading && hasFile && !pdfUrl && (
-          <span className="text-xs text-red-400">Error al cargar PDF</span>
+        {pdfLoading && (
+          <span className="text-xs text-gray-400 animate-pulse">Cargando...</span>
+        )}
+        {!pdfLoading && hasFile && !previewType && (
+          <span className="text-xs text-red-400">Error al cargar documento</span>
         )}
         {/* Page indicator and navigation */}
         <div className="flex items-center gap-2">
@@ -267,7 +302,7 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
             onMouseLeave={handleMouseUp}
           >
           {/* PDF Background - show actual PDF if available */}
-          {pdfUrl && hasFile && (
+          {previewType === 'pdf' && pdfUrl && hasFile && (
             <iframe
               src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
               className="absolute inset-0 pointer-events-none"
@@ -280,11 +315,22 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
             />
           )}
 
+          {/* Word fallback message */}
+          {previewType === 'word' && hasFile && (
+            <div className="absolute inset-0 flex items-center justify-center bg-blue-50/80 z-5 pointer-events-none">
+              <div className="text-center text-blue-600 p-4 bg-white rounded-lg shadow-md pointer-events-auto">
+                <FileText className="w-12 h-12 mx-auto mb-2 opacity-70" />
+                <p className="text-sm font-medium">Preview PDF no disponible</p>
+                <p className="text-xs text-gray-500 mt-1">Usa el botón "Descargar Word" para ver el documento</p>
+              </div>
+            </div>
+          )}
+
           {/* Render page placeholders with correct A4 proportions */}
           {[...Array(numPages)].map((_, pageIndex) => (
             <div
               key={pageIndex}
-              className={`border border-gray-300 ${pdfUrl ? 'bg-transparent' : 'bg-white'}`}
+              className={`border border-gray-300 ${previewType === 'pdf' ? 'bg-transparent' : 'bg-white'}`}
               style={{
                 width: PDF_WIDTH,
                 height: PAGE_HEIGHT,
@@ -298,8 +344,8 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
               <div className="absolute top-2 right-2 bg-gray-100/80 text-gray-500 text-xs px-2 py-1 rounded">
                 Página {pageIndex + 1}
               </div>
-              {/* Visual grid lines to help with positioning - only show if no PDF */}
-              {!pdfUrl && (
+              {/* Visual grid lines to help with positioning - only show if no PDF preview */}
+              {previewType !== 'pdf' && (
                 <>
                   <div className="absolute inset-4 border border-dashed border-gray-200 pointer-events-none opacity-50" />
                   {/* Center guides */}
