@@ -1003,6 +1003,18 @@ export default function HRDocuments() {
                             >
                               <Download className="w-4 h-4" />
                             </Button>
+                            {(doc.can_sign || doc.has_pending_signature) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSign(doc)}
+                                loading={signMutation.isPending}
+                                title="Firmar documento"
+                                className="text-primary-600 hover:text-primary-700 hover:bg-primary-50"
+                              >
+                                <PenTool className="w-4 h-4" />
+                              </Button>
+                            )}
                             {(isAdmin || isHR) && (
                               <Button
                                 variant="ghost"
