@@ -12,7 +12,7 @@ namespace :test_data do
     end
 
     # Find or create employee for Paula
-    employee = Hr::Employee.find_by(email: paula.email) || Hr::Employee.for_user(paula)
+    employee = Hr::Employee.where(email: paula.email).first || Hr::Employee.for_user(paula)
 
     if employee.nil?
       employee = Hr::Employee.create!(
