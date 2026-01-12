@@ -490,6 +490,10 @@ export default function HRDocuments() {
   const [previewDocument, setPreviewDocument] = useState(null)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [showNoSignatureModal, setShowNoSignatureModal] = useState(false)
+  const [signDocument, setSignDocument] = useState(null)
+  const [showSignModal, setShowSignModal] = useState(false)
+  const [signPreviewUrl, setSignPreviewUrl] = useState(null)
+  const [loadingSignPreview, setLoadingSignPreview] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -539,11 +543,13 @@ export default function HRDocuments() {
     onSuccess: () => {
       queryClient.invalidateQueries(['hr-documents'])
       if (selectedDocument) {
-        // Refresh the selected document
         generatedDocumentService.get(selectedDocument.id).then(res => {
           setSelectedDocument(res.data.data)
         })
       }
+      // Close sign modal and show success
+      closeSignModal()
+      alert('Documento firmado exitosamente')
     },
     onError: (error) => {
       alert(error.response?.data?.error || 'Error al firmar el documento')
@@ -632,7 +638,7 @@ export default function HRDocuments() {
     }
   }
 
-  const handleSign = (document) => {
+  const handleSign = async (document) => {
     // First check if user has a digital signature configured
     if (!document.user_has_digital_signature && !hasActiveSignature()) {
       setShowNoSignatureModal(true)
@@ -646,7 +652,37 @@ export default function HRDocuments() {
         return
       }
     }
-    signMutation.mutate(document.id)
+
+    // Show sign confirmation modal with preview
+    setSignDocument(document)
+    setShowSignModal(true)
+    setLoadingSignPreview(true)
+
+    try {
+      const response = await generatedDocumentService.download(document.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const blobUrl = window.URL.createObjectURL(blob)
+      setSignPreviewUrl(blobUrl)
+    } catch (error) {
+      console.error('Error loading preview:', error)
+    } finally {
+      setLoadingSignPreview(false)
+    }
+  }
+
+  const confirmSign = () => {
+    if (signDocument) {
+      signMutation.mutate(signDocument.id)
+    }
+  }
+
+  const closeSignModal = () => {
+    if (signPreviewUrl) {
+      window.URL.revokeObjectURL(signPreviewUrl)
+    }
+    setShowSignModal(false)
+    setSignDocument(null)
+    setSignPreviewUrl(null)
   }
 
   const handleDownload = async (document) => {
@@ -1388,6 +1424,74 @@ export default function HRDocuments() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Sign Confirmation Modal with Preview */}
+      <Modal
+        isOpen={showSignModal}
+        onClose={closeSignModal}
+        title="Confirmar Firma"
+        size="full"
+      >
+        {signDocument && (
+          <div className="flex flex-col h-[calc(100vh-200px)]">
+            {/* Document info */}
+            <div className="flex items-center justify-between mb-4 pb-4 border-b">
+              <div>
+                <h4 className="font-medium text-gray-900">{signDocument.name}</h4>
+                <p className="text-sm text-gray-500">
+                  {signDocument.template_name} • {signDocument.employee_name}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                <span className="text-sm text-green-700 font-medium">Listo para firmar</span>
+              </div>
+            </div>
+
+            {/* PDF Preview */}
+            <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden">
+              {loadingSignPreview ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4" />
+                    <p className="text-gray-500">Cargando documento...</p>
+                  </div>
+                </div>
+              ) : signPreviewUrl ? (
+                <iframe
+                  src={signPreviewUrl}
+                  className="w-full h-full border-0"
+                  title="Vista previa del documento a firmar"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-500">No se pudo cargar la vista previa</p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <p className="text-sm text-gray-500">
+                Al firmar, aceptas el contenido de este documento con tu firma digital.
+              </p>
+              <div className="flex gap-3">
+                <Button variant="secondary" onClick={closeSignModal}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={confirmSign}
+                  loading={signMutation.isPending}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <PenTool className="w-4 h-4" />
+                  Confirmar y Firmar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
