@@ -198,7 +198,9 @@ module Api
         if detailed
           json.merge!(
             variable_values: document.variable_values,
+            sequential_signing: document.sequential_signing?,
             signatures: document.signatures.map do |sig|
+              order_status = document.signature_with_order_status(sig)
               {
                 signatory_label: sig["signatory_label"],
                 signatory_type_code: sig["signatory_type_code"],
@@ -207,7 +209,9 @@ module Api
                 status: sig["status"],
                 required: sig["required"],
                 signed_at: sig["signed_at"],
-                signed_by_name: sig["signed_by_name"]
+                signed_by_name: sig["signed_by_name"],
+                can_sign_now: order_status[:can_sign_now],
+                waiting_for: order_status[:waiting_for]
               }
             end,
             pending_signatures_count: document.pending_signatures_count,
@@ -215,6 +219,7 @@ module Api
             total_required_signatures: document.total_required_signatures,
             all_signed: document.all_required_signed?,
             can_sign: document.can_be_signed_by?(current_user),
+            next_signatory: document.next_signatory_to_sign&.dig("signatory_label"),
             completed_at: document.completed_at&.iso8601,
             can_download: document.draft_file_id.present?
           )

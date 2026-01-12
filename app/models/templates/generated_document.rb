@@ -146,6 +146,13 @@ module Templates
       raise SignatureError, "No hay firma pendiente para este usuario" unless sig_entry
       raise SignatureError, "Usuario no tiene firma digital configurada" unless signature
 
+      # Check signature order if sequential signing is enabled
+      unless can_sign_at_position?(sig_entry)
+        blocking = blocking_signatures_for(sig_entry)
+        waiting_names = blocking.map { |b| b["signatory_label"] || b["label"] }.join(", ")
+        raise SignatureError, "Debe esperar las firmas de: #{waiting_names}"
+      end
+
       sig_entry["signature_id"] = signature.uuid
       sig_entry["signed_at"] = Time.current.iso8601
       sig_entry["signed_by_name"] = user.full_name
@@ -390,8 +397,59 @@ module Templates
 
     def can_be_signed_by?(user)
       signatures.any? do |s|
-        s["user_id"] == user.id.to_s && s["status"] == "pending"
+        s["user_id"] == user.id.to_s && s["status"] == "pending" && can_sign_at_position?(s)
       end
+    end
+
+    # Check if sequential signing is enabled for this document's template
+    def sequential_signing?
+      template&.sequential_signing != false
+    end
+
+    # Check if a signature at a given position can be signed now
+    # (all previous required signatures must be completed)
+    def can_sign_at_position?(sig_entry)
+      return true unless sequential_signing?
+
+      sig_index = signatures.index(sig_entry)
+      return true if sig_index.nil? || sig_index.zero?
+
+      # Check all previous required signatures are signed
+      signatures[0...sig_index].all? do |prev_sig|
+        !prev_sig["required"] || prev_sig["status"] == "signed"
+      end
+    end
+
+    # Get the signatures that are blocking a given signature
+    def blocking_signatures_for(sig_entry)
+      return [] unless sequential_signing?
+
+      sig_index = signatures.index(sig_entry)
+      return [] if sig_index.nil? || sig_index.zero?
+
+      # Return all previous required signatures that are not signed
+      signatures[0...sig_index].select do |prev_sig|
+        prev_sig["required"] && prev_sig["status"] != "signed"
+      end
+    end
+
+    # Get signature status with order information
+    def signature_with_order_status(sig_entry)
+      can_sign = can_sign_at_position?(sig_entry)
+      blocking = blocking_signatures_for(sig_entry)
+
+      {
+        can_sign_now: can_sign,
+        waiting_for: blocking.map { |b| b["signatory_label"] || b["label"] },
+        waiting_count: blocking.count
+      }
+    end
+
+    # Get next signatory who can sign
+    def next_signatory_to_sign
+      return nil unless pending_signatures?
+
+      pending_signatories.find { |sig| can_sign_at_position?(sig) }
     end
 
     def pending_signatories

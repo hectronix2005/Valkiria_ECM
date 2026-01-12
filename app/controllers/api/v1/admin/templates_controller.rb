@@ -342,6 +342,7 @@ module Api
             :default_third_party_type,
             :preview_scale,
             :preview_page_height,
+            :sequential_signing,
             variable_mappings: {}
           )
         end
@@ -387,6 +388,7 @@ module Api
             signatories_count: template.signatories.count,
             default_third_party_type: template.default_third_party_type,
             uses_third_party: template.uses_third_party_variables?,
+            sequential_signing: template.sequential_signing != false,
             preview_scale: template.preview_scale || 0.7,
             preview_page_height: template.preview_page_height || 842,
             pdf_width: template.pdf_width || 612,

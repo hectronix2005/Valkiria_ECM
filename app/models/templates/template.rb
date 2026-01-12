@@ -90,6 +90,11 @@ module Templates
     field :pdf_height, type: Float
     field :pdf_page_count, type: Integer, default: 1
 
+    # Signature workflow options
+    # When true, signatories must sign in order (by position)
+    # Each signatory can only sign after all previous signatories have signed
+    field :sequential_signing, type: Boolean, default: true
+
     # Associations
     belongs_to :organization, class_name: "Identity::Organization"
     belongs_to :created_by, class_name: "Identity::User", optional: true

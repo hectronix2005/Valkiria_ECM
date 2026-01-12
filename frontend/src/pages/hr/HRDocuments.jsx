@@ -484,6 +484,8 @@ export default function HRDocuments() {
   const [showVariablesPanel, setShowVariablesPanel] = useState(false)
   const [documentToDelete, setDocumentToDelete] = useState(null)
   const [downloading, setDownloading] = useState(null)
+  const [previewDocument, setPreviewDocument] = useState(null)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -639,6 +641,11 @@ export default function HRDocuments() {
     } finally {
       setDownloading(null)
     }
+  }
+
+  const handlePreview = (document) => {
+    setPreviewDocument(document)
+    setShowPreviewModal(true)
   }
 
   const formatDate = (dateStr) => {
@@ -946,6 +953,14 @@ export default function HRDocuments() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              onClick={() => handlePreview(doc)}
+                              title="Previsualizar"
+                            >
+                              <FileSearch className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => handleView(doc)}
                               title="Ver detalles"
                             >
@@ -1064,38 +1079,71 @@ export default function HRDocuments() {
             {/* Signatures */}
             {selectedDocument.signatures && selectedDocument.signatures.length > 0 && (
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Firmas</h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-gray-700">Firmas</h4>
+                  {selectedDocument.sequential_signing && (
+                    <span className="text-xs text-gray-500 flex items-center gap-1">
+                      <ArrowDown className="w-3 h-3" />
+                      Firma secuencial
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {selectedDocument.signatures.map((sig, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${
+                      sig.status === 'signed' ? 'bg-green-50' :
+                      sig.can_sign_now === false ? 'bg-gray-100 opacity-60' : 'bg-amber-50'
+                    }`}>
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          sig.status === 'signed' ? 'bg-green-100' : 'bg-amber-100'
-                        }`}>
-                          {sig.status === 'signed' ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <Clock className="w-4 h-4 text-amber-600" />
-                          )}
+                        <div className="flex items-center gap-1">
+                          <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-xs flex items-center justify-center font-medium">
+                            {idx + 1}
+                          </span>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            sig.status === 'signed' ? 'bg-green-100' :
+                            sig.can_sign_now === false ? 'bg-gray-200' : 'bg-amber-100'
+                          }`}>
+                            {sig.status === 'signed' ? (
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                            ) : sig.can_sign_now === false ? (
+                              <Lock className="w-4 h-4 text-gray-400" />
+                            ) : (
+                              <Clock className="w-4 h-4 text-amber-600" />
+                            )}
+                          </div>
                         </div>
                         <div>
                           <p className="text-sm font-medium">{sig.signatory_label}</p>
                           <p className="text-xs text-gray-500">
                             {sig.status === 'signed'
                               ? `Firmado por ${sig.signed_by_name} - ${formatDate(sig.signed_at)}`
+                              : sig.can_sign_now === false && sig.waiting_for?.length > 0
+                              ? `Esperando: ${sig.waiting_for.join(', ')}`
                               : sig.user_name || 'Pendiente'
                             }
                           </p>
                         </div>
                       </div>
-                      {sig.required && (
-                        <Badge variant="secondary" size="sm">Requerida</Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {sig.required && (
+                          <Badge variant="secondary" size="sm">Requerida</Badge>
+                        )}
+                        {sig.status !== 'signed' && sig.can_sign_now === false && (
+                          <Badge variant="secondary" size="sm" className="bg-gray-200 text-gray-600">
+                            Bloqueada
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
                 <div className="mt-3 text-sm text-gray-600">
                   Progreso: {selectedDocument.completed_signatures_count || 0} de {selectedDocument.total_required_signatures || 0} firmas
+                  {selectedDocument.next_signatory && (
+                    <span className="ml-2 text-primary-600">
+                      • Siguiente: {selectedDocument.next_signatory}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -1128,10 +1176,22 @@ export default function HRDocuments() {
                   Cerrar
                 </Button>
                 {selectedDocument.can_download && (
-                  <Button onClick={() => handleDownload(selectedDocument)} loading={downloading === selectedDocument.id}>
-                    <Download className="w-4 h-4" />
-                    Descargar PDF
-                  </Button>
+                  <>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setShowDetailModal(false)
+                        handlePreview(selectedDocument)
+                      }}
+                    >
+                      <FileSearch className="w-4 h-4" />
+                      Previsualizar
+                    </Button>
+                    <Button onClick={() => handleDownload(selectedDocument)} loading={downloading === selectedDocument.id}>
+                      <Download className="w-4 h-4" />
+                      Descargar PDF
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -1185,6 +1245,43 @@ export default function HRDocuments() {
         isOpen={showVariablesPanel}
         onClose={() => setShowVariablesPanel(false)}
       />
+
+      {/* Preview Modal */}
+      <Modal
+        isOpen={showPreviewModal}
+        onClose={() => { setShowPreviewModal(false); setPreviewDocument(null) }}
+        title={previewDocument?.name || 'Previsualización'}
+        size="full"
+      >
+        {previewDocument && (
+          <div className="h-[calc(100vh-200px)]">
+            <iframe
+              src={`/api/v1/documents/${previewDocument.id}/download`}
+              className="w-full h-full border-0 rounded-lg"
+              title="Vista previa del documento"
+            />
+            <div className="flex justify-between items-center mt-4 pt-4 border-t">
+              <div className="text-sm text-gray-500">
+                {previewDocument.template_name && (
+                  <span>Template: {previewDocument.template_name}</span>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => { setShowPreviewModal(false); setPreviewDocument(null) }}
+                >
+                  Cerrar
+                </Button>
+                <Button onClick={() => handleDownload(previewDocument)} loading={downloading === previewDocument.id}>
+                  <Download className="w-4 h-4" />
+                  Descargar PDF
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
