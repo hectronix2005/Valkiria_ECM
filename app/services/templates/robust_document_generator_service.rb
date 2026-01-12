@@ -654,6 +654,29 @@ module Templates
       Rails.logger.warn "Error rendering table: #{e.message}"
     end
 
+    def format_contract_type(type)
+      return nil if type.blank?
+
+      types = {
+        "indefinite" => "Término Indefinido",
+        "fixed_term" => "Término Fijo",
+        "work_or_labor" => "Obra o Labor",
+        "temporary" => "Temporal",
+        "apprenticeship" => "Aprendizaje"
+      }
+      types[type.to_s] || type.to_s.humanize
+    end
+
+    def format_currency(amount)
+      return nil if amount.blank?
+
+      "$#{number_with_delimiter(amount.to_i)}"
+    end
+
+    def number_with_delimiter(number, delimiter: ".")
+      number.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1' + delimiter).reverse
+    end
+
     def create_generated_document(pdf_content)
       file_name = "#{template.name.parameterize}-#{Time.current.strftime('%Y%m%d%H%M%S')}.pdf"
 
