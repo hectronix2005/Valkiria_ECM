@@ -310,49 +310,71 @@ module Templates
     end
 
     def resolve_contract_field(field)
-      return nil unless @contract
+      # If there's a commercial contract, use it
+      if @contract
+        case field
+        when "contract_number", "number"
+          return @contract.contract_number
+        when "title"
+          return @contract.title
+        when "description"
+          return @contract.description
+        when "contract_type", "type"
+          return @contract.type_label
+        when "status"
+          return @contract.status_label
+        when "amount"
+          return format_currency(@contract.amount)
+        when "amount_text"
+          return number_to_words(@contract.amount)
+        when "currency"
+          return @contract.currency
+        when "start_date"
+          return format_date(@contract.start_date)
+        when "start_date_text"
+          return format_date_text(@contract.start_date)
+        when "end_date"
+          return format_date(@contract.end_date)
+        when "end_date_text"
+          return format_date_text(@contract.end_date)
+        when "duration_days"
+          return @contract.duration_days.to_s
+        when "duration_text"
+          return format_contract_duration_from_days(@contract.duration_days)
+        when "payment_terms"
+          return @contract.payment_terms
+        when "payment_frequency"
+          return format_payment_frequency(@contract.payment_frequency)
+        when "approval_level"
+          return @contract.approval_level_label
+        when "approved_at"
+          return format_date(@contract.approved_at)
+        when "approved_at_text"
+          return format_date_text(@contract.approved_at)
+        else
+          return @contract.try(field)
+        end
+      end
+
+      # Fallback to employee contract data if no commercial contract but there's an employee
+      # This handles HR templates that might incorrectly use contract.* mappings
+      return nil unless @employee
 
       case field
-      when "contract_number", "number"
-        @contract.contract_number
-      when "title"
-        @contract.title
-      when "description"
-        @contract.description
-      when "contract_type", "type"
-        @contract.type_label
-      when "status"
-        @contract.status_label
-      when "amount"
-        format_currency(@contract.amount)
-      when "amount_text"
-        number_to_words(@contract.amount)
-      when "currency"
-        @contract.currency
       when "start_date"
-        format_date(@contract.start_date)
+        format_date(@employee.contract_start_date || @employee.hire_date)
       when "start_date_text"
-        format_date_text(@contract.start_date)
+        format_date_text(@employee.contract_start_date || @employee.hire_date)
       when "end_date"
-        format_date(@contract.end_date)
+        format_date(@employee.contract_end_date)
       when "end_date_text"
-        format_date_text(@contract.end_date)
-      when "duration_days"
-        @contract.duration_days.to_s
+        format_date_text(@employee.contract_end_date)
+      when "contract_type", "type"
+        format_contract_type(@employee.contract_type)
       when "duration_text"
-        format_contract_duration_from_days(@contract.duration_days)
-      when "payment_terms"
-        @contract.payment_terms
-      when "payment_frequency"
-        format_payment_frequency(@contract.payment_frequency)
-      when "approval_level"
-        @contract.approval_level_label
-      when "approved_at"
-        format_date(@contract.approved_at)
-      when "approved_at_text"
-        format_date_text(@contract.approved_at)
+        format_contract_duration
       else
-        @contract.try(field)
+        nil
       end
     end
 
