@@ -7,7 +7,11 @@ module Templates
     end
 
     def show?
-      owner? || hr_staff? || admin?
+      owner? || can_sign? || employee_document? || hr_staff? || admin?
+    end
+
+    def preview?
+      show?
     end
 
     def download?
@@ -29,8 +33,18 @@ module Templates
           # HR and Admin can see all documents in the organization
           scope.where(organization_id: user.organization_id)
         else
-          # Regular users only see documents they requested
-          scope.where(requested_by_id: user.id)
+          # Regular users see documents they:
+          # 1. Requested
+          # 2. Are the employee on
+          # 3. Have a signature on (pending or signed)
+          employee = ::Hr::Employee.for_user(user)
+          employee_id = employee&.id
+
+          conditions = [{ requested_by_id: user.id }]
+          conditions << { employee_id: employee_id } if employee_id
+          conditions << { "signatures.user_id" => user.id.to_s }
+
+          scope.where(organization_id: user.organization_id).any_of(*conditions)
         end
       end
 
@@ -46,6 +60,15 @@ module Templates
 
     def owner?
       record.requested_by_id == user.id
+    end
+
+    def can_sign?
+      record.signatures.any? { |s| s["user_id"] == user.id.to_s }
+    end
+
+    def employee_document?
+      employee = ::Hr::Employee.for_user(user)
+      employee && record.employee_id == employee.id
     end
 
     def hr_staff?
