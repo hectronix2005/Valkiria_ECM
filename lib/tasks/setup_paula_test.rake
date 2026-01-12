@@ -1,6 +1,28 @@
 # frozen_string_literal: true
 
 namespace :test_data do
+  desc "Fix signatory positions to be 1-based"
+  task fix_signatory_positions: :environment do
+    Templates::Template.all.each do |template|
+      next if template.signatories.empty?
+
+      puts "Template: #{template.name}"
+
+      # Sort signatories by current position and reassign 1, 2, 3...
+      sorted = template.signatories.sort_by { |s| s.position || 0 }
+      sorted.each_with_index do |sig, idx|
+        new_position = idx + 1
+        if sig.position != new_position
+          puts "  #{sig.label}: #{sig.position} -> #{new_position}"
+          sig.update!(position: new_position)
+        else
+          puts "  #{sig.label}: #{sig.position} (OK)"
+        end
+      end
+    end
+    puts "\nDone!"
+  end
+
   desc "Fix documents with inconsistent status"
   task fix_status: :environment do
     docs = Templates::GeneratedDocument.where(status: "pending_signatures")

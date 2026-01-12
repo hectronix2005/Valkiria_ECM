@@ -1667,7 +1667,7 @@ export default function TemplateEdit() {
                     >
                       <div className="flex flex-col items-center">
                         <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xs font-bold">
-                          {(sig.position ?? 0) + 1}
+                          {(sig.position ?? 0) === 0 ? 1 : sig.position}
                         </span>
                         <span className="text-[10px] text-gray-400">orden</span>
                       </div>
