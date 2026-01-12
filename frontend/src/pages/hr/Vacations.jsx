@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { vacationService, templateService } from '../../services/api'
+import { vacationService, publicTemplateService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
@@ -52,7 +52,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
   const { data: templateData } = useQuery({
     queryKey: ['vacation-template'],
     queryFn: async () => {
-      const response = await templateService.list({ category: 'vacation', status: 'active' })
+      const response = await publicTemplateService.list({ category: 'vacation' })
       return response.data?.data?.[0] || null
     },
   })

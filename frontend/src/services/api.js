@@ -187,6 +187,12 @@ export const variableMappingService = {
   removeAlias: (id, aliasName) => api.post(`/admin/variable_mappings/${id}/remove_alias`, { alias_name: aliasName }),
 }
 
+// Public - Templates (read-only, active only)
+export const publicTemplateService = {
+  list: (params) => api.get('/templates', { params }),
+  get: (id) => api.get(`/templates/${id}`),
+}
+
 // Admin - Templates
 export const templateService = {
   list: (params) => api.get('/admin/templates', { params }),

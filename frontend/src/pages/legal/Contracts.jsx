@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { contractService, thirdPartyService, thirdPartyTypeService, templateService, variableMappingService } from '../../services/api'
+import { contractService, thirdPartyService, thirdPartyTypeService, publicTemplateService, variableMappingService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
@@ -1723,7 +1723,7 @@ export default function Contracts() {
 
   const { data: templatesData } = useQuery({
     queryKey: ['templates-comercial'],
-    queryFn: () => templateService.list({ main_category: 'comercial', status: 'active' }),
+    queryFn: () => publicTemplateService.list({ main_category: 'comercial' }),
   })
 
   const { data: thirdPartyTypesData } = useQuery({

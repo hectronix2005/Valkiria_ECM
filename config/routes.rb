@@ -60,6 +60,9 @@ Rails.application.routes.draw do
       # Protected resources
       resources :users, only: [:index, :show]
 
+      # Public templates endpoint (read-only, active templates only)
+      resources :templates, only: [:index, :show]
+
       namespace :admin do
         resource :settings, only: [:show, :update]
 

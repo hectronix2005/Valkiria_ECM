@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { employeeService, templateService, generatedDocumentService } from '../../services/api'
+import { employeeService, publicTemplateService, generatedDocumentService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -1494,8 +1494,8 @@ export default function Employees() {
 
   // Query for contract templates (always enabled for form and modal)
   const { data: templatesData } = useQuery({
-    queryKey: ['templates', { category: 'contract', status: 'active' }],
-    queryFn: () => templateService.list({ category: 'contract', status: 'active' }),
+    queryKey: ['templates', { category: 'contract' }],
+    queryFn: () => publicTemplateService.list({ category: 'contract' }),
   })
 
   const contractTemplates = templatesData?.data?.data || []
