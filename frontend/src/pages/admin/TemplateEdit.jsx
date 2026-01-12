@@ -1647,6 +1647,15 @@ export default function TemplateEdit() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Info about signature order */}
+              {localSignatories.length > 0 && (
+                <div className="mb-3 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                  <p className="text-xs text-blue-700">
+                    <strong>Orden de firma:</strong> El número indica en qué secuencia deben firmar.
+                    Haz clic en <Edit2 className="w-3 h-3 inline" /> para cambiar el orden.
+                  </p>
+                </div>
+              )}
               {localSignatories.length > 0 ? (
                 <div className="space-y-2">
                   {/* Sort by position for display */}
