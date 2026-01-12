@@ -9,7 +9,14 @@ namespace :test_data do
     org = Identity::Organization.first
 
     puts "Employee: #{paula_emp.full_name}"
-    puts "Template: #{template.name}"
+    puts "Template: #{template.name} (status: #{template.status})"
+
+    # Activate template if not active
+    unless template.active?
+      puts "Activating template..."
+      template.activate!
+      puts "Template activated"
+    end
 
     # Delete existing test documents for Paula
     Templates::GeneratedDocument.where(
