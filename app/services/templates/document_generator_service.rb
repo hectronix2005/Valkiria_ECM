@@ -103,21 +103,34 @@ module Templates
     end
 
     def libreoffice_available?
-      system("which soffice > /dev/null 2>&1") ||
-        system("which libreoffice > /dev/null 2>&1")
+      # Check common LibreOffice paths on macOS, Linux, and Heroku
+      paths_to_check = [
+        "/app/.apt/usr/bin/soffice",  # Heroku apt buildpack path
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        "/usr/local/bin/soffice",
+        "/usr/bin/soffice",
+        "/usr/bin/libreoffice"
+      ]
+
+      @libreoffice_path = paths_to_check.find { |p| File.exist?(p) }
+      @libreoffice_path ||= `which soffice 2>/dev/null`.strip.presence
+      @libreoffice_path ||= `which libreoffice 2>/dev/null`.strip.presence
+
+      @libreoffice_path.present?
     end
 
     def convert_with_libreoffice(docx_path)
       output_dir = Dir.mktmpdir
       begin
-        cmd = "soffice --headless --convert-to pdf --outdir '#{output_dir}' '#{docx_path}'"
-        system(cmd)
+        cmd = "\"#{@libreoffice_path}\" --headless --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
+        result = `#{cmd}`
+        Rails.logger.info "LibreOffice conversion: #{result}"
 
         # Find the generated PDF
         pdf_files = Dir.glob(File.join(output_dir, "*.pdf"))
-        raise GenerationError, "Conversión a PDF falló" if pdf_files.empty?
+        raise GenerationError, "Conversión a PDF falló: #{result}" if pdf_files.empty?
 
-        File.read(pdf_files.first)
+        File.binread(pdf_files.first)
       ensure
         FileUtils.rm_rf(output_dir)
       end

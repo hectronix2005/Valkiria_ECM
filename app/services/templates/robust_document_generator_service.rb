@@ -415,8 +415,9 @@ module Templates
     end
 
     def libreoffice_available?
-      # Check common LibreOffice paths on macOS
+      # Check common LibreOffice paths on macOS, Linux, and Heroku
       paths_to_check = [
+        "/app/.apt/usr/bin/soffice",  # Heroku apt buildpack path
         "/Applications/LibreOffice.app/Contents/MacOS/soffice",
         "/usr/local/bin/soffice",
         "/usr/bin/soffice",
@@ -427,6 +428,7 @@ module Templates
       @libreoffice_path ||= `which soffice 2>/dev/null`.strip.presence
       @libreoffice_path ||= `which libreoffice 2>/dev/null`.strip.presence
 
+      Rails.logger.info "LibreOffice path: #{@libreoffice_path || 'NOT FOUND'}"
       @libreoffice_path.present?
     end
 
