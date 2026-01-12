@@ -671,9 +671,22 @@ export default function HRDocuments() {
     }
   }
 
-  const handlePreview = (document) => {
-    setPreviewDocument(document)
-    setShowPreviewModal(true)
+  const handlePreview = async (document) => {
+    try {
+      setPreviewDocument(document)
+      setShowPreviewModal(true)
+
+      // Fetch the PDF with authentication
+      const response = await generatedDocumentService.download(document.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const blobUrl = window.URL.createObjectURL(blob)
+      setPreviewDocument({ ...document, blobUrl })
+    } catch (error) {
+      console.error('Preview error:', error)
+      alert('Error al cargar la vista previa')
+      setShowPreviewModal(false)
+      setPreviewDocument(null)
+    }
   }
 
   const formatDate = (dateStr) => {
@@ -1289,17 +1302,29 @@ export default function HRDocuments() {
       {/* Preview Modal */}
       <Modal
         isOpen={showPreviewModal}
-        onClose={() => { setShowPreviewModal(false); setPreviewDocument(null) }}
+        onClose={() => {
+          if (previewDocument?.blobUrl) {
+            window.URL.revokeObjectURL(previewDocument.blobUrl)
+          }
+          setShowPreviewModal(false)
+          setPreviewDocument(null)
+        }}
         title={previewDocument?.name || 'Previsualización'}
         size="full"
       >
         {previewDocument && (
           <div className="h-[calc(100vh-200px)]">
-            <iframe
-              src={`/api/v1/documents/${previewDocument.id}/preview`}
-              className="w-full h-full border-0 rounded-lg"
-              title="Vista previa del documento"
-            />
+            {previewDocument.blobUrl ? (
+              <iframe
+                src={previewDocument.blobUrl}
+                className="w-full h-full border-0 rounded-lg"
+                title="Vista previa del documento"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500" />
+              </div>
+            )}
             <div className="flex justify-between items-center mt-4 pt-4 border-t">
               <div className="text-sm text-gray-500">
                 {previewDocument.template_name && (
