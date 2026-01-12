@@ -537,8 +537,14 @@ module Templates
     def check_completion!
       return unless all_required_signed?
 
-      # Generate final PDF with all signatures
-      Templates::PdfSignatureService.new(self).apply_all_signatures!
+      # Generate final PDF with all signatures (non-blocking on error)
+      begin
+        Templates::PdfSignatureService.new(self).apply_all_signatures!
+      rescue StandardError => e
+        Rails.logger.error("Error generating final PDF: #{e.message}")
+        Rails.logger.error(e.backtrace.first(5).join("\n"))
+        # Continue to mark as completed even if PDF generation fails
+      end
 
       update!(status: COMPLETED, completed_at: Time.current)
     end

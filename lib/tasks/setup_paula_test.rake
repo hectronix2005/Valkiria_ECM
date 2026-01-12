@@ -1,6 +1,21 @@
 # frozen_string_literal: true
 
 namespace :test_data do
+  desc "Fix documents with inconsistent status"
+  task fix_status: :environment do
+    docs = Templates::GeneratedDocument.where(status: "pending_signatures")
+    fixed = 0
+    docs.each do |doc|
+      if doc.all_required_signed?
+        puts "Fixing: #{doc.name} (#{doc.uuid})"
+        doc.update!(status: "completed", completed_at: Time.current)
+        fixed += 1
+      end
+    end
+    puts ""
+    puts "Fixed #{fixed} documents"
+  end
+
   desc "Setup Paula with signature and test document"
   task setup_paula: :environment do
     puts "Finding Paula..."
