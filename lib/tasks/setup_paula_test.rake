@@ -1,6 +1,39 @@
 # frozen_string_literal: true
 
 namespace :test_data do
+  desc "Assign employee to Paula's test document"
+  task assign_paula_employee: :environment do
+    paula = Identity::User.find_by(email: /paula/i)
+    doc = Templates::GeneratedDocument.find_by(uuid: "7282513c-a2d6-4a2a-87a2-12220128dd39")
+
+    unless doc
+      puts "Document not found"
+      exit 1
+    end
+
+    # Find or create employee for Paula
+    employee = Hr::Employee.find_by(email: paula.email) || Hr::Employee.for_user(paula)
+
+    if employee.nil?
+      employee = Hr::Employee.create!(
+        first_name: paula.first_name || "Paula",
+        last_name: paula.last_name || "Carrillo",
+        email: paula.email,
+        user_id: paula.id,
+        organization_id: paula.organization_id,
+        employee_number: "EMP-#{paula.id.to_s[-4..-1]}",
+        hire_date: Date.today,
+        status: "active"
+      )
+      puts "Created employee: #{employee.full_name}"
+    else
+      puts "Existing employee: #{employee.full_name} (#{employee.id})"
+    end
+
+    doc.update!(employee_id: employee.id)
+    puts "Document updated with employee_id: #{doc.employee_id}"
+  end
+
   desc "Fix signatory positions to be 1-based"
   task fix_signatory_positions: :environment do
     Templates::Template.all.each do |template|
