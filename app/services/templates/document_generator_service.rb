@@ -121,23 +121,35 @@ module Templates
 
     def convert_with_libreoffice(docx_path)
       output_dir = Dir.mktmpdir
-      begin
-        # Set LD_LIBRARY_PATH for Heroku apt buildpack
-        lib_path = "/app/.apt/usr/lib/libreoffice/program:/app/.apt/usr/lib/x86_64-linux-gnu"
-        env_prefix = "LD_LIBRARY_PATH=#{lib_path}:$LD_LIBRARY_PATH"
+      user_profile = Dir.mktmpdir("lo_profile")
 
-        cmd = "#{env_prefix} \"#{@libreoffice_path}\" --headless --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
+      begin
+        # Set environment for Heroku apt buildpack
+        lib_path = "/app/.apt/usr/lib/libreoffice/program:/app/.apt/usr/lib/x86_64-linux-gnu"
+        env_vars = [
+          "LD_LIBRARY_PATH=#{lib_path}:$LD_LIBRARY_PATH",
+          "HOME=/tmp"
+        ].join(" ")
+
+        # Use -env:UserInstallation to avoid profile issues
+        user_install = "-env:UserInstallation=file://#{user_profile}"
+
+        cmd = "#{env_vars} \"#{@libreoffice_path}\" --headless #{user_install} --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
         Rails.logger.info "Running LibreOffice: #{cmd}"
         result = `#{cmd}`
         Rails.logger.info "LibreOffice conversion result: #{result}"
 
         # Find the generated PDF
         pdf_files = Dir.glob(File.join(output_dir, "*.pdf"))
-        raise GenerationError, "Conversión a PDF falló: #{result}" if pdf_files.empty?
+        if pdf_files.empty?
+          Rails.logger.error "LibreOffice conversion failed, falling back to Prawn"
+          return convert_with_prawn(docx_path)
+        end
 
         File.binread(pdf_files.first)
       ensure
         FileUtils.rm_rf(output_dir)
+        FileUtils.rm_rf(user_profile)
       end
     end
 
