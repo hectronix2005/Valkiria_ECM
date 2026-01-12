@@ -632,86 +632,157 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
   if (!isOpen || !signatory) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">Editar Firmante</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
+          <h3 className="font-semibold">Editar Firmante</h3>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-4 h-4" />
-              <span className="text-sm">{error}</span>
-            </div>
-          )}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+            {error && (
+              <div className="p-2 bg-red-50 border border-red-200 rounded flex items-center gap-2 text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-              <p className="px-3 py-2 bg-gray-50 rounded-lg text-sm">{signatory.role_label}</p>
-            </div>
-            <Input
-              label="Etiqueta"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Ej: Firma del Empleado"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="edit-required"
-              checked={required}
-              onChange={(e) => setRequired(e.target.checked)}
-              className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-            />
-            <label htmlFor="edit-required" className="text-sm text-gray-700">
-              Firma requerida
-            </label>
-          </div>
-
-          {/* Page Selection */}
-          <div className="border-t pt-4">
-            <p className="text-sm font-medium text-gray-700 mb-3">Ubicación de la firma</p>
-
-            <div className="mb-4">
-              <label className="block text-xs text-gray-500 mb-2">Página</label>
-              <div className="flex gap-1 flex-wrap">
-                {[...Array(numPages)].map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setSelectedPage(i + 1)}
-                    className={`w-8 h-8 text-sm rounded-lg font-medium transition-colors ${
-                      selectedPage === i + 1
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
+            {/* Basic Info - Compact */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Tipo</label>
+                <p className="px-2 py-1 bg-gray-50 rounded text-sm truncate">{signatory.role_label}</p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Etiqueta</label>
+                <input
+                  type="text"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder="Ej: Firma del Empleado"
+                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                />
               </div>
             </div>
 
-            {/* Quick Position Presets */}
-            <div className="mb-4">
-              <label className="block text-xs text-gray-500 mb-2">Posición rápida</label>
-              <div className="flex gap-1 flex-wrap">
-                {positionPresets.map((preset) => (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={required}
+                onChange={(e) => setRequired(e.target.checked)}
+                className="w-3.5 h-3.5 text-primary-600 rounded"
+              />
+              <span className="text-sm text-gray-700">Firma requerida</span>
+            </label>
+
+            {/* Location Section */}
+            <div className="border-t pt-2">
+              <p className="text-xs font-medium text-gray-600 mb-2">Ubicación</p>
+
+              {/* Page + Quick Position in one row */}
+              <div className="flex gap-2 items-center mb-2">
+                <span className="text-xs text-gray-500 shrink-0">Pág:</span>
+                <div className="flex gap-0.5">
+                  {[...Array(Math.min(numPages, 10))].map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSelectedPage(i + 1)}
+                      className={`w-6 h-6 text-xs rounded font-medium ${
+                        selectedPage === i + 1
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-gray-400 mx-1">|</span>
+                {positionPresets.slice(0, 3).map((preset) => (
                   <button
                     key={preset.label}
                     type="button"
-                    onClick={() => {
-                      setXPosition(preset.x)
-                      setYInPage(preset.y)
+                    onClick={() => { setXPosition(preset.x); setYInPage(preset.y) }}
+                    className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Position & Size Controls - Compact Grid */}
+              <div className="grid grid-cols-4 gap-1.5">
+                <div>
+                  <label className="block text-xs text-gray-400">X</label>
+                  <input
+                    type="number"
+                    value={xPosition}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10)
+                      if (!isNaN(val)) setXPosition(Math.max(0, Math.min(PDF_WIDTH - width, val)))
                     }}
-                    className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400">Y</label>
+                  <input
+                    type="number"
+                    value={yInPage}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10)
+                      if (!isNaN(val)) setYInPage(Math.max(0, Math.min(PDF_HEIGHT - height, val)))
+                    }}
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400">Ancho</label>
+                  <input
+                    type="number"
+                    value={width}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10)
+                      if (!isNaN(val)) setWidth(Math.max(20, Math.min(400, val)))
+                    }}
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400">Alto</label>
+                  <input
+                    type="number"
+                    value={height}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10)
+                      if (!isNaN(val)) setHeight(Math.max(15, Math.min(200, val)))
+                    }}
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Size Presets - Inline */}
+              <div className="flex gap-1 mt-2">
+                <span className="text-xs text-gray-400 shrink-0 py-0.5">Tamaño:</span>
+                {[
+                  { label: 'S', w: 120, h: 45 },
+                  { label: 'M', w: 160, h: 60 },
+                  { label: 'L', w: 200, h: 80 },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => { setWidth(preset.w); setHeight(preset.h) }}
+                    className={`px-2 py-0.5 text-xs rounded ${
+                      width === preset.w && height === preset.h
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
                   >
                     {preset.label}
                   </button>
@@ -719,159 +790,59 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
               </div>
             </div>
 
-            {/* Position Controls */}
-            <div className="grid grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">X</label>
-                <input
-                  type="number"
-                  value={xPosition}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10)
-                    if (!isNaN(val)) setXPosition(Math.max(0, Math.min(PDF_WIDTH - width, val)))
-                  }}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
-                  min="0"
-                  max={PDF_WIDTH - width}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Y en pág</label>
-                <input
-                  type="number"
-                  value={yInPage}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10)
-                    if (!isNaN(val)) setYInPage(Math.max(0, Math.min(PDF_HEIGHT - height, val)))
-                  }}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
-                  min="0"
-                  max={PDF_HEIGHT - height}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Ancho</label>
-                <input
-                  type="number"
-                  value={width}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10)
-                    if (!isNaN(val)) setWidth(Math.max(20, Math.min(400, val)))
-                  }}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
-                  min="20"
-                  max="400"
-                  step="10"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Alto</label>
-                <input
-                  type="number"
-                  value={height}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10)
-                    if (!isNaN(val)) setHeight(Math.max(15, Math.min(200, val)))
-                  }}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
-                  min="15"
-                  max="200"
-                  step="5"
-                />
-              </div>
-            </div>
-
-            {/* Size Presets */}
-            <div className="mt-3">
-              <label className="block text-xs text-gray-500 mb-2">Tamaño rápido</label>
-              <div className="flex gap-1 flex-wrap">
-                {[
-                  { label: 'XS', w: 80, h: 30 },
-                  { label: 'S', w: 120, h: 45 },
-                  { label: 'M', w: 160, h: 60 },
-                  { label: 'L', w: 200, h: 80 },
-                  { label: 'XL', w: 280, h: 100 },
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    onClick={() => {
-                      setWidth(preset.w)
-                      setHeight(preset.h)
-                    }}
-                    className={`px-2 py-1 text-xs rounded transition-colors ${
-                      width === preset.w && height === preset.h
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {preset.label} ({preset.w}×{preset.h})
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Date Position */}
-            <div className="mt-4 border-t pt-4">
-              <label className="block text-xs text-gray-500 mb-2">Posición de la fecha</label>
-              <div className="grid grid-cols-2 gap-2">
+            {/* Date Position - Compact */}
+            <div className="border-t pt-2">
+              <p className="text-xs font-medium text-gray-600 mb-1.5">Posición de fecha</p>
+              <div className="grid grid-cols-4 gap-1">
                 {DATE_POSITION_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
                     onClick={() => setDatePosition(opt.value)}
-                    className={`p-2 text-left rounded-lg border-2 transition-all ${
+                    className={`px-2 py-1 text-xs rounded border ${
                       datePosition === opt.value
-                        ? 'border-primary-500 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
                     }`}
                   >
-                    <p className={`text-sm font-medium ${datePosition === opt.value ? 'text-primary-700' : 'text-gray-700'}`}>
-                      {opt.label}
-                    </p>
-                    <p className="text-xs text-gray-500">{opt.desc}</p>
+                    {opt.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Display Options */}
-            <div className="mt-4 border-t pt-4">
-              <label className="block text-xs text-gray-500 mb-2">Elementos a mostrar en la firma</label>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
+            {/* Display Options - Compact */}
+            <div className="border-t pt-2">
+              <p className="text-xs font-medium text-gray-600 mb-1.5">Mostrar</p>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={showLabel}
                     onChange={(e) => setShowLabel(e.target.checked)}
-                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                    className="w-3.5 h-3.5 text-primary-600 rounded"
                   />
-                  <span className="text-sm text-gray-700">Mostrar etiqueta</span>
-                  <span className="text-xs text-gray-400">({signatory?.label || 'Ej: Representante Legal'})</span>
+                  <span className="text-xs text-gray-700">Etiqueta</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={showSignerName}
                     onChange={(e) => setShowSignerName(e.target.checked)}
-                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                    className="w-3.5 h-3.5 text-primary-600 rounded"
                   />
-                  <span className="text-sm text-gray-700">Mostrar nombre del firmante</span>
-                  <span className="text-xs text-gray-400">(Ej: Juan Pérez)</span>
+                  <span className="text-xs text-gray-700">Nombre firmante</span>
                 </label>
               </div>
-              <p className="text-xs text-gray-400 mt-2">
-                La fecha se controla con la opción "Posición de la fecha" arriba.
-              </p>
             </div>
 
-            {/* Position Summary */}
-            <div className="mt-3 p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
-              <span className="font-medium">Resumen:</span> Página {selectedPage}, posición ({xPosition}, {yInPage}) → Y absoluta: {absoluteY}, tamaño {width}×{height}, fecha: {DATE_POSITION_OPTIONS.find(o => o.value === datePosition)?.label}
+            {/* Summary - Minimal */}
+            <div className="p-1.5 bg-gray-50 rounded text-xs text-gray-500">
+              Pág {selectedPage} • ({xPosition}, {yInPage}) • {width}×{height} • Fecha: {datePosition}
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-2 px-4 py-2 border-t shrink-0">
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancelar
             </Button>
