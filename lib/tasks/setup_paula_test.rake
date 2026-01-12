@@ -1,6 +1,58 @@
 # frozen_string_literal: true
 
 namespace :test_data do
+  desc "Generate new document for Paula with her data"
+  task generate_paula_contract: :environment do
+    paula_user = Identity::User.where(email: /paula/i).first
+    paula_emp = Hr::Employee.where(user_id: paula_user.id).first
+    template = Templates::Template.where(name: /Contrato termino indefinido/i).first
+
+    puts "Employee: #{paula_emp.full_name}"
+    puts "Template: #{template.name}"
+
+    # Delete existing test documents for Paula
+    Templates::GeneratedDocument.where(
+      employee_id: paula_emp.id,
+      :name => /paula/i
+    ).destroy_all
+    puts "Deleted old test documents"
+
+    service = Templates::DocumentGeneratorService.new(
+      template: template,
+      employee: paula_emp,
+      requested_by: paula_user
+    )
+
+    result = service.generate
+
+    if result[:success]
+      doc = result[:document]
+      puts ""
+      puts "=== Document Generated ==="
+      puts "UUID: #{doc.uuid}"
+      puts "Name: #{doc.name}"
+      puts "Status: #{doc.status}"
+      puts "Has PDF: #{doc.draft_file_id.present?}"
+
+      # Initialize signatures if template has signatories
+      if template.signatories.any?
+        doc.initialize_signatures!
+        doc.update!(status: "pending_signatures")
+        doc.reload
+        puts ""
+        puts "Signatures initialized:"
+        doc.signatures.each_with_index do |sig, idx|
+          puts "  #{idx + 1}. #{sig['signatory_label']}: #{sig['status']} (#{sig['user_name']})"
+        end
+      end
+
+      puts ""
+      puts "Paula can sign: #{doc.can_be_signed_by?(paula_user)}"
+    else
+      puts "Error: #{result[:error]}"
+    end
+  end
+
   desc "Recreate Paula's document with clean PDF"
   task recreate_paula_doc: :environment do
     # Get clean PDF from draft document
