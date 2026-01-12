@@ -235,6 +235,8 @@ module Api
             total_required_signatures: document.total_required_signatures,
             all_signed: document.all_required_signed?,
             can_sign: document.can_be_signed_by?(current_user),
+            has_pending_signature: document.find_pending_signature_for(current_user).present?,
+            user_has_digital_signature: current_user.signatures.active.exists?,
             next_signatory: document.next_signatory_to_sign&.dig("signatory_label"),
             completed_at: document.completed_at&.iso8601,
             can_download: document.draft_file_id.present?

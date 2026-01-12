@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { generatedDocumentService, variableMappingService } from '../../services/api'
+import { useNavigate } from 'react-router-dom'
+import { generatedDocumentService, variableMappingService, signatureService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -21,6 +22,7 @@ import {
   ChevronRight,
   FileSearch,
   AlertCircle,
+  AlertTriangle,
   Trash2,
   ArrowUpDown,
   ArrowUp,
@@ -476,6 +478,7 @@ function VariablesPanel({ isOpen, onClose }) {
 export default function HRDocuments() {
   const { isAdmin, isHR } = useAuth()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   const [page, setPage] = useState(1)
   const [selectedDocument, setSelectedDocument] = useState(null)
@@ -486,6 +489,7 @@ export default function HRDocuments() {
   const [downloading, setDownloading] = useState(null)
   const [previewDocument, setPreviewDocument] = useState(null)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [showNoSignatureModal, setShowNoSignatureModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -504,6 +508,17 @@ export default function HRDocuments() {
       q: searchQuery || undefined
     })
   })
+
+  // Fetch user's digital signatures
+  const { data: signaturesData } = useQuery({
+    queryKey: ['signatures'],
+    queryFn: () => signatureService.list()
+  })
+
+  const hasActiveSignature = () => {
+    const signatures = signaturesData?.data?.data || []
+    return signatures.some(sig => sig.active)
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.delete(id),
@@ -618,6 +633,19 @@ export default function HRDocuments() {
   }
 
   const handleSign = (document) => {
+    // First check if user has a digital signature configured
+    if (!document.user_has_digital_signature && !hasActiveSignature()) {
+      setShowNoSignatureModal(true)
+      return
+    }
+    // If blocked by sequential signing, show alert with waiting info
+    if (!document.can_sign && document.has_pending_signature) {
+      const userSig = document.signatures?.find(s => s.status === 'pending' && s.waiting_for?.length > 0)
+      if (userSig?.waiting_for?.length > 0) {
+        alert(`Debes esperar las firmas de: ${userSig.waiting_for.join(', ')}`)
+        return
+      }
+    }
     signMutation.mutate(document.id)
   }
 
@@ -1160,7 +1188,7 @@ export default function HRDocuments() {
                     Eliminar
                   </Button>
                 )}
-                {selectedDocument.can_sign && (
+                {(selectedDocument.can_sign || selectedDocument.has_pending_signature) && (
                   <Button
                     variant="primary"
                     onClick={() => handleSign(selectedDocument)}
@@ -1281,6 +1309,48 @@ export default function HRDocuments() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* No Signature Modal */}
+      <Modal
+        isOpen={showNoSignatureModal}
+        onClose={() => setShowNoSignatureModal(false)}
+        title="Firma Digital Requerida"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-lg">
+            <AlertTriangle className="w-8 h-8 text-amber-500 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-gray-900">
+                No tienes una firma digital configurada
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                Para firmar documentos necesitas crear tu firma digital primero.
+              </p>
+            </div>
+          </div>
+          <p className="text-sm text-gray-500">
+            Ve a tu perfil para crear tu firma digital. Puedes dibujarla o usar una firma estilizada con tu nombre.
+          </p>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button
+              variant="secondary"
+              onClick={() => setShowNoSignatureModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowNoSignatureModal(false)
+                navigate('/profile')
+              }}
+            >
+              <PenTool className="w-4 h-4" />
+              Ir a Crear Firma
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { vacationService, certificationService, approvalService, dashboardService, generatedDocumentService } from '../services/api'
+import { vacationService, certificationService, approvalService, dashboardService, generatedDocumentService, signatureService } from '../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
@@ -16,7 +18,9 @@ import {
   ArrowRight,
   Plus,
   PenTool,
-  FileCheck
+  FileCheck,
+  AlertTriangle,
+  X
 } from 'lucide-react'
 
 function StatCard({ title, value, icon: Icon, color, subtitle }) {
@@ -90,6 +94,8 @@ function RecentRequestCard({ request, type }) {
 export default function Dashboard() {
   const { user, isHR, isSupervisor } = useAuth()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [showNoSignatureModal, setShowNoSignatureModal] = useState(false)
 
   const { data: vacationsData } = useQuery({
     queryKey: ['vacations', 'recent'],
@@ -118,6 +124,34 @@ export default function Dashboard() {
     queryKey: ['documents', 'pending_signatures'],
     queryFn: () => generatedDocumentService.pendingSignatures(),
   })
+
+  // Fetch user's digital signatures
+  const { data: signaturesData } = useQuery({
+    queryKey: ['signatures'],
+    queryFn: () => signatureService.list()
+  })
+
+  const hasActiveSignature = () => {
+    const signatures = signaturesData?.data?.data || []
+    return signatures.some(sig => sig.active)
+  }
+
+  const handleSign = (doc) => {
+    // First check if user has a digital signature configured
+    if (!doc.user_has_digital_signature && !hasActiveSignature()) {
+      setShowNoSignatureModal(true)
+      return
+    }
+    // If blocked by sequential signing, show alert with waiting info
+    if (!doc.can_sign && doc.has_pending_signature) {
+      const userSig = doc.signatures?.find(s => s.status === 'pending' && s.waiting_for?.length > 0)
+      if (userSig?.waiting_for?.length > 0) {
+        alert(`Debes esperar las firmas de: ${userSig.waiting_for.join(', ')}`)
+        return
+      }
+    }
+    signMutation.mutate(doc.id)
+  }
 
   const signMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.sign(id),
@@ -246,9 +280,8 @@ export default function Dashboard() {
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      onClick={() => signMutation.mutate(doc.id)}
+                      onClick={() => handleSign(doc)}
                       loading={signMutation.isPending}
-                      disabled={!doc.can_sign}
                     >
                       <PenTool className="w-4 h-4" />
                       Firmar
@@ -375,6 +408,53 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      {/* No Signature Modal */}
+      {showNoSignatureModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">Firma Digital Requerida</h3>
+              <button onClick={() => setShowNoSignatureModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-lg">
+                <AlertTriangle className="w-8 h-8 text-amber-500 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-gray-900">
+                    No tienes una firma digital configurada
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Para firmar documentos necesitas crear tu firma digital primero.
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-500">
+                Ve a tu perfil para crear tu firma digital. Puedes dibujarla o usar una firma estilizada con tu nombre.
+              </p>
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowNoSignatureModal(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowNoSignatureModal(false)
+                    navigate('/profile')
+                  }}
+                >
+                  <PenTool className="w-4 h-4" />
+                  Ir a Crear Firma
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
