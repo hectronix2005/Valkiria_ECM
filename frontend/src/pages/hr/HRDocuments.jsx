@@ -1256,7 +1256,7 @@ export default function HRDocuments() {
         {previewDocument && (
           <div className="h-[calc(100vh-200px)]">
             <iframe
-              src={`/api/v1/documents/${previewDocument.id}/download`}
+              src={`/api/v1/documents/${previewDocument.id}/preview`}
               className="w-full h-full border-0 rounded-lg"
               title="Vista previa del documento"
             />

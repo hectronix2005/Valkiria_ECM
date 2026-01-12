@@ -44,6 +44,7 @@ Rails.application.routes.draw do
         end
         member do
           get :download
+          get :preview
           post :sign
         end
       end

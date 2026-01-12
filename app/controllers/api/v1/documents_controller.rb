@@ -3,7 +3,7 @@
 module Api
   module V1
     class DocumentsController < BaseController
-      before_action :set_document, only: [:show, :download, :destroy, :sign]
+      before_action :set_document, only: [:show, :download, :preview, :destroy, :sign]
 
       # GET /api/v1/documents
       def index
@@ -52,6 +52,22 @@ module Api
                     filename: @document.file_name || "#{@document.name}.pdf",
                     type: "application/pdf",
                     disposition: "attachment"
+        else
+          render json: { error: "El archivo no está disponible" }, status: :not_found
+        end
+      end
+
+      # GET /api/v1/documents/:id/preview
+      def preview
+        authorize @document
+
+        file_content = @document.file_content
+
+        if file_content
+          send_data file_content,
+                    filename: @document.file_name || "#{@document.name}.pdf",
+                    type: "application/pdf",
+                    disposition: "inline"
         else
           render json: { error: "El archivo no está disponible" }, status: :not_found
         end
