@@ -42,6 +42,10 @@ case "$1" in
     echo "Generating PDF previews for templates without them..."
     bundle exec rake db:sync:generate_previews
     ;;
+  documents|docs)
+    echo "Processing pending document PDF generation..."
+    bundle exec rake db:sync:generate_pending_pdfs
+    ;;
   *)
     echo "VALKYRIA ECM Database Sync"
     echo ""
@@ -54,11 +58,13 @@ case "$1" in
     echo "  backup       Backup database (local|production)"
     echo "  collection   Sync specific collection"
     echo "  previews     Generate PDF previews for new templates"
+    echo "  documents    Generate PDFs for pending documents (local LibreOffice)"
     echo ""
     echo "Examples:"
     echo "  bin/sync to                           # Push local to production"
     echo "  bin/sync from                         # Pull production to local"
     echo "  bin/sync previews                     # Generate missing PDF previews"
+    echo "  bin/sync documents                    # Generate pending document PDFs"
     echo "  bin/sync backup production            # Backup production"
     echo "  bin/sync collection to users          # Sync users to production"
     ;;

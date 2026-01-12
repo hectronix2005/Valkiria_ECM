@@ -195,17 +195,26 @@ module Templates
       output_file.close
 
       begin
-        # Process the DOCX file
+        # Process the DOCX file (replace variables)
         process_docx(input_file.path, output_file.path)
 
         # Log replacement results
         log_replacement_results
 
-        # Convert to PDF
+        # Read the processed DOCX content
+        docx_content = File.binread(output_file.path)
+
+        # Try to convert to PDF
         pdf_content = convert_to_pdf(output_file.path)
 
-        # Create GeneratedDocument record
-        create_generated_document(pdf_content)
+        if pdf_content
+          # PDF conversion successful - create complete document
+          create_generated_document(pdf_content, docx_content: nil)
+        else
+          # PDF conversion failed - store DOCX for local sync
+          Rails.logger.warn "PDF conversion failed. Storing DOCX for local sync workflow."
+          create_generated_document_pending_pdf(docx_content)
+        end
       ensure
         input_file.unlink
         output_file.unlink
@@ -415,6 +424,13 @@ module Templates
       if gotenberg_available?
         result = convert_with_gotenberg(docx_path)
         return result if result
+      end
+
+      # If USE_LOCAL_PDF_SYNC is enabled, skip inferior fallbacks
+      # and return nil to trigger local sync workflow
+      if ENV["USE_LOCAL_PDF_SYNC"] == "true"
+        Rails.logger.info "Local PDF sync enabled. Skipping fallback converters."
+        return nil
       end
 
       # Priority 3: Pandoc + wkhtmltopdf (works on Heroku without external APIs)
@@ -848,7 +864,7 @@ module Templates
       number.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1' + delimiter).reverse
     end
 
-    def create_generated_document(pdf_content)
+    def create_generated_document(pdf_content, docx_content: nil)
       file_name = "#{template.name.parameterize}-#{Time.current.strftime('%Y%m%d%H%M%S')}.pdf"
 
       pdf_file = Mongoid::GridFs.put(
@@ -866,10 +882,38 @@ module Templates
         file_name: file_name,
         variable_values: variable_values,
         source: context[:request],
-        employee: context[:employee]
+        employee: context[:employee],
+        pdf_generation_status: "completed"
       )
 
       generated_doc.initialize_signatures!
+      generated_doc
+    end
+
+    def create_generated_document_pending_pdf(docx_content)
+      file_name = "#{template.name.parameterize}-#{Time.current.strftime('%Y%m%d%H%M%S')}"
+
+      # Store DOCX in GridFS for later local conversion
+      docx_file = Mongoid::GridFs.put(
+        StringIO.new(docx_content),
+        filename: "#{file_name}.docx",
+        content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      )
+
+      generated_doc = GeneratedDocument.create!(
+        name: "#{file_name}.pdf",
+        template: template,
+        organization: context[:organization],
+        requested_by: context[:user],
+        docx_file_id: docx_file.id,
+        file_name: "#{file_name}.pdf",
+        variable_values: variable_values,
+        source: context[:request],
+        employee: context[:employee],
+        pdf_generation_status: "pending"
+      )
+
+      Rails.logger.info "Document created with pending PDF generation: #{generated_doc.uuid}"
       generated_doc
     end
 

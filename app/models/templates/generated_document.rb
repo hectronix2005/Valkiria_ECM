@@ -22,7 +22,12 @@ module Templates
     # PDF file storage (GridFS)
     field :draft_file_id, type: BSON::ObjectId  # Initial generated PDF
     field :final_file_id, type: BSON::ObjectId  # PDF with all signatures
+    field :docx_file_id, type: BSON::ObjectId   # Source DOCX for local PDF generation
     field :file_name, type: String
+
+    # PDF generation tracking (for local sync workflow)
+    field :pdf_generation_status, type: String, default: "completed"
+    # Values: "completed", "pending", "failed"
 
     # Variable values used for generation
     field :variable_values, type: Hash, default: {}
@@ -66,6 +71,7 @@ module Templates
     scope :completed, -> { where(status: COMPLETED) }
     scope :cancelled, -> { where(status: CANCELLED) }
     scope :for_user, ->(user) { where(requested_by_id: user.id) }
+    scope :pending_pdf_generation, -> { where(pdf_generation_status: "pending") }
     scope :pending_signature_by, lambda { |user|
       where(
         status: PENDING_SIGNATURES,
@@ -410,6 +416,37 @@ module Templates
     rescue StandardError => e
       Rails.logger.error "Error reading generated document from GridFS: #{e.message}"
       nil
+    end
+
+    def docx_content
+      return nil unless docx_file_id
+
+      file = Mongoid::GridFs.get(docx_file_id)
+      file.data
+    rescue StandardError => e
+      Rails.logger.error "Error reading DOCX from GridFS: #{e.message}"
+      nil
+    end
+
+    def pending_pdf?
+      pdf_generation_status == "pending"
+    end
+
+    def store_pdf_from_sync!(pdf_content)
+      file_name = "#{name.parameterize}.pdf"
+      pdf_file = Mongoid::GridFs.put(
+        StringIO.new(pdf_content),
+        filename: file_name,
+        content_type: "application/pdf"
+      )
+
+      update!(
+        draft_file_id: pdf_file.id,
+        pdf_generation_status: "completed"
+      )
+
+      # Initialize signatures now that we have a PDF
+      initialize_signatures!
     end
 
     def cancel!(reason: nil)

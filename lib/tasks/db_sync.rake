@@ -264,6 +264,131 @@ namespace :db do
       puts "=" * 60 + "\n"
     end
 
+    desc "Generate PDFs for documents pending local conversion"
+    task generate_pending_pdfs: :environment do
+      puts "\n" + "=" * 60
+      puts "📄 GENERATE PENDING DOCUMENT PDFs"
+      puts "=" * 60
+      puts "\nThis will:"
+      puts "  1. Sync pending documents from production"
+      puts "  2. Convert DOCX to PDF locally (using LibreOffice)"
+      puts "  3. Sync generated PDFs back to production\n"
+
+      # Check LibreOffice availability
+      libreoffice_path = find_libreoffice
+      unless libreoffice_path
+        puts "❌ LibreOffice not found! Install it with: brew install --cask libreoffice"
+        next
+      end
+      puts "✓ LibreOffice found: #{libreoffice_path}"
+
+      # Step 1: Sync from production
+      puts "\n📥 Step 1: Syncing documents and files from production..."
+      %w[generated_documents fs.files fs.chunks].each do |col|
+        sync_collection_from_production(col)
+        puts "   ✓ #{col}"
+      end
+
+      # Step 2: Find pending documents
+      puts "\n🔍 Step 2: Finding documents pending PDF generation..."
+      pending_docs = Templates::GeneratedDocument.pending_pdf_generation.to_a
+
+      if pending_docs.empty?
+        puts "   ✓ No pending documents found!"
+        puts "\n" + "=" * 60
+        next
+      end
+
+      puts "   Found #{pending_docs.count} document(s) pending PDF generation:"
+      pending_docs.each { |d| puts "   - #{d.name} (#{d.uuid})" }
+
+      # Step 3: Generate PDFs
+      puts "\n🖨️  Step 3: Generating PDFs (using LibreOffice)..."
+      generated = 0
+      pending_docs.each do |doc|
+        print "   Converting: #{doc.name}..."
+
+        docx_content = doc.docx_content
+        unless docx_content
+          puts " ⚠️  No DOCX content, skipped"
+          next
+        end
+
+        begin
+          pdf_content = convert_docx_to_pdf_locally(docx_content, libreoffice_path)
+          if pdf_content
+            doc.store_pdf_from_sync!(pdf_content)
+            generated += 1
+            puts " ✓ (#{pdf_content.bytesize} bytes)"
+          else
+            puts " ⚠️  Conversion failed"
+            doc.update!(pdf_generation_status: "failed")
+          end
+        rescue StandardError => e
+          puts " ❌ Error: #{e.message}"
+          doc.update!(pdf_generation_status: "failed")
+        end
+      end
+
+      puts "   Generated #{generated} PDF(s)"
+
+      # Step 4: Sync back to production
+      if generated > 0
+        puts "\n📤 Step 4: Syncing PDFs to production..."
+        %w[generated_documents fs.files fs.chunks].each do |col|
+          sync_collection_to_production(col)
+          puts "   ✓ #{col}"
+        end
+        puts "\n✅ Done! #{generated} PDF(s) generated and synced to production."
+      else
+        puts "\n⚠️  No PDFs were generated."
+      end
+
+      puts "=" * 60 + "\n"
+    end
+
+    def find_libreoffice
+      paths = [
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        "/usr/local/bin/soffice",
+        "/usr/bin/soffice",
+        "/usr/bin/libreoffice"
+      ]
+      paths.find { |p| File.exist?(p) } || `which soffice 2>/dev/null`.strip.presence
+    end
+
+    def convert_docx_to_pdf_locally(docx_content, libreoffice_path)
+      require "tempfile"
+      require "fileutils"
+
+      # Create temp files
+      input_file = Tempfile.new(["document", ".docx"])
+      input_file.binmode
+      input_file.write(docx_content)
+      input_file.close
+
+      output_dir = Dir.mktmpdir
+      user_profile = Dir.mktmpdir("lo_profile")
+
+      begin
+        # Run LibreOffice conversion
+        cmd = "\"#{libreoffice_path}\" --headless -env:UserInstallation=file://#{user_profile} " \
+              "--convert-to pdf --outdir \"#{output_dir}\" \"#{input_file.path}\" 2>&1"
+
+        result = `#{cmd}`
+
+        # Find generated PDF
+        pdf_files = Dir.glob(File.join(output_dir, "*.pdf"))
+        return nil if pdf_files.empty?
+
+        File.binread(pdf_files.first)
+      ensure
+        input_file.unlink
+        FileUtils.rm_rf(output_dir)
+        FileUtils.rm_rf(user_profile)
+      end
+    end
+
     desc "Recalculate PDF dimensions for all templates with previews"
     task recalculate_pdf_dimensions: :environment do
       puts "\n" + "=" * 60
