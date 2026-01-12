@@ -25,18 +25,28 @@ module Templates
         pages = pdf.pages
         total_pages = pages.count
 
+        # Get standard page height (assume all pages are same height)
+        standard_page_height = pages.first&.mediabox&.dig(3) || 792.0
+
         # Apply each signature to the correct page
         @generated_document.signed_signatories.each do |sig_entry|
           signatory = find_signatory(sig_entry["signatory_id"])
           next unless signatory
 
-          # Get the page number from the signatory config (1-indexed)
-          page_number = signatory.page_number || total_pages
+          # Calculate actual page from absolute Y coordinate
+          # y_position is the distance from top of entire document
+          absolute_y = signatory.y_position || 0
+
+          # Calculate which page this Y coordinate falls on (0-indexed)
+          calculated_page_index = (absolute_y / standard_page_height).floor
+
           # Clamp to valid range
-          page_index = [[page_number - 1, 0].max, total_pages - 1].min
+          page_index = [[calculated_page_index, 0].max, total_pages - 1].min
           target_page = pages[page_index]
 
-          apply_signature_to_page(target_page, sig_entry, page_index)
+          Rails.logger.info "Signature #{signatory.label}: absolute_y=#{absolute_y}, page_height=#{standard_page_height}, calculated_page=#{calculated_page_index + 1}, actual_page=#{page_index + 1}"
+
+          apply_signature_to_page(target_page, sig_entry, page_index, standard_page_height)
         end
 
         # Save the final PDF
@@ -62,7 +72,7 @@ module Templates
 
     private
 
-    def apply_signature_to_page(page, sig_entry, page_index = 0)
+    def apply_signature_to_page(page, sig_entry, page_index, page_height)
       # Get signature data
       signature = find_signature(sig_entry["signature_id"])
       return unless signature
@@ -83,7 +93,8 @@ module Templates
         signatory: signatory,
         sig_entry: sig_entry,
         page_width: page.mediabox[2],
-        page_height: page.mediabox[3]
+        page_height: page_height,
+        target_page_index: page_index
       )
 
       # Merge overlay onto page
@@ -116,16 +127,23 @@ module Templates
       end
     end
 
-    def create_signature_overlay(image_data:, signatory:, sig_entry:, page_width:, page_height:)
+    def create_signature_overlay(image_data:, signatory:, sig_entry:, page_width:, page_height:, target_page_index:)
       # Get position from signatory config
       box = signatory.signature_box
       x = box[:x]
-      y = box[:y]  # y from top of document
+      absolute_y = box[:y]  # y from top of ENTIRE document (absolute coordinate)
       width = box[:width]
       height = box[:height]
       show_label = box[:show_label].nil? ? true : box[:show_label]
       show_signer_name = box[:show_signer_name] || false
       date_position = box[:date_position] || "right"
+
+      # Convert absolute Y to per-page Y coordinate
+      # absolute_y is the distance from top of the entire document
+      # We need to convert it to distance from top of the specific page
+      y = absolute_y - (target_page_index * page_height)
+
+      Rails.logger.info "Signature placement: absolute_y=#{absolute_y}, page_index=#{target_page_index}, page_height=#{page_height}, y_on_page=#{y}"
 
       # Create temp image file
       img_file = Tempfile.new(["sig", ".png"])
