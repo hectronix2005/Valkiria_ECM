@@ -552,10 +552,11 @@ const DATE_POSITION_OPTIONS = [
   { value: 'none', label: 'Sin fecha', desc: 'Sin fecha (firma usa 100% del espacio)' },
 ]
 
-function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages = 1, onSuccess, pdfWidth = DEFAULT_PDF_WIDTH, pdfHeight = DEFAULT_PDF_HEIGHT }) {
+function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages = 1, onSuccess, pdfWidth = DEFAULT_PDF_WIDTH, pdfHeight = DEFAULT_PDF_HEIGHT, totalSignatories = 1 }) {
   const queryClient = useQueryClient()
   const [label, setLabel] = useState(signatory?.label || '')
   const [required, setRequired] = useState(signatory?.required ?? true)
+  const [position, setPosition] = useState(signatory?.position ?? 0)
   const [xPosition, setXPosition] = useState(signatory?.x_position || 350)
   const [selectedPage, setSelectedPage] = useState(1)
   const [yInPage, setYInPage] = useState(700)
@@ -575,6 +576,7 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
     if (signatory && isOpen) {
       setLabel(signatory.label || '')
       setRequired(signatory.required ?? true)
+      setPosition(signatory.position ?? 0)
       setXPosition(signatory.x_position || 350)
       setWidth(signatory.width || 200)
       setHeight(signatory.height || 80)
@@ -611,6 +613,7 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
     updateMutation.mutate({
       label,
       required,
+      position,
       x_position: xPosition,
       y_position: absoluteY,
       width,
@@ -652,7 +655,7 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
             )}
 
             {/* Basic Info - Compact */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-0.5">Tipo</label>
                 <p className="px-2 py-1 bg-gray-50 rounded text-sm truncate">{signatory.role_label}</p>
@@ -665,6 +668,17 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
                   onChange={(e) => setLabel(e.target.value)}
                   placeholder="Ej: Firma del Empleado"
                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Orden de firma</label>
+                <input
+                  type="number"
+                  value={position}
+                  onChange={(e) => setPosition(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  min="0"
+                  max={totalSignatories}
+                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
                 />
               </div>
             </div>
@@ -858,11 +872,12 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
   )
 }
 
-function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = DEFAULT_PDF_WIDTH, pdfHeight = DEFAULT_PDF_HEIGHT, totalPages = 1 }) {
+function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = DEFAULT_PDF_WIDTH, pdfHeight = DEFAULT_PDF_HEIGHT, totalPages = 1, existingSignatories = 0 }) {
   const queryClient = useQueryClient()
   const [typeCode, setTypeCode] = useState('')
   const [label, setLabel] = useState('')
   const [required, setRequired] = useState(true)
+  const [position, setPosition] = useState(existingSignatories) // Default to next position
   const [pageNumber, setPageNumber] = useState(1)
   const [xPosition, setXPosition] = useState(350)
   const [yPosition, setYPosition] = useState(700)
@@ -899,6 +914,7 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
     setTypeCode('')
     setLabel('')
     setRequired(true)
+    setPosition(existingSignatories)
     setPageNumber(1)
     setXPosition(350)
     setYPosition(700)
@@ -921,6 +937,7 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
       signatory_type_code: typeCode,
       label: label || selectedType?.name || 'Firma',
       required,
+      position,
       page_number: pageNumber,
       x_position: xPosition,
       y_position: yPosition,
@@ -984,15 +1001,28 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Etiqueta</label>
-                <input
-                  type="text"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="Ej: Firma del Empleado"
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Etiqueta</label>
+                  <input
+                    type="text"
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                    placeholder="Ej: Firma del Empleado"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Orden de firma</label>
+                  <input
+                    type="number"
+                    value={position}
+                    onChange={(e) => setPosition(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    min="0"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-0.5">0 = firma primero</p>
+                </div>
               </div>
 
               <div className="flex items-center gap-4 flex-wrap">
@@ -1619,13 +1649,19 @@ export default function TemplateEdit() {
             <CardContent>
               {localSignatories.length > 0 ? (
                 <div className="space-y-2">
-                  {localSignatories.map((sig, index) => (
+                  {/* Sort by position for display */}
+                  {[...localSignatories].sort((a, b) => (a.position || 0) - (b.position || 0)).map((sig) => (
                     <div
                       key={sig.id}
                       className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedSignatoryId === sig.id ? 'bg-primary-50 ring-2 ring-primary-500' : 'bg-gray-50 hover:bg-gray-100'}`}
                       onClick={() => setSelectedSignatoryId(sig.id)}
                     >
-                      <span className="text-sm text-gray-400">{index + 1}</span>
+                      <div className="flex flex-col items-center">
+                        <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xs font-bold">
+                          {(sig.position ?? 0) + 1}
+                        </span>
+                        <span className="text-[10px] text-gray-400">orden</span>
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{sig.label}</p>
                         <p className="text-xs text-gray-500">{sig.role_label}</p>
@@ -1719,6 +1755,7 @@ export default function TemplateEdit() {
         pdfWidth={pageWidth}
         pdfHeight={pageHeight}
         totalPages={documentPages}
+        existingSignatories={localSignatories.length}
         onSuccess={() => {}}
       />
 
@@ -1731,6 +1768,7 @@ export default function TemplateEdit() {
         numPages={documentPages}
         pdfWidth={pageWidth}
         pdfHeight={pageHeight}
+        totalSignatories={localSignatories.length}
         onSuccess={() => {}}
       />
     </div>
