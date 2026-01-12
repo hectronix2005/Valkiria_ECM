@@ -411,9 +411,9 @@ module Templates
         return result if result
       end
 
-      # Priority 2: ConvertAPI (cloud service, excellent quality)
-      if convert_api_available?
-        result = convert_with_convert_api(docx_path)
+      # Priority 2: Pandoc + wkhtmltopdf (works on Heroku without external APIs)
+      if pandoc_available?
+        result = convert_with_pandoc_wkhtmltopdf(docx_path)
         return result if result
       end
 
@@ -428,23 +428,96 @@ module Templates
       generate_basic_prawn_pdf(docx_path)
     end
 
-    def convert_api_available?
-      ENV["CONVERT_API_TOKEN"].present?
+    def pandoc_available?
+      @pandoc_path ||= `which pandoc 2>/dev/null`.strip.presence
+      @pandoc_path ||= "/app/vendor/pandoc/bin/pandoc" if File.exist?("/app/vendor/pandoc/bin/pandoc")
+      @pandoc_path.present?
     end
 
-    def convert_with_convert_api(docx_path)
-      Rails.logger.info "Converting DOCX to PDF using ConvertAPI..."
+    def convert_with_pandoc_wkhtmltopdf(docx_path)
+      Rails.logger.info "Converting DOCX to PDF using Pandoc + wkhtmltopdf..."
 
       begin
-        result = ConvertApi.convert("pdf", { File: docx_path })
-        pdf_content = result.file.io.read
+        # Step 1: Convert DOCX to HTML using Pandoc
+        html_content = PandocRuby.new([docx_path], from: :docx, to: :html5).convert
+        Rails.logger.info "Pandoc DOCX->HTML conversion successful"
 
-        Rails.logger.info "ConvertAPI conversion successful (#{pdf_content.bytesize} bytes)"
+        # Add basic styling to preserve formatting
+        styled_html = wrap_html_with_styles(html_content)
+
+        # Step 2: Convert HTML to PDF using wkhtmltopdf
+        pdf_content = WickedPdf.new.pdf_from_string(
+          styled_html,
+          page_size: "Letter",
+          margin: { top: 20, bottom: 20, left: 20, right: 20 },
+          encoding: "UTF-8"
+        )
+
+        Rails.logger.info "wkhtmltopdf HTML->PDF conversion successful (#{pdf_content.bytesize} bytes)"
         pdf_content
       rescue StandardError => e
-        Rails.logger.error "ConvertAPI conversion failed: #{e.message}"
+        Rails.logger.error "Pandoc + wkhtmltopdf conversion failed: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
         nil
       end
+    end
+
+    def wrap_html_with_styles(html_content)
+      <<~HTML
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body {
+              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+              font-size: 11pt;
+              line-height: 1.5;
+              color: #333;
+              max-width: 100%;
+              padding: 0;
+              margin: 0;
+            }
+            h1, h2, h3, h4, h5, h6 {
+              color: #222;
+              margin-top: 1em;
+              margin-bottom: 0.5em;
+            }
+            h1 { font-size: 18pt; }
+            h2 { font-size: 16pt; }
+            h3 { font-size: 14pt; }
+            p {
+              margin: 0.5em 0;
+              text-align: justify;
+            }
+            table {
+              border-collapse: collapse;
+              width: 100%;
+              margin: 1em 0;
+            }
+            th, td {
+              border: 1px solid #ccc;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f5f5f5;
+              font-weight: bold;
+            }
+            ul, ol {
+              margin: 0.5em 0;
+              padding-left: 2em;
+            }
+            strong, b { font-weight: bold; }
+            em, i { font-style: italic; }
+            u { text-decoration: underline; }
+          </style>
+        </head>
+        <body>
+          #{html_content}
+        </body>
+        </html>
+      HTML
     end
 
     def libreoffice_available?
