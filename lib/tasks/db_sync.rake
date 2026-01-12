@@ -270,9 +270,10 @@ namespace :db do
       puts "📄 GENERATE PENDING DOCUMENT PDFs"
       puts "=" * 60
       puts "\nThis will:"
-      puts "  1. Sync pending documents from production"
+      puts "  1. Sync pending documents and templates from production"
       puts "  2. Convert DOCX to PDF locally (using LibreOffice)"
-      puts "  3. Sync generated PDFs back to production\n"
+      puts "  3. Initialize signatures for completed documents"
+      puts "  4. Sync generated PDFs back to production\n"
 
       # Check LibreOffice availability
       libreoffice_path = find_libreoffice
@@ -282,9 +283,9 @@ namespace :db do
       end
       puts "✓ LibreOffice found: #{libreoffice_path}"
 
-      # Step 1: Sync from production
-      puts "\n📥 Step 1: Syncing documents and files from production..."
-      %w[generated_documents fs.files fs.chunks].each do |col|
+      # Step 1: Sync from production (including templates for signature initialization)
+      puts "\n📥 Step 1: Syncing documents, templates, and files from production..."
+      %w[generated_documents templates template_signatories users hr_employees fs.files fs.chunks].each do |col|
         sync_collection_from_production(col)
         puts "   ✓ #{col}"
       end
@@ -318,14 +319,17 @@ namespace :db do
           pdf_content = convert_docx_to_pdf_locally(docx_content, libreoffice_path)
           if pdf_content
             doc.store_pdf_from_sync!(pdf_content)
+            doc.reload
             generated += 1
-            puts " ✓ (#{pdf_content.bytesize} bytes)"
+            sig_count = doc.signatures.count
+            puts " ✓ (#{pdf_content.bytesize} bytes, #{sig_count} signatures, status: #{doc.status})"
           else
             puts " ⚠️  Conversion failed"
             doc.update!(pdf_generation_status: "failed")
           end
         rescue StandardError => e
           puts " ❌ Error: #{e.message}"
+          puts "      #{e.backtrace.first(2).join("\n      ")}"
           doc.update!(pdf_generation_status: "failed")
         end
       end
@@ -334,12 +338,13 @@ namespace :db do
 
       # Step 4: Sync back to production
       if generated > 0
-        puts "\n📤 Step 4: Syncing PDFs to production..."
+        puts "\n📤 Step 4: Syncing documents and PDFs to production..."
         %w[generated_documents fs.files fs.chunks].each do |col|
           sync_collection_to_production(col)
           puts "   ✓ #{col}"
         end
         puts "\n✅ Done! #{generated} PDF(s) generated and synced to production."
+        puts "   Documents should now be in 'pending_signatures' status."
       else
         puts "\n⚠️  No PDFs were generated."
       end
