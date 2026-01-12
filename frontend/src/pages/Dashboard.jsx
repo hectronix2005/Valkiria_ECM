@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { vacationService, certificationService, approvalService, dashboardService } from '../services/api'
+import { vacationService, certificationService, approvalService, dashboardService, generatedDocumentService } from '../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
@@ -14,7 +14,9 @@ import {
   Users,
   FileText,
   ArrowRight,
-  Plus
+  Plus,
+  PenTool,
+  FileCheck
 } from 'lucide-react'
 
 function StatCard({ title, value, icon: Icon, color, subtitle }) {
@@ -87,6 +89,7 @@ function RecentRequestCard({ request, type }) {
 
 export default function Dashboard() {
   const { user, isHR, isSupervisor } = useAuth()
+  const queryClient = useQueryClient()
 
   const { data: vacationsData } = useQuery({
     queryKey: ['vacations', 'recent'],
@@ -110,10 +113,28 @@ export default function Dashboard() {
     enabled: isHR,
   })
 
+  // Documents pending user's signature
+  const { data: pendingDocsData } = useQuery({
+    queryKey: ['documents', 'pending_signatures'],
+    queryFn: () => generatedDocumentService.pendingSignatures(),
+  })
+
+  const signMutation = useMutation({
+    mutationFn: (id) => generatedDocumentService.sign(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['documents', 'pending_signatures'])
+      alert('Documento firmado exitosamente')
+    },
+    onError: (error) => {
+      alert(error.response?.data?.error || 'Error al firmar el documento')
+    }
+  })
+
   const vacations = vacationsData?.data?.data || []
   const certifications = certificationsData?.data?.data || []
   const approvals = approvalsData?.data?.data || { vacation_requests: [], certification_requests: [] }
   const pendingCount = (approvals.vacation_requests?.length || 0) + (approvals.certification_requests?.length || 0)
+  const pendingDocs = pendingDocsData?.data?.data || []
 
   return (
     <div className="space-y-6">
@@ -193,6 +214,52 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Pending Signatures - shown to all users when they have documents to sign */}
+      {pendingDocs.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-amber-800">
+              <PenTool className="w-5 h-5" />
+              Documentos Pendientes de tu Firma
+            </CardTitle>
+            <Badge variant="warning">{pendingDocs.length}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingDocs.map((doc) => (
+                <div key={doc.id} className="flex items-center gap-4 p-4 bg-white rounded-lg border border-amber-200">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <FileCheck className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{doc.name}</p>
+                    <p className="text-sm text-gray-500">
+                      {doc.template_name} • {new Date(doc.created_at).toLocaleDateString('es-ES')}
+                    </p>
+                    {doc.signatures?.find(s => s.user_id === user?.id && s.status === 'pending' && s.waiting_for?.length > 0) && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Esperando: {doc.signatures.find(s => s.user_id === user?.id)?.waiting_for?.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => signMutation.mutate(doc.id)}
+                      loading={signMutation.isPending}
+                      disabled={!doc.can_sign}
+                    >
+                      <PenTool className="w-4 h-4" />
+                      Firmar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Two columns layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
