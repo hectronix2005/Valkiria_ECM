@@ -6,6 +6,7 @@ namespace :test_data do
     paula_user = Identity::User.where(email: /paula/i).first
     paula_emp = Hr::Employee.where(user_id: paula_user.id).first
     template = Templates::Template.where(name: /Contrato termino indefinido/i).first
+    org = Identity::Organization.first
 
     puts "Employee: #{paula_emp.full_name}"
     puts "Template: #{template.name}"
@@ -17,16 +18,17 @@ namespace :test_data do
     ).destroy_all
     puts "Deleted old test documents"
 
-    service = Templates::DocumentGeneratorService.new(
-      template: template,
+    # Build context for document generation
+    context = {
       employee: paula_emp,
-      requested_by: paula_user
-    )
+      organization: org,
+      user: paula_user
+    }
 
-    result = service.generate
+    begin
+      service = Templates::RobustDocumentGeneratorService.new(template, context)
+      doc = service.generate!
 
-    if result[:success]
-      doc = result[:document]
       puts ""
       puts "=== Document Generated ==="
       puts "UUID: #{doc.uuid}"
@@ -35,21 +37,27 @@ namespace :test_data do
       puts "Has PDF: #{doc.draft_file_id.present?}"
 
       # Initialize signatures if template has signatories
-      if template.signatories.any?
+      if template.signatories.any? && doc.signatures.empty?
         doc.initialize_signatures!
         doc.update!(status: "pending_signatures")
         doc.reload
-        puts ""
-        puts "Signatures initialized:"
-        doc.signatures.each_with_index do |sig, idx|
-          puts "  #{idx + 1}. #{sig['signatory_label']}: #{sig['status']} (#{sig['user_name']})"
-        end
+      end
+
+      puts ""
+      puts "Signatures:"
+      doc.signatures.each_with_index do |sig, idx|
+        puts "  #{idx + 1}. #{sig['signatory_label']}: #{sig['status']} (#{sig['user_name']})"
       end
 
       puts ""
       puts "Paula can sign: #{doc.can_be_signed_by?(paula_user)}"
-    else
-      puts "Error: #{result[:error]}"
+    rescue Templates::RobustDocumentGeneratorService::MissingVariablesError => e
+      puts "Missing variables: #{e.message}"
+    rescue Templates::RobustDocumentGeneratorService::GenerationError => e
+      puts "Generation error: #{e.message}"
+    rescue StandardError => e
+      puts "Error: #{e.class} - #{e.message}"
+      puts e.backtrace.first(5).join("\n")
     end
   end
 
