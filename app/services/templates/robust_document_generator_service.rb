@@ -438,12 +438,26 @@ module Templates
       Rails.logger.info "Converting DOCX to PDF using Pandoc + wkhtmltopdf..."
 
       begin
-        # Step 1: Convert DOCX to HTML using Pandoc
-        html_content = PandocRuby.new([docx_path], from: :docx, to: :html5).convert
-        Rails.logger.info "Pandoc DOCX->HTML conversion successful"
+        # Step 1: Convert DOCX to HTML using Pandoc (using shell command directly)
+        html_output = Tempfile.new(["pandoc_output", ".html"])
+        html_output.close
 
-        # Add basic styling to preserve formatting
-        styled_html = wrap_html_with_styles(html_content)
+        pandoc_cmd = "pandoc -f docx -t html5 --standalone \"#{docx_path}\" -o \"#{html_output.path}\" 2>&1"
+        Rails.logger.info "Running: #{pandoc_cmd}"
+        result = `#{pandoc_cmd}`
+
+        unless $?.success?
+          Rails.logger.error "Pandoc failed: #{result}"
+          html_output.unlink
+          return nil
+        end
+
+        html_content = File.read(html_output.path)
+        html_output.unlink
+        Rails.logger.info "Pandoc DOCX->HTML conversion successful (#{html_content.bytesize} bytes)"
+
+        # Inject additional styles into the pandoc-generated HTML
+        styled_html = inject_pdf_styles(html_content)
 
         # Step 2: Convert HTML to PDF using wkhtmltopdf
         pdf_content = WickedPdf.new.pdf_from_string(
@@ -462,62 +476,61 @@ module Templates
       end
     end
 
-    def wrap_html_with_styles(html_content)
-      <<~HTML
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <style>
-            body {
-              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-              font-size: 11pt;
-              line-height: 1.5;
-              color: #333;
-              max-width: 100%;
-              padding: 0;
-              margin: 0;
-            }
-            h1, h2, h3, h4, h5, h6 {
-              color: #222;
-              margin-top: 1em;
-              margin-bottom: 0.5em;
-            }
-            h1 { font-size: 18pt; }
-            h2 { font-size: 16pt; }
-            h3 { font-size: 14pt; }
-            p {
-              margin: 0.5em 0;
-              text-align: justify;
-            }
-            table {
-              border-collapse: collapse;
-              width: 100%;
-              margin: 1em 0;
-            }
-            th, td {
-              border: 1px solid #ccc;
-              padding: 8px;
-              text-align: left;
-            }
-            th {
-              background-color: #f5f5f5;
-              font-weight: bold;
-            }
-            ul, ol {
-              margin: 0.5em 0;
-              padding-left: 2em;
-            }
-            strong, b { font-weight: bold; }
-            em, i { font-style: italic; }
-            u { text-decoration: underline; }
-          </style>
-        </head>
-        <body>
-          #{html_content}
-        </body>
-        </html>
-      HTML
+    def inject_pdf_styles(html_content)
+      # Inject additional CSS styles into pandoc-generated HTML
+      additional_styles = <<~CSS
+        <style>
+          body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.4;
+            color: #333;
+            max-width: 100%;
+          }
+          h1, h2, h3, h4, h5, h6 {
+            color: #222;
+            margin-top: 0.8em;
+            margin-bottom: 0.4em;
+          }
+          p {
+            margin: 0.4em 0;
+            text-align: justify;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0.8em 0;
+          }
+          th, td {
+            border: 1px solid #999;
+            padding: 6px;
+            text-align: left;
+          }
+          th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+          }
+        </style>
+      CSS
+
+      # Insert styles before </head>
+      if html_content.include?("</head>")
+        html_content.sub("</head>", "#{additional_styles}</head>")
+      else
+        # If no head tag, wrap the content
+        <<~HTML
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            #{additional_styles}
+          </head>
+          <body>
+            #{html_content}
+          </body>
+          </html>
+        HTML
+      end
     end
 
     def libreoffice_available?
