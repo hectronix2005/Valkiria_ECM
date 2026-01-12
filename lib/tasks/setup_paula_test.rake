@@ -1,6 +1,79 @@
 # frozen_string_literal: true
 
 namespace :test_data do
+  desc "Fix signature order: Employee first, then Legal Representative"
+  task fix_contract_order: :environment do
+    # Fix template order
+    template = Templates::Template.where(name: /Contrato termino indefinido/i).first
+    puts "Template: #{template.name}"
+
+    template.signatories.each do |sig|
+      if sig.signatory_type_code == "employee"
+        sig.update!(position: 1)
+        puts "  #{sig.label} -> Position 1"
+      elsif sig.signatory_type_code == "legal_representative"
+        sig.update!(position: 2)
+        puts "  #{sig.label} -> Position 2"
+      end
+    end
+
+    # Reset document signatures
+    doc = Templates::GeneratedDocument.where(uuid: "7282513c-a2d6-4a2a-87a2-12220128dd39").first
+    if doc
+      puts "\nResetting document: #{doc.name}"
+
+      # Get users
+      paula = Identity::User.where(email: /paula/i).first
+      legal_user = Identity::User.where(email: /legal/i).first ||
+                   Identity::User.where(email: /nathalia/i).first
+
+      # Get signatories
+      emp_sig = template.signatories.where(signatory_type_code: "employee").first
+      legal_sig = template.signatories.where(signatory_type_code: "legal_representative").first
+
+      # Reset signatures with correct order
+      doc.signatures = [
+        {
+          "signatory_id" => emp_sig.uuid,
+          "signatory_type_code" => "employee",
+          "signatory_role" => emp_sig.role,
+          "signatory_label" => "Empleado Solicitante",
+          "label" => "Empleado Solicitante",
+          "user_id" => paula.id.to_s,
+          "user_name" => paula.full_name,
+          "required" => true,
+          "status" => "pending",
+          "signature_id" => nil,
+          "signed_at" => nil,
+          "signed_by_name" => nil
+        },
+        {
+          "signatory_id" => legal_sig.uuid,
+          "signatory_type_code" => "legal_representative",
+          "signatory_role" => legal_sig.role,
+          "signatory_label" => "Representante Legal",
+          "label" => "Representante Legal",
+          "user_id" => legal_user&.id&.to_s,
+          "user_name" => legal_user&.full_name,
+          "required" => true,
+          "status" => "pending",
+          "signature_id" => nil,
+          "signed_at" => nil,
+          "signed_by_name" => nil
+        }
+      ]
+      doc.status = "pending_signatures"
+      doc.save!
+
+      puts "Document reset. New signature order:"
+      doc.signatures.each_with_index do |sig, idx|
+        puts "  #{idx + 1}. #{sig['signatory_label']}: #{sig['status']}"
+      end
+    end
+
+    puts "\nDone!"
+  end
+
   desc "Assign employee to Paula's test document"
   task assign_paula_employee: :environment do
     paula = Identity::User.find_by(email: /paula/i)
