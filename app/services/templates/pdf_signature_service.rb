@@ -7,11 +7,14 @@ module Templates
     end
 
     # Apply all collected signatures to the PDF
+    # Always reads from draft_file_id to avoid double-applying signatures
     def apply_all_signatures!
       return unless @generated_document.all_required_signed?
 
-      pdf_content = @generated_document.file_content
-      raise SignatureError, "No se pudo leer el PDF" unless pdf_content
+      # Always read from draft (original PDF without signatures)
+      # This prevents double-application when apply_signature_to_pdf! was called earlier
+      pdf_content = read_draft_pdf
+      raise SignatureError, "No se pudo leer el PDF draft" unless pdf_content
 
       # Create working files
       input_pdf = Tempfile.new(["input", ".pdf"])
@@ -211,6 +214,17 @@ module Templates
         img_file.close
         img_file.unlink
       end
+    end
+
+    # Read the original draft PDF (without any signatures applied)
+    def read_draft_pdf
+      return nil unless @generated_document.draft_file_id
+
+      file = Mongoid::GridFs.get(@generated_document.draft_file_id)
+      file.data
+    rescue StandardError => e
+      Rails.logger.error "Error reading draft PDF: #{e.message}"
+      nil
     end
 
     def store_final_pdf(pdf_content)
