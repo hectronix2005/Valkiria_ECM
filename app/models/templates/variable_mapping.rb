@@ -209,7 +209,8 @@ module Templates
 
           # Employee mappings - Contract & compensation
           { name: "Fecha de Ingreso", key: "employee.hire_date", category: "employee", data_type: "date", description: "Fecha de contratación" },
-          { name: "Fecha de Inicio del Contrato", key: "employee.contract_start_date", category: "employee", data_type: "date", description: "Fecha de inicio del contrato" },
+          { name: "Fecha de Contratacion", key: "employee.hire_date", category: "employee", data_type: "date", description: "Fecha de contratación (alias)" },
+          { name: "Fecha de Inicio del Contrato", key: "employee.contract_start_date", category: "employee", data_type: "date", description: "Fecha de inicio del contrato (usa fecha de ingreso si no está definida)" },
           { name: "Fecha de Terminacion del Contrato", key: "employee.contract_end_date", category: "employee", data_type: "date", description: "Fecha de terminación del contrato" },
           { name: "Fecha de Terminacion", key: "employee.contract_end_date", category: "employee", data_type: "date", description: "Fecha de terminación (alias)" },
           { name: "Tipo de Contrato", key: "employee.contract_type", category: "employee", description: "Tipo de contrato laboral" },
@@ -286,7 +287,7 @@ module Templates
           { name: "Monto del Contrato", key: "contract.amount", category: "contract", data_type: "number", description: "Valor monetario del contrato" },
           { name: "Monto en Letras", key: "contract.amount_text", category: "contract", description: "Monto del contrato en palabras" },
           { name: "Moneda del Contrato", key: "contract.currency", category: "contract", description: "Moneda (COP, USD, EUR)" },
-          { name: "Fecha de Inicio del Contrato", key: "contract.start_date", category: "contract", data_type: "date", description: "Fecha de inicio de vigencia" },
+          { name: "Fecha de Inicio Vigencia", key: "contract.start_date", category: "contract", data_type: "date", description: "Fecha de inicio de vigencia del contrato comercial" },
           { name: "Fecha de Inicio en Texto", key: "contract.start_date_text", category: "contract", description: "Fecha de inicio en formato largo" },
           { name: "Fecha de Fin del Contrato", key: "contract.end_date", category: "contract", data_type: "date", description: "Fecha de terminación del contrato" },
           { name: "Fecha de Fin en Texto", key: "contract.end_date_text", category: "contract", description: "Fecha de fin en formato largo" },
