@@ -466,7 +466,112 @@ module Templates
     end
 
     def convert_with_prawn(docx_path)
-      # Enhanced Prawn fallback with better formatting
+      # Try to use stored PDF preview if available (preserves original formatting)
+      if template.preview_file_id.present?
+        Rails.logger.info "Using stored PDF preview as base (LibreOffice unavailable)"
+        return convert_using_stored_preview
+      end
+
+      # Fallback to basic Prawn generation if no preview available
+      Rails.logger.warn "No stored PDF preview, using basic Prawn generation"
+      generate_basic_prawn_pdf(docx_path)
+    end
+
+    def convert_using_stored_preview
+      require "combine_pdf"
+
+      # Get the stored PDF preview (has original formatting but with placeholders)
+      preview_content = template.preview_content
+      raise GenerationError, "No se pudo leer el PDF preview" unless preview_content
+
+      # Parse the preview PDF
+      base_pdf = CombinePDF.parse(preview_content)
+
+      # Create a data summary page with all variable values
+      data_page_pdf = create_data_summary_page(base_pdf)
+
+      # Add data summary as the first page
+      if data_page_pdf
+        data_pages = CombinePDF.parse(data_page_pdf)
+        combined = CombinePDF.new
+        data_pages.pages.each { |page| combined << page }
+        base_pdf.pages.each { |page| combined << page }
+        return combined.to_pdf
+      end
+
+      base_pdf.to_pdf
+    end
+
+    def create_data_summary_page(base_pdf)
+      return nil if variable_values.empty?
+
+      # Get page dimensions from first page
+      first_page = base_pdf.pages.first
+      page_width = first_page.mediabox[2] || 612
+      page_height = first_page.mediabox[3] || 792
+
+      employee = context[:employee]
+      org = context[:organization]
+
+      Prawn::Document.new(
+        page_size: [page_width, page_height],
+        margin: 40
+      ) do |pdf|
+        # Header
+        pdf.text "DATOS DEL DOCUMENTO", size: 16, style: :bold, align: :center
+        pdf.move_down 5
+        pdf.text "Generado: #{Time.current.strftime('%d/%m/%Y %H:%M')}", size: 9, align: :center, color: "666666"
+        pdf.move_down 20
+
+        # Employee info box
+        if employee
+          pdf.text "DATOS DEL EMPLEADO", size: 12, style: :bold
+          pdf.stroke_horizontal_rule
+          pdf.move_down 10
+
+          employee_data = [
+            ["Nombre:", employee.full_name],
+            ["Identificacion:", "#{employee.identification_type} #{employee.identification_number}"],
+            ["Cargo:", employee.job_title],
+            ["Departamento:", employee.department],
+            ["Fecha de Ingreso:", employee.hire_date&.strftime("%d/%m/%Y")],
+            ["Tipo de Contrato:", format_contract_type(employee.contract_type)],
+            ["Salario:", format_currency(employee.salary)]
+          ].reject { |_, v| v.blank? }
+
+          pdf.table(employee_data, width: pdf.bounds.width, cell_style: { size: 10, padding: 5 }) do |t|
+            t.columns(0).font_style = :bold
+            t.columns(0).width = 150
+          end
+          pdf.move_down 20
+        end
+
+        # Variable values
+        pdf.text "VARIABLES DEL DOCUMENTO", size: 12, style: :bold
+        pdf.stroke_horizontal_rule
+        pdf.move_down 10
+
+        var_data = variable_values.map { |name, value| [name, value.to_s] }
+        unless var_data.empty?
+          pdf.table(var_data, width: pdf.bounds.width, cell_style: { size: 9, padding: 4 }) do |t|
+            t.columns(0).font_style = :bold
+            t.columns(0).width = 180
+          end
+        end
+
+        # Footer note
+        pdf.move_down 30
+        pdf.text "NOTA: Los datos anteriores corresponden a las variables reemplazadas en el documento.",
+                 size: 8, color: "666666", align: :center
+        pdf.text "El formato original del documento se muestra en las paginas siguientes.",
+                 size: 8, color: "666666", align: :center
+      end.render
+    rescue => e
+      Rails.logger.error "Error creating data summary page: #{e.message}"
+      nil
+    end
+
+    def generate_basic_prawn_pdf(docx_path)
       doc = Docx::Document.open(docx_path)
 
       Prawn::Document.new(page_size: "LETTER", margin: 50) do |pdf|
