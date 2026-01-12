@@ -405,12 +405,45 @@ module Templates
     end
 
     def convert_to_pdf(docx_path)
+      # Priority 1: LibreOffice (local, best quality)
       if libreoffice_available?
-        convert_with_libreoffice(docx_path)
-      else
-        Rails.logger.warn "LibreOffice not available. PDF will have limited formatting."
-        Rails.logger.warn "Install LibreOffice: brew install --cask libreoffice"
-        convert_with_prawn(docx_path)
+        result = convert_with_libreoffice(docx_path)
+        return result if result
+      end
+
+      # Priority 2: ConvertAPI (cloud service, excellent quality)
+      if convert_api_available?
+        result = convert_with_convert_api(docx_path)
+        return result if result
+      end
+
+      # Priority 3: Use stored preview with data summary (partial solution)
+      if template.preview_file_id.present?
+        Rails.logger.warn "Using stored PDF preview (variables not replaced in document body)"
+        return convert_using_stored_preview
+      end
+
+      # Priority 4: Basic Prawn generation (last resort)
+      Rails.logger.warn "No PDF conversion available. Using basic Prawn generation."
+      generate_basic_prawn_pdf(docx_path)
+    end
+
+    def convert_api_available?
+      ENV["CONVERT_API_TOKEN"].present?
+    end
+
+    def convert_with_convert_api(docx_path)
+      Rails.logger.info "Converting DOCX to PDF using ConvertAPI..."
+
+      begin
+        result = ConvertApi.convert("pdf", { File: docx_path })
+        pdf_content = result.file.io.read
+
+        Rails.logger.info "ConvertAPI conversion successful (#{pdf_content.bytesize} bytes)"
+        pdf_content
+      rescue StandardError => e
+        Rails.logger.error "ConvertAPI conversion failed: #{e.message}"
+        nil
       end
     end
 
@@ -454,8 +487,8 @@ module Templates
 
         pdf_files = Dir.glob(File.join(output_dir, "*.pdf"))
         if pdf_files.empty?
-          Rails.logger.error "LibreOffice conversion failed, falling back to Prawn"
-          return convert_with_prawn(docx_path)
+          Rails.logger.error "LibreOffice conversion failed"
+          return nil
         end
 
         File.binread(pdf_files.first)
@@ -463,18 +496,6 @@ module Templates
         FileUtils.rm_rf(output_dir)
         FileUtils.rm_rf(user_profile)
       end
-    end
-
-    def convert_with_prawn(docx_path)
-      # Try to use stored PDF preview if available (preserves original formatting)
-      if template.preview_file_id.present?
-        Rails.logger.info "Using stored PDF preview as base (LibreOffice unavailable)"
-        return convert_using_stored_preview
-      end
-
-      # Fallback to basic Prawn generation if no preview available
-      Rails.logger.warn "No stored PDF preview, using basic Prawn generation"
-      generate_basic_prawn_pdf(docx_path)
     end
 
     def convert_using_stored_preview
