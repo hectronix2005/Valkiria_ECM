@@ -411,21 +411,85 @@ module Templates
         return result if result
       end
 
-      # Priority 2: Pandoc + wkhtmltopdf (works on Heroku without external APIs)
+      # Priority 2: Gotenberg API (LibreOffice via HTTP, preserves formatting)
+      if gotenberg_available?
+        result = convert_with_gotenberg(docx_path)
+        return result if result
+      end
+
+      # Priority 3: Pandoc + wkhtmltopdf (works on Heroku without external APIs)
       if pandoc_available?
         result = convert_with_pandoc_wkhtmltopdf(docx_path)
         return result if result
       end
 
-      # Priority 3: Use stored preview with data summary (partial solution)
+      # Priority 4: Use stored preview with data summary (partial solution)
       if template.preview_file_id.present?
         Rails.logger.warn "Using stored PDF preview (variables not replaced in document body)"
         return convert_using_stored_preview
       end
 
-      # Priority 4: Basic Prawn generation (last resort)
+      # Priority 5: Basic Prawn generation (last resort)
       Rails.logger.warn "No PDF conversion available. Using basic Prawn generation."
       generate_basic_prawn_pdf(docx_path)
+    end
+
+    def gotenberg_available?
+      ENV["GOTENBERG_URL"].present?
+    end
+
+    def convert_with_gotenberg(docx_path)
+      Rails.logger.info "Converting DOCX to PDF using Gotenberg API..."
+
+      begin
+        require "net/http"
+        require "uri"
+
+        gotenberg_url = ENV["GOTENBERG_URL"].chomp("/")
+        uri = URI.parse("#{gotenberg_url}/forms/libreoffice/convert")
+
+        # Prepare multipart form data
+        boundary = "----GotenbergBoundary#{SecureRandom.hex(8)}"
+        file_content = File.binread(docx_path)
+        file_name = File.basename(docx_path)
+
+        body = build_multipart_body(boundary, file_name, file_content)
+
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = uri.scheme == "https"
+        http.read_timeout = 60
+        http.open_timeout = 30
+
+        request = Net::HTTP::Post.new(uri.request_uri)
+        request["Content-Type"] = "multipart/form-data; boundary=#{boundary}"
+        request.body = body
+
+        response = http.request(request)
+
+        if response.code == "200"
+          Rails.logger.info "Gotenberg conversion successful (#{response.body.bytesize} bytes)"
+          response.body
+        else
+          Rails.logger.error "Gotenberg conversion failed: #{response.code} - #{response.body}"
+          nil
+        end
+      rescue StandardError => e
+        Rails.logger.error "Gotenberg conversion error: #{e.message}"
+        Rails.logger.error e.backtrace.first(3).join("\n")
+        nil
+      end
+    end
+
+    def build_multipart_body(boundary, file_name, file_content)
+      body = ""
+      body << "--#{boundary}\r\n"
+      body << "Content-Disposition: form-data; name=\"files\"; filename=\"#{file_name}\"\r\n"
+      body << "Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n"
+      body << "\r\n"
+      body << file_content
+      body << "\r\n"
+      body << "--#{boundary}--\r\n"
+      body
     end
 
     def pandoc_available?
