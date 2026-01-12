@@ -25,28 +25,40 @@ module Templates
         pages = pdf.pages
         total_pages = pages.count
 
-        # Get standard page height (assume all pages are same height)
-        standard_page_height = pages.first&.mediabox&.dig(3) || 792.0
+        # Get actual PDF page height
+        actual_page_height = pages.first&.mediabox&.dig(3) || 792.0
+
+        # Get template's stored preview page height (used when coordinates were captured)
+        template = @generated_document.template
+        preview_page_height = template&.preview_page_height || 792.0
+
+        # Calculate scale factor if template preview height differs from actual PDF
+        # This handles cases where the preview was at a different scale than the actual PDF
+        scale_factor = actual_page_height / preview_page_height
+
+        Rails.logger.info "PDF rendering: actual_page_height=#{actual_page_height}, preview_page_height=#{preview_page_height}, scale_factor=#{scale_factor}"
 
         # Apply each signature to the correct page
         @generated_document.signed_signatories.each do |sig_entry|
           signatory = find_signatory(sig_entry["signatory_id"])
           next unless signatory
 
-          # Calculate actual page from absolute Y coordinate
-          # y_position is the distance from top of entire document
-          absolute_y = signatory.y_position || 0
+          # Get stored coordinates (captured at preview_page_height scale)
+          stored_y = signatory.y_position || 0
+
+          # Scale coordinates to actual PDF dimensions
+          absolute_y = stored_y * scale_factor
 
           # Calculate which page this Y coordinate falls on (0-indexed)
-          calculated_page_index = (absolute_y / standard_page_height).floor
+          calculated_page_index = (absolute_y / actual_page_height).floor
 
           # Clamp to valid range
           page_index = [[calculated_page_index, 0].max, total_pages - 1].min
           target_page = pages[page_index]
 
-          Rails.logger.info "Signature #{signatory.label}: absolute_y=#{absolute_y}, page_height=#{standard_page_height}, calculated_page=#{calculated_page_index + 1}, actual_page=#{page_index + 1}"
+          Rails.logger.info "Signature #{signatory.label}: stored_y=#{stored_y}, absolute_y=#{absolute_y}, page_height=#{actual_page_height}, calculated_page=#{calculated_page_index + 1}, actual_page=#{page_index + 1}"
 
-          apply_signature_to_page(target_page, sig_entry, page_index, standard_page_height)
+          apply_signature_to_page(target_page, sig_entry, page_index, actual_page_height)
         end
 
         # Save the final PDF
