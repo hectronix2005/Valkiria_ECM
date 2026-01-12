@@ -122,9 +122,14 @@ module Templates
     def convert_with_libreoffice(docx_path)
       output_dir = Dir.mktmpdir
       begin
-        cmd = "\"#{@libreoffice_path}\" --headless --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
+        # Set LD_LIBRARY_PATH for Heroku apt buildpack
+        lib_path = "/app/.apt/usr/lib/libreoffice/program:/app/.apt/usr/lib/x86_64-linux-gnu"
+        env_prefix = "LD_LIBRARY_PATH=#{lib_path}:$LD_LIBRARY_PATH"
+
+        cmd = "#{env_prefix} \"#{@libreoffice_path}\" --headless --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
+        Rails.logger.info "Running LibreOffice: #{cmd}"
         result = `#{cmd}`
-        Rails.logger.info "LibreOffice conversion: #{result}"
+        Rails.logger.info "LibreOffice conversion result: #{result}"
 
         # Find the generated PDF
         pdf_files = Dir.glob(File.join(output_dir, "*.pdf"))
