@@ -92,13 +92,16 @@ module Templates
     end
 
     def find_signature(signature_uuid)
-      Identity::UserSignature.find_by(uuid: signature_uuid)
+      return nil if signature_uuid.blank?
+
+      Identity::UserSignature.where(uuid: signature_uuid).first
     end
 
     def find_signatory(signatory_uuid)
+      return nil if signatory_uuid.blank?
       return nil unless @generated_document.template
 
-      @generated_document.template.signatories.find_by(uuid: signatory_uuid)
+      @generated_document.template.signatories.where(uuid: signatory_uuid).first
     end
 
     def get_signature_image(signature)
