@@ -1,6 +1,108 @@
 # frozen_string_literal: true
 
 namespace :test_data do
+  desc "Recreate Paula's document with clean PDF"
+  task recreate_paula_doc: :environment do
+    # Get clean PDF from draft document
+    clean_doc = Templates::GeneratedDocument.where(uuid: "acb4c1d7-ba68-4edc-a363-8e272a43b8a8").first
+    unless clean_doc&.draft_file_id
+      puts "ERROR: No clean PDF found"
+      exit 1
+    end
+
+    pdf_content = clean_doc.file_content
+    unless pdf_content
+      puts "ERROR: Cannot read PDF"
+      exit 1
+    end
+    puts "Clean PDF size: #{pdf_content.size} bytes"
+
+    # Store new copy of PDF
+    new_file_name = "contrato-paula-limpio-#{Time.now.strftime('%Y%m%d%H%M%S')}.pdf"
+    pdf_file = Mongoid::GridFs.put(
+      StringIO.new(pdf_content),
+      filename: new_file_name,
+      content_type: "application/pdf"
+    )
+    puts "Stored new PDF: #{pdf_file.id}"
+
+    # Get Paula and template
+    paula = Identity::User.where(email: /paula/i).first
+    template = Templates::Template.where(name: /Contrato termino indefinido/i).first
+    org = Identity::Organization.first
+    paula_emp = Hr::Employee.for_user(paula) || Hr::Employee.where(email: paula.email).first
+
+    # Get legal user
+    legal_user = Identity::User.where(email: /legal/i).first ||
+                 Identity::User.where(email: /nathalia/i).first
+
+    # Get template signatories
+    emp_sig = template.signatories.where(signatory_type_code: "employee").first
+    legal_sig = template.signatories.where(signatory_type_code: "legal_representative").first
+
+    # Delete old document
+    old_doc = Templates::GeneratedDocument.where(uuid: "7282513c-a2d6-4a2a-87a2-12220128dd39").first
+    if old_doc
+      old_doc.destroy
+      puts "Deleted old document"
+    end
+
+    # Create new document
+    doc = Templates::GeneratedDocument.create!(
+      name: new_file_name,
+      file_name: new_file_name,
+      template: template,
+      organization: org,
+      requested_by: paula,
+      employee: paula_emp,
+      status: "pending_signatures",
+      draft_file_id: pdf_file.id,
+      variable_values: {},
+      signatures: [
+        {
+          "signatory_id" => emp_sig.uuid,
+          "signatory_type_code" => "employee",
+          "signatory_role" => emp_sig.role,
+          "signatory_label" => "Empleado Solicitante",
+          "label" => "Empleado Solicitante",
+          "user_id" => paula.id.to_s,
+          "user_name" => paula.full_name,
+          "required" => true,
+          "status" => "pending",
+          "signature_id" => nil,
+          "signed_at" => nil,
+          "signed_by_name" => nil
+        },
+        {
+          "signatory_id" => legal_sig.uuid,
+          "signatory_type_code" => "legal_representative",
+          "signatory_role" => legal_sig.role,
+          "signatory_label" => "Representante Legal",
+          "label" => "Representante Legal",
+          "user_id" => legal_user&.id&.to_s,
+          "user_name" => legal_user&.full_name,
+          "required" => true,
+          "status" => "pending",
+          "signature_id" => nil,
+          "signed_at" => nil,
+          "signed_by_name" => nil
+        }
+      ]
+    )
+
+    puts ""
+    puts "=== New document created ==="
+    puts "UUID: #{doc.uuid}"
+    puts "Name: #{doc.name}"
+    puts "Status: #{doc.status}"
+    puts "Signatures:"
+    doc.signatures.each_with_index do |sig, idx|
+      puts "  #{idx + 1}. #{sig['signatory_label']}: #{sig['status']}"
+    end
+    puts ""
+    puts "Paula can sign: #{doc.can_be_signed_by?(paula)}"
+  end
+
   desc "Fix signature order: Employee first, then Legal Representative"
   task fix_contract_order: :environment do
     # Fix template order
