@@ -22,11 +22,21 @@ module Templates
       begin
         # Load the PDF
         pdf = CombinePDF.load(input_pdf.path)
-        last_page = pdf.pages.last
+        pages = pdf.pages
+        total_pages = pages.count
 
-        # Apply each signature
+        # Apply each signature to the correct page
         @generated_document.signed_signatories.each do |sig_entry|
-          apply_signature_to_page(last_page, sig_entry)
+          signatory = find_signatory(sig_entry["signatory_id"])
+          next unless signatory
+
+          # Get the page number from the signatory config (1-indexed)
+          page_number = signatory.page_number || total_pages
+          # Clamp to valid range
+          page_index = [[page_number - 1, 0].max, total_pages - 1].min
+          target_page = pages[page_index]
+
+          apply_signature_to_page(target_page, sig_entry, page_index)
         end
 
         # Save the final PDF
@@ -52,7 +62,7 @@ module Templates
 
     private
 
-    def apply_signature_to_page(page, sig_entry)
+    def apply_signature_to_page(page, sig_entry, page_index = 0)
       # Get signature data
       signature = find_signature(sig_entry["signature_id"])
       return unless signature
@@ -63,6 +73,9 @@ module Templates
       # Get signature as PNG image
       image_data = get_signature_image(signature)
       return unless image_data
+
+      # Log signature placement for debugging
+      Rails.logger.info "Applying signature for #{signatory.label} to page #{page_index + 1} at position (#{signatory.x_position}, #{signatory.y_position})"
 
       # Create signature overlay using Prawn
       overlay_pdf = create_signature_overlay(
