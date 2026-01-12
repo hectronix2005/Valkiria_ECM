@@ -344,6 +344,8 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
               const datePosition = sig.date_position || 'right'
               // y_position is already stored as absolute Y coordinate (includes page offset)
               const absoluteY = sig.y_position || 700
+              // Calculate page number from absolute Y for display
+              const sigPage = Math.floor(absoluteY / PAGE_HEIGHT) + 1
 
               // Calculate actual signature area based on date position (matching PDF rendering)
               let actualSigWidth = sigWidth
