@@ -126,6 +126,9 @@ module Hr
     validates :salary, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true
     validates :personal_email, format: { with: URI::MailTo::EMAIL_REGEXP }, allow_blank: true
 
+    # Callbacks
+    after_save :sync_user_name, if: :should_sync_user_name?
+
     # Scopes
     scope :active, -> { where(employment_status: STATUS_ACTIVE) }
     scope :on_leave, -> { where(employment_status: STATUS_ON_LEAVE) }
@@ -300,6 +303,23 @@ module Hr
         current = current.supervisor
       end
       chain
+    end
+
+    private
+
+    # Sync employee name to associated user account
+    def sync_user_name
+      return unless user
+
+      user.update(
+        first_name: first_name,
+        last_name: last_name
+      )
+    end
+
+    # Only sync if name fields changed and user exists
+    def should_sync_user_name?
+      user_id.present? && (saved_change_to_first_name? || saved_change_to_last_name?)
     end
 
     class << self
