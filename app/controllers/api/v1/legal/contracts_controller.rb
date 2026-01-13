@@ -344,24 +344,28 @@ module Api
           authorize @contract
 
           unless @contract.document_uuid
-            return render json: { error: "Este contrato no tiene documento generado" }, status: :not_found
+            return render json: { error: "Este contrato no tiene documento generado. Por favor genere el documento primero." }, status: :not_found
           end
 
           generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @contract.document_uuid)
           unless generated_doc
-            return render json: { error: "Documento no encontrado" }, status: :not_found
+            return render json: { error: "El documento asociado no fue encontrado. Por favor regenere el documento." }, status: :not_found
           end
 
-          file_id = generated_doc.final_file_id || generated_doc.draft_file_id
+          file_id = generated_doc.final_file_id || generated_doc.draft_file_id || generated_doc.original_draft_file_id
           unless file_id
-            return render json: { error: "Archivo no disponible" }, status: :not_found
+            return render json: { error: "El archivo PDF no está disponible. Esto puede ocurrir si hubo un error durante la generación. Por favor regenere el documento." }, status: :unprocessable_entity
           end
 
-          grid_file = Mongoid::GridFs.get(file_id)
-          send_data grid_file.data,
-                    type: "application/pdf",
-                    disposition: "attachment",
-                    filename: generated_doc.file_name
+          begin
+            grid_file = Mongoid::GridFs.get(file_id)
+            send_data grid_file.data,
+                      type: "application/pdf",
+                      disposition: "attachment",
+                      filename: generated_doc.file_name
+          rescue Mongoid::Errors::DocumentNotFound
+            render json: { error: "El archivo PDF no fue encontrado en el almacenamiento. Por favor regenere el documento." }, status: :not_found
+          end
         end
 
         # POST /api/v1/legal/contracts/:id/sign_document
