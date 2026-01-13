@@ -42,6 +42,7 @@ gem "docx", "~> 0.8"           # Read/write Word documents
 gem "prawn", "~> 2.4"          # PDF generation
 gem "prawn-table", "~> 0.2"    # PDF tables
 gem "combine_pdf", "~> 1.0"    # PDF manipulation
+gem "hexapdf", "~> 0.40"       # Advanced PDF manipulation and text replacement
 gem "mini_magick", "~> 4.12"   # Image processing for signatures
 gem "pandoc-ruby", "~> 2.1"    # Pandoc wrapper for DOCX to HTML
 gem "wkhtmltopdf-heroku", "~> 3.0" # wkhtmltopdf binary for Heroku

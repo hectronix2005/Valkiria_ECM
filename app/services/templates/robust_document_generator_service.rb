@@ -433,16 +433,18 @@ module Templates
         return nil
       end
 
-      # Priority 3: Pandoc + wkhtmltopdf (works on Heroku without external APIs)
-      if pandoc_available?
-        result = convert_with_pandoc_wkhtmltopdf(docx_path)
+      # Priority 3: Use stored preview with data overlay (preserves original formatting)
+      if template.preview_file_id.present?
+        Rails.logger.info "Using stored PDF preview with data overlay (preserves original formatting)"
+        result = convert_using_preview_with_overlay(docx_path)
         return result if result
       end
 
-      # Priority 4: Use stored preview with data summary (partial solution)
-      if template.preview_file_id.present?
-        Rails.logger.warn "Using stored PDF preview (variables not replaced in document body)"
-        return convert_using_stored_preview
+      # Priority 4: Pandoc + wkhtmltopdf (works on Heroku but loses formatting)
+      if pandoc_available?
+        Rails.logger.warn "Falling back to Pandoc conversion (formatting may be lost)"
+        result = convert_with_pandoc_wkhtmltopdf(docx_path)
+        return result if result
       end
 
       # Priority 5: Basic Prawn generation (last resort)
@@ -672,6 +674,61 @@ module Templates
         FileUtils.rm_rf(output_dir)
         FileUtils.rm_rf(user_profile)
       end
+    end
+
+    def convert_using_preview_with_overlay(_docx_path)
+      require "hexapdf"
+      require "combine_pdf"
+
+      preview_content = template.preview_content
+      return nil unless preview_content
+
+      Rails.logger.info "Attempting PDF text replacement using HexaPDF..."
+
+      begin
+        # Try to replace variables directly in the PDF
+        doc = HexaPDF::Document.new(io: StringIO.new(preview_content))
+        replacements_made = 0
+
+        variable_values.each do |var_name, value|
+          # Try different placeholder formats
+          placeholders = [
+            "{{#{var_name}}}",
+            "{{ #{var_name} }}",
+            "{{#{var_name.upcase}}}",
+            "{{#{var_name.downcase}}}"
+          ]
+
+          doc.pages.each do |page|
+            page.each_content_stream do |content_stream|
+              content_stream.contents.force_encoding("UTF-8")
+              placeholders.each do |placeholder|
+                if content_stream.contents.include?(placeholder)
+                  content_stream.contents.gsub!(placeholder, value.to_s)
+                  replacements_made += 1
+                  Rails.logger.info "  Replaced '#{placeholder}' with '#{value}'"
+                end
+              end
+            rescue StandardError
+              # Content stream may not be text, skip
+            end
+          end
+        end
+
+        if replacements_made > 0
+          Rails.logger.info "HexaPDF: Made #{replacements_made} replacements successfully"
+          output = StringIO.new
+          doc.write(output)
+          return output.string
+        else
+          Rails.logger.info "HexaPDF: No replacements made, falling back to data summary page"
+        end
+      rescue StandardError => e
+        Rails.logger.warn "HexaPDF replacement failed: #{e.message}, falling back to data summary"
+      end
+
+      # Fallback: Use original preview with data summary page
+      convert_using_stored_preview
     end
 
     def convert_using_stored_preview
