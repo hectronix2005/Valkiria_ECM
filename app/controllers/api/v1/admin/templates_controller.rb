@@ -173,7 +173,9 @@ module Api
               default_third_party_type: @template.default_third_party_type,
               suggested_person_type: @template.suggested_person_type,
               required_fields: @template.required_third_party_fields,
-              uses_third_party: @template.uses_third_party_variables?
+              uses_third_party: @template.uses_third_party_variables?,
+              variables: @template.variables,
+              variables_count: @template.variables&.count || 0
             }
           }
         end

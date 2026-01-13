@@ -603,7 +603,7 @@ function ThirdPartyQuickForm({ template, onSubmit, onCancel, isLoading, thirdPar
             <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
             <div className="flex-1">
               <p className="font-medium text-blue-900">
-                Crear tercero para: {template.name} ({template.variables?.length || 0} variables)
+                Crear tercero para: {template.name} ({templateRequirements.variables_count ?? templateRequirements.variables?.length ?? 0} variables)
               </p>
 
               {/* Variables del Tercero - que el usuario debe llenar */}
@@ -630,7 +630,7 @@ function ThirdPartyQuickForm({ template, onSubmit, onCancel, isLoading, thirdPar
                   Datos del Contrato (se toman del formulario):
                 </p>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {(template.variables || []).filter(v =>
+                  {(templateRequirements.variables || []).filter(v =>
                     ['Valor', 'Periodicidad de Pago', 'Monto', 'Condiciones de Pago'].some(k => v.toLowerCase().includes(k.toLowerCase()))
                   ).map((v, idx) => (
                     <span key={idx} className="inline-flex items-center px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded">
@@ -647,7 +647,7 @@ function ThirdPartyQuickForm({ template, onSubmit, onCancel, isLoading, thirdPar
                   Automático (fecha del sistema):
                 </p>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {(template.variables || []).filter(v =>
+                  {(templateRequirements.variables || []).filter(v =>
                     v.toLowerCase().includes('fecha') || v.toLowerCase().includes('dia') || v.toLowerCase().includes('año') || v.toLowerCase().includes('ano')
                   ).map((v, idx) => (
                     <span key={idx} className="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
