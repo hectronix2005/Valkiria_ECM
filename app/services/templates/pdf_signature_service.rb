@@ -217,10 +217,13 @@ module Templates
     end
 
     # Read the original draft PDF (without any signatures applied)
+    # Uses original_draft_file_id if available, falls back to draft_file_id
     def read_draft_pdf
-      return nil unless @generated_document.draft_file_id
+      # Prefer original_draft_file_id (clean PDF without any signatures)
+      file_id = @generated_document.original_draft_file_id || @generated_document.draft_file_id
+      return nil unless file_id
 
-      file = Mongoid::GridFs.get(@generated_document.draft_file_id)
+      file = Mongoid::GridFs.get(file_id)
       file.data
     rescue StandardError => e
       Rails.logger.error "Error reading draft PDF: #{e.message}"
