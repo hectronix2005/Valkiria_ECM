@@ -103,6 +103,7 @@ export default function Dashboard() {
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [showSignConfirm, setShowSignConfirm] = useState(false)
 
   const { data: vacationsData } = useQuery({
     queryKey: ['vacations', 'recent'],
@@ -194,6 +195,24 @@ export default function Dashboard() {
     }
     setPreviewUrl(null)
     setPreviewDoc(null)
+    setShowSignConfirm(false)
+  }
+
+  const handleConfirmSign = () => {
+    if (!previewDoc) return
+
+    // Check if user has a digital signature configured
+    if (!previewDoc.user_has_digital_signature && !hasActiveSignature()) {
+      handleClosePreview()
+      setShowNoSignatureModal(true)
+      return
+    }
+
+    signMutation.mutate(previewDoc.id, {
+      onSuccess: () => {
+        handleClosePreview()
+      }
+    })
   }
 
   const handleDownload = async (doc) => {
@@ -390,15 +409,6 @@ export default function Dashboard() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => handlePreview(doc)}
-                      title="Ver documento"
-                    >
-                      <Eye className="w-4 h-4" />
-                      Ver
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
                       onClick={() => handleDownload(doc)}
                       title="Descargar documento"
                     >
@@ -406,12 +416,11 @@ export default function Dashboard() {
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => handleSign(doc)}
-                      loading={signMutation.isPending}
+                      onClick={() => handlePreview(doc)}
                       disabled={doc.signatures?.find(s => s.user_id === user?.id?.toString() && s.waiting_for?.length > 0)}
                     >
-                      <PenTool className="w-4 h-4" />
-                      Firmar
+                      <Eye className="w-4 h-4" />
+                      Ver y Firmar
                     </Button>
                   </div>
                 </div>
@@ -605,17 +614,6 @@ export default function Dashboard() {
                   <Download className="w-4 h-4" />
                   Descargar
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    handleClosePreview()
-                    handleSign(previewDoc)
-                  }}
-                  disabled={previewDoc.signatures?.find(s => s.user_id === user?.id?.toString() && s.waiting_for?.length > 0)}
-                >
-                  <PenTool className="w-4 h-4" />
-                  Firmar
-                </Button>
                 <button
                   onClick={handleClosePreview}
                   className="p-2 hover:bg-gray-100 rounded-lg ml-2"
@@ -679,6 +677,57 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+
+            {/* Sign Confirmation Footer */}
+            {!showSignConfirm ? (
+              <div className="p-4 border-t bg-white flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">
+                    Revisa el documento antes de firmar
+                  </p>
+                  <Button
+                    onClick={() => setShowSignConfirm(true)}
+                    disabled={previewDoc.signatures?.find(s => s.user_id === user?.id?.toString() && s.waiting_for?.length > 0)}
+                  >
+                    <PenTool className="w-4 h-4" />
+                    Proceder a Firmar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 border-t bg-amber-50 flex-shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    <AlertTriangle className="w-8 h-8 text-amber-500" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">
+                      Confirmar firma del documento
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Al firmar, confirmas que has revisado el documento y aceptas su contenido.
+                      Esta accion no se puede deshacer.
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowSignConfirm(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleConfirmSign}
+                      loading={signMutation.isPending}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <PenTool className="w-4 h-4" />
+                      Confirmar y Firmar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
