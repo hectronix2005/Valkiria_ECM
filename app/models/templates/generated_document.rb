@@ -178,7 +178,8 @@ module Templates
 
     # Apply a single signature to the current PDF
     def apply_signature_to_pdf!(sig_entry, signature)
-      signatory = template&.signatories&.find_by(uuid: sig_entry["signatory_id"])
+      signatory_uuid = sig_entry["signatory_id"]
+      signatory = signatory_uuid.present? ? template&.signatories&.where(uuid: signatory_uuid)&.first : nil
       return unless signatory
 
       pdf_content = file_content

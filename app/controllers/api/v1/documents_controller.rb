@@ -136,8 +136,11 @@ module Api
       private
 
       def set_document
-        @document = ::Templates::GeneratedDocument.find_by!(uuid: params[:id])
-      rescue Mongoid::Errors::DocumentNotFound
+        return render json: { error: "ID de documento requerido" }, status: :bad_request if params[:id].blank?
+
+        @document = ::Templates::GeneratedDocument.where(uuid: params[:id]).first
+        return if @document
+
         render json: { error: "Documento no encontrado" }, status: :not_found
       end
 

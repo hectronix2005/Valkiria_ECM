@@ -72,7 +72,8 @@ module Api
           return render json: { error: "Se requiere lista de IDs" }, status: :bad_request unless params[:ids].present?
 
           params[:ids].each_with_index do |uuid, index|
-            signatory = @template.signatories.find_by(uuid: uuid)
+            next if uuid.blank?
+            signatory = @template.signatories.where(uuid: uuid).first
             signatory&.update!(position: index)
           end
 
@@ -93,10 +94,12 @@ module Api
         end
 
         def set_template
-          @template = ::Templates::Template.find_by(
+          return render json: { error: "ID de template requerido" }, status: :bad_request if params[:template_id].blank?
+
+          @template = ::Templates::Template.where(
             uuid: params[:template_id],
             organization_id: current_organization.id
-          )
+          ).first
 
           return if @template
 
@@ -104,7 +107,9 @@ module Api
         end
 
         def set_signatory
-          @signatory = @template.signatories.find_by(uuid: params[:id])
+          return render json: { error: "ID de firmante requerido" }, status: :bad_request if params[:id].blank?
+
+          @signatory = @template.signatories.where(uuid: params[:id]).first
 
           return if @signatory
 

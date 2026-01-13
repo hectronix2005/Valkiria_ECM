@@ -219,7 +219,8 @@ module Api
           if doc
             signatures_info = doc.signatures.map do |sig|
               # Get signatory from template to get position info
-              signatory = doc.template&.signatories&.find_by(uuid: sig["signatory_id"])
+              signatory_uuid = sig["signatory_id"]
+              signatory = signatory_uuid.present? ? doc.template&.signatories&.where(uuid: signatory_uuid)&.first : nil
               sig_box = signatory&.signature_box || {}
 
               {
