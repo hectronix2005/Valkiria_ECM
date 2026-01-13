@@ -638,15 +638,25 @@ module Templates
       begin
         # Set environment for Heroku apt buildpack
         lib_path = "/app/.apt/usr/lib/libreoffice/program:/app/.apt/usr/lib/x86_64-linux-gnu"
-        env_vars = [
-          "LD_LIBRARY_PATH=#{lib_path}:$LD_LIBRARY_PATH",
-          "HOME=/tmp"
-        ].join(" ")
+
+        # Additional environment variables to fix LibreOffice issues on Heroku
+        env_vars = {
+          "LD_LIBRARY_PATH" => "#{lib_path}:#{ENV['LD_LIBRARY_PATH']}",
+          "HOME" => "/tmp",
+          "FONTCONFIG_PATH" => "/etc/fonts",
+          "SAL_DISABLE_SYNCHRONOUS_PRINTER_DETECTION" => "1",
+          "SAL_DISABLE_COMPONENTITHREADING" => "1",
+          "SAL_USE_VCLPLUGIN" => "svp",
+          "DISPLAY" => "",
+          "URE_BOOTSTRAP" => "file:///app/.apt/usr/lib/libreoffice/program/fundamentalrc"
+        }
+
+        env_string = env_vars.map { |k, v| "#{k}=#{v}" }.join(" ")
 
         # Use -env:UserInstallation to avoid profile issues
         user_install = "-env:UserInstallation=file://#{user_profile}"
 
-        cmd = "#{env_vars} \"#{@libreoffice_path}\" --headless #{user_install} --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
+        cmd = "#{env_string} \"#{@libreoffice_path}\" --headless --nologo --nofirststartwizard --norestore #{user_install} --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
         Rails.logger.info "Running LibreOffice: #{cmd}"
         result = `#{cmd}`
         Rails.logger.info "LibreOffice conversion result: #{result}"
