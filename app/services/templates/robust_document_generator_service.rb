@@ -686,7 +686,7 @@ module Templates
       Rails.logger.info "Attempting PDF text replacement using HexaPDF..."
 
       begin
-        # Try to replace variables directly in the PDF
+        # Try to replace variables directly in the PDF using HexaPDF's text search
         doc = HexaPDF::Document.new(io: StringIO.new(preview_content))
         replacements_made = 0
 
@@ -700,17 +700,27 @@ module Templates
           ]
 
           doc.pages.each do |page|
-            page.each_content_stream do |content_stream|
-              content_stream.contents.force_encoding("UTF-8")
-              placeholders.each do |placeholder|
-                if content_stream.contents.include?(placeholder)
-                  content_stream.contents.gsub!(placeholder, value.to_s)
-                  replacements_made += 1
-                  Rails.logger.info "  Replaced '#{placeholder}' with '#{value}'"
-                end
+            # Get the page's content stream
+            contents = page.contents
+            next unless contents
+
+            # Decode the content stream to get raw data
+            data = contents.stream rescue nil
+            next unless data
+
+            data_str = data.to_s.force_encoding("UTF-8") rescue data.to_s
+
+            placeholders.each do |placeholder|
+              if data_str.include?(placeholder)
+                data_str.gsub!(placeholder, value.to_s)
+                replacements_made += 1
+                Rails.logger.info "  Replaced '#{placeholder}' with '#{value}'"
               end
-            rescue StandardError
-              # Content stream may not be text, skip
+            end
+
+            # Update the content stream if changes were made
+            if replacements_made > 0
+              contents.stream = data_str
             end
           end
         end
@@ -721,7 +731,7 @@ module Templates
           doc.write(output)
           return output.string
         else
-          Rails.logger.info "HexaPDF: No replacements made, falling back to data summary page"
+          Rails.logger.info "HexaPDF: No direct replacements possible, using data summary page"
         end
       rescue StandardError => e
         Rails.logger.warn "HexaPDF replacement failed: #{e.message}, falling back to data summary"
