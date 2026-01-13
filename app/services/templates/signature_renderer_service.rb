@@ -68,29 +68,14 @@ module Templates
     private
 
     def transparent_base_image
-      # Create a transparent 400x150 PNG base
-      MiniMagick::Image.create(".png") do |f|
-        # Create transparent image
-        MiniMagick::Tool::Convert.new do |convert|
-          convert << "-size" << "400x150"
-          convert << "xc:transparent"
-          convert << f.path
-        end
-        f.path
-      end
-    rescue StandardError
-      # Fallback to creating directly
-      create_transparent_image
-    end
-
-    def create_transparent_image
-      tempfile = Tempfile.new(["base", ".png"])
+      # Create a transparent 400x150 PNG base using tempfile
+      @base_tempfile = Tempfile.new(["base", ".png"])
       MiniMagick::Tool::Convert.new do |convert|
         convert << "-size" << "400x150"
         convert << "xc:transparent"
-        convert << tempfile.path
+        convert << @base_tempfile.path
       end
-      tempfile.path
+      @base_tempfile.path
     end
 
     def font_path(font_name)
