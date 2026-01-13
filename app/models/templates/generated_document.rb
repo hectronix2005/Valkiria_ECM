@@ -20,7 +20,8 @@ module Templates
     field :status, type: String, default: DRAFT
 
     # PDF file storage (GridFS)
-    field :draft_file_id, type: BSON::ObjectId  # Initial generated PDF
+    field :draft_file_id, type: BSON::ObjectId  # Current working PDF (may have signatures)
+    field :original_draft_file_id, type: BSON::ObjectId  # Original PDF without any signatures
     field :final_file_id, type: BSON::ObjectId  # PDF with all signatures
     field :docx_file_id, type: BSON::ObjectId   # Source DOCX for local PDF generation
     field :file_name, type: String
@@ -498,13 +499,43 @@ module Templates
         content_type: "application/pdf"
       )
 
+      # Store as both draft and original (original never gets modified)
       update!(
         draft_file_id: pdf_file.id,
+        original_draft_file_id: pdf_file.id,
         pdf_generation_status: "completed"
       )
 
       # Initialize signatures now that we have a PDF
       initialize_signatures!
+    end
+
+    # Reset signatures and restore original PDF without any signatures
+    def reset_signatures!
+      # Restore original PDF if available
+      if original_draft_file_id.present?
+        # Copy original to draft (don't modify original)
+        original_content = Mongoid::GridFs.get(original_draft_file_id).data
+        new_draft = Mongoid::GridFs.put(
+          StringIO.new(original_content),
+          filename: file_name || "document.pdf",
+          content_type: "application/pdf"
+        )
+        self.draft_file_id = new_draft.id
+      end
+
+      # Reset all signatures to pending
+      signatures.each do |s|
+        s["status"] = "pending"
+        s["signature_id"] = nil
+        s["signed_at"] = nil
+        s["signed_by_name"] = nil
+      end
+
+      self.status = PENDING_SIGNATURES
+      self.final_file_id = nil
+      self.completed_at = nil
+      save!
     end
 
     def cancel!(reason: nil)
