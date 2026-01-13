@@ -20,7 +20,11 @@ import {
   PenTool,
   FileCheck,
   AlertTriangle,
-  X
+  X,
+  Eye,
+  Download,
+  User,
+  Building
 } from 'lucide-react'
 
 function StatCard({ title, value, icon: Icon, color, subtitle }) {
@@ -96,6 +100,9 @@ export default function Dashboard() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [showNoSignatureModal, setShowNoSignatureModal] = useState(false)
+  const [previewDoc, setPreviewDoc] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const { data: vacationsData } = useQuery({
     queryKey: ['vacations', 'recent'],
@@ -163,6 +170,49 @@ export default function Dashboard() {
       alert(error.response?.data?.error || 'Error al firmar el documento')
     }
   })
+
+  // Preview document handlers
+  const handlePreview = async (doc) => {
+    setPreviewDoc(doc)
+    setPreviewLoading(true)
+    try {
+      const response = await generatedDocumentService.download(doc.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl(url)
+    } catch (error) {
+      console.error('Error loading preview:', error)
+      alert('Error al cargar la vista previa del documento')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handleClosePreview = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl)
+    }
+    setPreviewUrl(null)
+    setPreviewDoc(null)
+  }
+
+  const handleDownload = async (doc) => {
+    try {
+      const response = await generatedDocumentService.download(doc.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = doc.name || 'documento.pdf'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading:', error)
+      alert('Error al descargar el documento')
+    }
+  }
 
   const vacations = vacationsData?.data?.data || []
   const certifications = certificationsData?.data?.data || []
@@ -260,28 +310,105 @@ export default function Dashboard() {
             <Badge variant="warning">{pendingDocs.length}</Badge>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {pendingDocs.map((doc) => (
-                <div key={doc.id} className="flex items-center gap-4 p-4 bg-white rounded-lg border border-amber-200">
-                  <div className="p-2 bg-amber-100 rounded-lg">
-                    <FileCheck className="w-5 h-5 text-amber-600" />
+                <div key={doc.id} className="bg-white rounded-lg border border-amber-200 overflow-hidden">
+                  {/* Document Header */}
+                  <div className="flex items-start gap-4 p-4">
+                    <div className="p-3 bg-amber-100 rounded-lg flex-shrink-0">
+                      <FileCheck className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900">{doc.name}</p>
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FileText className="w-4 h-4 text-gray-400" />
+                          <span>{doc.template_name || 'Documento'}</span>
+                        </div>
+                        {doc.employee_name && (
+                          <div className="flex items-center gap-2 text-gray-600">
+                            <User className="w-4 h-4 text-gray-400" />
+                            <span>{doc.employee_name}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          <span>{new Date(doc.created_at).toLocaleDateString('es-ES', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          })}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <PenTool className="w-4 h-4 text-gray-400" />
+                          <span>
+                            {doc.completed_signatures_count || 0}/{doc.total_required_signatures || 0} firmas
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Signatures Progress */}
+                      {doc.signatures && doc.signatures.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-xs font-medium text-gray-500 mb-1">Estado de firmas:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {doc.signatures.map((sig, idx) => (
+                              <span
+                                key={idx}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                                  sig.status === 'signed'
+                                    ? 'bg-green-100 text-green-700'
+                                    : sig.user_id === user?.id?.toString()
+                                    ? 'bg-amber-100 text-amber-700 font-medium'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
+                                {sig.status === 'signed' ? (
+                                  <CheckSquare className="w-3 h-3" />
+                                ) : (
+                                  <Clock className="w-3 h-3" />
+                                )}
+                                {sig.label || sig.signatory_label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Waiting message */}
+                      {doc.signatures?.find(s => s.user_id === user?.id?.toString() && s.status === 'pending' && s.waiting_for?.length > 0) && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                          <AlertTriangle className="w-3 h-3" />
+                          Esperando: {doc.signatures.find(s => s.user_id === user?.id?.toString())?.waiting_for?.join(', ')}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{doc.name}</p>
-                    <p className="text-sm text-gray-500">
-                      {doc.template_name} • {new Date(doc.created_at).toLocaleDateString('es-ES')}
-                    </p>
-                    {doc.signatures?.find(s => s.user_id === user?.id && s.status === 'pending' && s.waiting_for?.length > 0) && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        Esperando: {doc.signatures.find(s => s.user_id === user?.id)?.waiting_for?.join(', ')}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-2 px-4 py-3 bg-gray-50 border-t border-amber-100">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handlePreview(doc)}
+                      title="Ver documento"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Ver
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleDownload(doc)}
+                      title="Descargar documento"
+                    >
+                      <Download className="w-4 h-4" />
+                    </Button>
                     <Button
                       size="sm"
                       onClick={() => handleSign(doc)}
                       loading={signMutation.isPending}
+                      disabled={doc.signatures?.find(s => s.user_id === user?.id?.toString() && s.waiting_for?.length > 0)}
                     >
                       <PenTool className="w-4 h-4" />
                       Firmar
@@ -451,6 +578,106 @@ export default function Dashboard() {
                   Ir a Crear Firma
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
+              <div>
+                <h3 className="text-lg font-semibold">{previewDoc.name}</h3>
+                <p className="text-sm text-gray-500">
+                  {previewDoc.template_name}
+                  {previewDoc.employee_name && ` • ${previewDoc.employee_name}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleDownload(previewDoc)}
+                >
+                  <Download className="w-4 h-4" />
+                  Descargar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    handleClosePreview()
+                    handleSign(previewDoc)
+                  }}
+                  disabled={previewDoc.signatures?.find(s => s.user_id === user?.id?.toString() && s.waiting_for?.length > 0)}
+                >
+                  <PenTool className="w-4 h-4" />
+                  Firmar
+                </Button>
+                <button
+                  onClick={handleClosePreview}
+                  className="p-2 hover:bg-gray-100 rounded-lg ml-2"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Document Info Bar */}
+            <div className="px-4 py-2 bg-gray-50 border-b flex items-center gap-4 text-sm flex-shrink-0">
+              <div className="flex items-center gap-2 text-gray-600">
+                <Calendar className="w-4 h-4" />
+                {new Date(previewDoc.created_at).toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })}
+              </div>
+              <div className="flex items-center gap-2 text-gray-600">
+                <PenTool className="w-4 h-4" />
+                {previewDoc.completed_signatures_count || 0}/{previewDoc.total_required_signatures || 0} firmas completadas
+              </div>
+              {previewDoc.signatures && (
+                <div className="flex items-center gap-2 ml-auto">
+                  {previewDoc.signatures.map((sig, idx) => (
+                    <span
+                      key={idx}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                        sig.status === 'signed'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {sig.status === 'signed' ? <CheckSquare className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                      {sig.label || sig.signatory_label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* PDF Viewer */}
+            <div className="flex-1 overflow-hidden bg-gray-100">
+              {previewLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-500">Cargando documento...</p>
+                  </div>
+                </div>
+              ) : previewUrl ? (
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full border-0"
+                  title="Vista previa del documento"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-500">No se pudo cargar el documento</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
