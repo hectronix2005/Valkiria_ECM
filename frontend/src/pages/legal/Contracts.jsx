@@ -482,28 +482,16 @@ function ThirdPartyQuickForm({ template, onSubmit, onCancel, isLoading, thirdPar
   })
   const [errors, setErrors] = useState({})
 
-  // Fetch template requirements from API
-  const { data: requirementsData, isLoading: loadingRequirements, error: requirementsError } = useQuery({
+  // Fetch template requirements from API (using public endpoint)
+  const { data: requirementsData, isLoading: loadingRequirements } = useQuery({
     queryKey: ['template-requirements', template?.id],
-    queryFn: () => templateService.getThirdPartyRequirements(template.id),
+    queryFn: () => publicTemplateService.getThirdPartyRequirements(template.id),
     enabled: !!template?.id,
-  })
-
-  // Debug logging
-  console.log('ThirdPartyQuickForm Debug:', {
-    templateId: template?.id,
-    templateName: template?.name,
-    loadingRequirements,
-    requirementsError: requirementsError?.message,
-    requirementsData: requirementsData?.data,
-    rawResponse: requirementsData
   })
 
   const templateRequirements = requirementsData?.data?.data || {}
   const requiredFields = templateRequirements.required_fields || []
   const requiredFieldNames = requiredFields.map(f => f.field)
-
-  console.log('Parsed templateRequirements:', templateRequirements)
 
   // Update person type and form data when requirements load
   useEffect(() => {

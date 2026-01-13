@@ -56,6 +56,33 @@ module Api
         end
       end
 
+      # GET /api/v1/templates/:id/third_party_requirements
+      def third_party_requirements
+        template = Templates::Template.find_by(
+          uuid: params[:id],
+          organization_id: current_user.organization_id,
+          status: "active"
+        )
+
+        unless template
+          render json: { error: "Template no encontrado" }, status: :not_found
+          return
+        end
+
+        render json: {
+          data: {
+            template_id: template.uuid,
+            template_name: template.name,
+            default_third_party_type: template.default_third_party_type,
+            suggested_person_type: template.suggested_person_type,
+            required_fields: template.required_third_party_fields,
+            uses_third_party: template.uses_third_party_variables?,
+            variables: template.variables,
+            variables_count: template.variables&.count || 0
+          }
+        }
+      end
+
       private
 
       def template_json(template, detailed: false)

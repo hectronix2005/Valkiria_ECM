@@ -61,7 +61,11 @@ Rails.application.routes.draw do
       resources :users, only: [:index, :show]
 
       # Public templates endpoint (read-only, active templates only)
-      resources :templates, only: [:index, :show]
+      resources :templates, only: [:index, :show] do
+        member do
+          get :third_party_requirements
+        end
+      end
 
       namespace :admin do
         resource :settings, only: [:show, :update]

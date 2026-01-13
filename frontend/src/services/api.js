@@ -191,6 +191,7 @@ export const variableMappingService = {
 export const publicTemplateService = {
   list: (params) => api.get('/templates', { params }),
   get: (id) => api.get(`/templates/${id}`),
+  getThirdPartyRequirements: (id) => api.get(`/templates/${id}/third_party_requirements`),
 }
 
 // Admin - Templates
