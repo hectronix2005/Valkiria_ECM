@@ -69,7 +69,8 @@ module Api
           default_third_party_type: template.default_third_party_type,
           uses_third_party: template.uses_third_party_variables?,
           signatories_count: template.signatories.count,
-          sequential_signing: template.sequential_signing != false
+          sequential_signing: template.sequential_signing != false,
+          variables_count: template.variables&.count || 0
         }
 
         if detailed

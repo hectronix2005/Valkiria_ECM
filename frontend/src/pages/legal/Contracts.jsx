@@ -1061,7 +1061,7 @@ function ContractForm({ template, thirdParties, thirdPartyTypes, onSubmit, onCan
             <div>
               <p className="text-sm text-indigo-600 font-medium">Template seleccionado</p>
               <p className="font-semibold text-indigo-900">{template?.name}</p>
-              <p className="text-xs text-indigo-500">{template?.variables?.length || 0} variables configuradas</p>
+              <p className="text-xs text-indigo-500">{template?.variables_count ?? template?.variables?.length ?? 0} variables configuradas</p>
             </div>
           </div>
         </div>
@@ -1390,7 +1390,7 @@ function TemplateSelector({ templates, onSelect, onCancel, isLoading }) {
                         {template.name}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {template.category_label} • {template.variables?.length || 0} variables
+                        {template.category_label} • {template.variables_count ?? template.variables?.length ?? 0} variables
                       </p>
                     </div>
                   </div>
@@ -2259,7 +2259,7 @@ export default function Contracts() {
               { value: '', label: 'Seleccionar template...' },
               ...templates.map(t => ({
                 value: t.id,
-                label: `${t.name} (${t.variables?.length || 0} variables)`
+                label: `${t.name} (${t.variables_count ?? t.variables?.length ?? 0} variables)`
               }))
             ]}
           />
