@@ -594,6 +594,9 @@ function ThirdPartyQuickForm({ template, onSubmit, onCancel, isLoading, thirdPar
     )
   }
 
+  // Get variables count - prefer from requirements API, fallback to template
+  const variablesCount = templateRequirements.variables_count ?? templateRequirements.variables?.length ?? 0
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Info del template con TODAS las variables */}
@@ -603,7 +606,7 @@ function ThirdPartyQuickForm({ template, onSubmit, onCancel, isLoading, thirdPar
             <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
             <div className="flex-1">
               <p className="font-medium text-blue-900">
-                Crear tercero para: {template.name} ({templateRequirements.variables_count ?? templateRequirements.variables?.length ?? 0} variables)
+                Crear tercero para: {template.name} ({loadingRequirements ? '...' : variablesCount} variables)
               </p>
 
               {/* Variables del Tercero - que el usuario debe llenar */}
