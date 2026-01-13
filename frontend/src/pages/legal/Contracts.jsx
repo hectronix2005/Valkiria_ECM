@@ -1863,6 +1863,8 @@ export default function Contracts() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error downloading document:', error)
+      const errorMessage = error.response?.data?.error || 'Error al descargar el documento'
+      alert(errorMessage)
     }
   }
 
@@ -1877,7 +1879,9 @@ export default function Contracts() {
       setDocumentUrl(url)
     } catch (error) {
       console.error('Error loading document:', error)
-      alert('Error al cargar el documento')
+      const errorMessage = error.response?.data?.error || 'Error al cargar el documento'
+      alert(errorMessage)
+      setDocumentContract(null)
     } finally {
       setDocumentLoading(false)
     }
