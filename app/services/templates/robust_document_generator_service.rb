@@ -433,17 +433,18 @@ module Templates
         return nil
       end
 
-      # Priority 3: Use stored preview with data overlay (preserves original formatting)
-      if template.preview_file_id.present?
-        Rails.logger.info "Using stored PDF preview with data overlay (preserves original formatting)"
-        result = convert_using_preview_with_overlay(docx_path)
+      # Priority 3: Pandoc + wkhtmltopdf (works on Heroku, converts modified DOCX with replaced variables)
+      # This is preferred over preview fallback because it uses the DOCX with variables already replaced
+      if pandoc_available?
+        Rails.logger.info "Converting modified DOCX with Pandoc (variables are replaced in document)"
+        result = convert_with_pandoc_wkhtmltopdf(docx_path)
         return result if result
       end
 
-      # Priority 4: Pandoc + wkhtmltopdf (works on Heroku but loses formatting)
-      if pandoc_available?
-        Rails.logger.warn "Falling back to Pandoc conversion (formatting may be lost)"
-        result = convert_with_pandoc_wkhtmltopdf(docx_path)
+      # Priority 4: Use stored preview with data overlay (original formatting but variables NOT replaced in body)
+      if template.preview_file_id.present?
+        Rails.logger.warn "Pandoc failed - falling back to stored PDF preview with data summary page"
+        result = convert_using_preview_with_overlay(docx_path)
         return result if result
       end
 
