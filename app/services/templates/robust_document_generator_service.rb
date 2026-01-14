@@ -426,31 +426,13 @@ module Templates
         return result if result
       end
 
-      # If USE_LOCAL_PDF_SYNC is enabled, skip inferior fallbacks
-      # and return nil to trigger local sync workflow
-      if ENV["USE_LOCAL_PDF_SYNC"] == "true"
-        Rails.logger.info "Local PDF sync enabled. Skipping fallback converters."
-        return nil
-      end
-
-      # Priority 3: Pandoc + wkhtmltopdf (works on Heroku, converts modified DOCX with replaced variables)
-      # This is preferred over preview fallback because it uses the DOCX with variables already replaced
-      if pandoc_available?
-        Rails.logger.info "Converting modified DOCX with Pandoc (variables are replaced in document)"
-        result = convert_with_pandoc_wkhtmltopdf(docx_path)
-        return result if result
-      end
-
-      # Priority 4: Use stored preview with data overlay (original formatting but variables NOT replaced in body)
-      if template.preview_file_id.present?
-        Rails.logger.warn "Pandoc failed - falling back to stored PDF preview with data summary page"
-        result = convert_using_preview_with_overlay(docx_path)
-        return result if result
-      end
-
-      # Priority 5: Basic Prawn generation (last resort)
-      Rails.logger.warn "No PDF conversion available. Using basic Prawn generation."
-      generate_basic_prawn_pdf(docx_path)
+      # Priority 3: Local PDF sync workflow (for Heroku deployment)
+      # When LibreOffice and Gotenberg are unavailable, store DOCX for local conversion
+      # This preserves formatting by generating PDF locally with LibreOffice
+      # Use: rake db:sync:generate_pending_pdfs
+      Rails.logger.info "LibreOffice/Gotenberg unavailable - using local PDF sync workflow"
+      Rails.logger.info "Document will be created with 'pending' status. Run 'rake db:sync:generate_pending_pdfs' locally to generate PDF with proper formatting."
+      nil
     end
 
     def gotenberg_available?
