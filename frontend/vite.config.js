@@ -18,11 +18,26 @@ export default defineConfig({
   build: {
     outDir: '../public',
     emptyOutDir: false,
+    // Increase chunk size warning limit since we're now splitting properly
+    chunkSizeWarningLimit: 300,
     rollupOptions: {
       output: {
         assetFileNames: 'assets/[name]-[hash][extname]',
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
+        // Manual chunks for better code splitting
+        manualChunks: {
+          // Core React libraries - loaded once, cached forever
+          'vendor-react': ['react', 'react-dom'],
+          // Router - needed for navigation
+          'vendor-router': ['react-router-dom'],
+          // Data fetching - used across app
+          'vendor-query': ['@tanstack/react-query'],
+          // HTTP client
+          'vendor-axios': ['axios'],
+          // Icons - large library, separate chunk
+          'vendor-icons': ['lucide-react'],
+        },
       },
     },
   },

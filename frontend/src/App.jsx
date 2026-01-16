@@ -1,32 +1,42 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
-import Login from './pages/Login'
-import ForceChangePassword from './pages/ForceChangePassword'
-import Dashboard from './pages/Dashboard'
-import Profile from './pages/Profile'
-import Vacations from './pages/hr/Vacations'
-import Approvals from './pages/hr/Approvals'
-import Employees from './pages/hr/Employees'
-import Certifications from './pages/hr/Certifications'
-import MyRequests from './pages/hr/MyRequests'
-import HRDashboard from './pages/hr/HRDashboard'
-import Orgchart from './pages/hr/Orgchart'
-import HRDocuments from './pages/hr/HRDocuments'
-import Templates from './pages/admin/Templates'
-import TemplateEdit from './pages/admin/TemplateEdit'
-// HRVariables is now integrated into HRDocuments.jsx
-import SignatoryTypes from './pages/admin/SignatoryTypes'
-import Settings from './pages/admin/Settings'
-import Departments from './pages/admin/Departments'
-import AdminUsers from './pages/admin/Users'
-import Documents from './pages/Documents'
-import Folders from './pages/Folders'
-import ThirdParties from './pages/legal/ThirdParties'
-// ThirdPartyTypes is now integrated into ThirdParties.jsx
-import Contracts from './pages/legal/Contracts'
-import ContractApprovals from './pages/legal/ContractApprovals'
-// LegalVariables is now integrated into Contracts.jsx
+
+// Lazy load all pages for code splitting
+const Login = lazy(() => import('./pages/Login'))
+const ForceChangePassword = lazy(() => import('./pages/ForceChangePassword'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Profile = lazy(() => import('./pages/Profile'))
+const MyRequests = lazy(() => import('./pages/hr/MyRequests'))
+const Approvals = lazy(() => import('./pages/hr/Approvals'))
+const Employees = lazy(() => import('./pages/hr/Employees'))
+const HRDashboard = lazy(() => import('./pages/hr/HRDashboard'))
+const Orgchart = lazy(() => import('./pages/hr/Orgchart'))
+const HRDocuments = lazy(() => import('./pages/hr/HRDocuments'))
+const Templates = lazy(() => import('./pages/admin/Templates'))
+const TemplateEdit = lazy(() => import('./pages/admin/TemplateEdit'))
+const SignatoryTypes = lazy(() => import('./pages/admin/SignatoryTypes'))
+const Settings = lazy(() => import('./pages/admin/Settings'))
+const Departments = lazy(() => import('./pages/admin/Departments'))
+const AdminUsers = lazy(() => import('./pages/admin/Users'))
+const Documents = lazy(() => import('./pages/Documents'))
+const Folders = lazy(() => import('./pages/Folders'))
+const ThirdParties = lazy(() => import('./pages/legal/ThirdParties'))
+const Contracts = lazy(() => import('./pages/legal/Contracts'))
+const ContractApprovals = lazy(() => import('./pages/legal/ContractApprovals'))
+
+// Loading spinner component
+function PageLoader() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2" />
+        <p className="text-sm text-gray-500">Cargando...</p>
+      </div>
+    </div>
+  )
+}
 
 // Protected Route wrapper
 function ProtectedRoute({ children, requireHR = false, requireApprover = false, requireAdmin = false }) {
@@ -56,17 +66,12 @@ function ProtectedRoute({ children, requireHR = false, requireApprover = false, 
     return <Navigate to="/" replace />
   }
 
-  return <Layout>{children}</Layout>
-}
-
-// Placeholder pages
-function ComingSoon({ title }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24">
-      <div className="text-6xl mb-4">🚧</div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">{title}</h1>
-      <p className="text-gray-500">Esta sección está en desarrollo</p>
-    </div>
+    <Layout>
+      <Suspense fallback={<PageLoader />}>
+        {children}
+      </Suspense>
+    </Layout>
   )
 }
 
@@ -89,13 +94,29 @@ export default function App() {
       {/* Public routes */}
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
+        element={
+          isAuthenticated ? (
+            <Navigate to="/" replace />
+          ) : (
+            <Suspense fallback={<PageLoader />}>
+              <Login />
+            </Suspense>
+          )
+        }
       />
 
       {/* Force change password route */}
       <Route
         path="/change-password"
-        element={isAuthenticated ? <ForceChangePassword /> : <Navigate to="/login" replace />}
+        element={
+          isAuthenticated ? (
+            <Suspense fallback={<PageLoader />}>
+              <ForceChangePassword />
+            </Suspense>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
       />
 
       {/* Protected routes */}
