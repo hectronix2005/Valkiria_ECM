@@ -1343,6 +1343,42 @@ function TemplateSelector({ templates, onSelect, onCancel, isLoading }) {
   const [selectedId, setSelectedId] = useState('')
   const selectedTemplate = templates.find(t => t.id === selectedId)
 
+  // Group templates by module type
+  const legalTemplates = templates.filter(t => t.module_type === 'legal' || t.main_category === 'comercial')
+  const hrTemplates = templates.filter(t => t.module_type === 'hr' || t.main_category === 'laboral')
+
+  const renderTemplateCard = (template) => (
+    <div
+      key={template.id}
+      onClick={() => setSelectedId(template.id)}
+      className={`
+        p-4 border-2 rounded-lg cursor-pointer transition-all
+        ${selectedId === template.id
+          ? 'border-indigo-500 bg-indigo-50'
+          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}
+      `}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${selectedId === template.id ? 'bg-indigo-100' : 'bg-gray-100'}`}>
+            <FileText className={`h-5 w-5 ${selectedId === template.id ? 'text-indigo-600' : 'text-gray-500'}`} />
+          </div>
+          <div>
+            <p className={`font-medium ${selectedId === template.id ? 'text-indigo-900' : 'text-gray-900'}`}>
+              {template.name}
+            </p>
+            <p className="text-sm text-gray-500">
+              {template.category_label} • {template.variables_count ?? template.variables?.length ?? 0} variables
+            </p>
+          </div>
+        </div>
+        {selectedId === template.id && (
+          <CheckCircle className="h-5 w-5 text-indigo-600" />
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -1363,7 +1399,7 @@ function TemplateSelector({ templates, onSelect, onCancel, isLoading }) {
           <FileWarning className="h-12 w-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No hay templates disponibles</h3>
           <p className="text-gray-500 mb-4">
-            Para crear contratos, primero debes crear templates en la categoría "Comercial".
+            Para crear contratos, primero debes crear templates en las categorías Legal o Recursos Humanos.
           </p>
           <Button variant="secondary" onClick={onCancel}>
             Cerrar
@@ -1371,38 +1407,42 @@ function TemplateSelector({ templates, onSelect, onCancel, isLoading }) {
         </div>
       ) : (
         <>
-          <div className="grid gap-3">
-            {templates.map((template) => (
-              <div
-                key={template.id}
-                onClick={() => setSelectedId(template.id)}
-                className={`
-                  p-4 border-2 rounded-lg cursor-pointer transition-all
-                  ${selectedId === template.id
-                    ? 'border-indigo-500 bg-indigo-50'
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}
-                `}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${selectedId === template.id ? 'bg-indigo-100' : 'bg-gray-100'}`}>
-                      <FileText className={`h-5 w-5 ${selectedId === template.id ? 'text-indigo-600' : 'text-gray-500'}`} />
-                    </div>
-                    <div>
-                      <p className={`font-medium ${selectedId === template.id ? 'text-indigo-900' : 'text-gray-900'}`}>
-                        {template.name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {template.category_label} • {template.variables_count ?? template.variables?.length ?? 0} variables
-                      </p>
-                    </div>
+          <div className="space-y-6">
+            {/* Legal Templates Section */}
+            {legalTemplates.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-1.5 bg-purple-100 rounded-lg">
+                    <Building2 className="h-4 w-4 text-purple-600" />
                   </div>
-                  {selectedId === template.id && (
-                    <CheckCircle className="h-5 w-5 text-indigo-600" />
-                  )}
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                    Gestión Legal
+                  </h3>
+                  <span className="text-xs text-gray-400">({legalTemplates.length})</span>
+                </div>
+                <div className="grid gap-3">
+                  {legalTemplates.map(renderTemplateCard)}
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* HR Templates Section */}
+            {hrTemplates.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-1.5 bg-green-100 rounded-lg">
+                    <Users className="h-4 w-4 text-green-600" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                    Recursos Humanos
+                  </h3>
+                  <span className="text-xs text-gray-400">({hrTemplates.length})</span>
+                </div>
+                <div className="grid gap-3">
+                  {hrTemplates.map(renderTemplateCard)}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
@@ -1724,9 +1764,15 @@ export default function Contracts() {
     queryFn: () => thirdPartyService.list({ status: 'active', per_page: 100 }),
   })
 
-  const { data: templatesData } = useQuery({
+  // Fetch templates from both Legal (comercial) and HR (laboral) modules
+  const { data: templatesLegalData } = useQuery({
     queryKey: ['templates-comercial'],
     queryFn: () => publicTemplateService.list({ main_category: 'comercial' }),
+  })
+
+  const { data: templatesHrData } = useQuery({
+    queryKey: ['templates-laboral'],
+    queryFn: () => publicTemplateService.list({ main_category: 'laboral' }),
   })
 
   const { data: thirdPartyTypesData } = useQuery({
@@ -1837,7 +1883,9 @@ export default function Contracts() {
 
   const contracts = data?.data?.data || []
   const thirdParties = thirdPartiesData?.data?.data || []
-  const templates = templatesData?.data?.data || []
+  const templatesLegal = templatesLegalData?.data?.data || []
+  const templatesHr = templatesHrData?.data?.data || []
+  const templates = [...templatesLegal, ...templatesHr]
   const thirdPartyTypes = thirdPartyTypesData?.data?.data || []
 
   const handleCloseCreateModal = () => {
