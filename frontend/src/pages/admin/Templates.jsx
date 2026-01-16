@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { templateService } from '../../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -625,8 +625,9 @@ const MODULE_TABS = [
   }
 ]
 
-export default function Templates() {
+export default function Templates({ module = 'legal' }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
@@ -635,7 +636,9 @@ export default function Templates() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
-  const [activeModule, setActiveModule] = useState('legal') // 'legal' or 'hr'
+
+  // Use module prop from URL
+  const activeModule = module
 
   // Get current module config
   const currentModuleConfig = MODULE_TABS.find(m => m.id === activeModule) || MODULE_TABS[0]
@@ -708,20 +711,27 @@ export default function Templates() {
   const filteredSubcategories = grouped[currentModuleConfig.mainCategory] || []
   const meta = templatesData?.data?.meta || {}
 
-  // Handle module change - reset category filter
+  // Handle module change - navigate to new URL
   const handleModuleChange = (moduleId) => {
-    setActiveModule(moduleId)
+    navigate(`/admin/templates/${moduleId}`)
+  }
+
+  // Reset filters when module changes
+  useEffect(() => {
     setCategoryFilter('')
     setSearchQuery('')
-  }
+    setStatusFilter('')
+  }, [module])
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Templates de Documentos</h1>
-          <p className="text-gray-500">Gestiona los templates para generación de documentos</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Templates - {currentModuleConfig.label}
+          </h1>
+          <p className="text-gray-500">{currentModuleConfig.description}</p>
         </div>
         <div className="flex items-center gap-2">
           <Link to="/admin/signatory-types">

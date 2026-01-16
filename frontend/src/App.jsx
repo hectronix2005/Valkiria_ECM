@@ -243,9 +243,21 @@ export default function App() {
       {/* Admin - Templates */}
       <Route
         path="/admin/templates"
+        element={<Navigate to="/admin/templates/legal" replace />}
+      />
+      <Route
+        path="/admin/templates/legal"
         element={
           <ProtectedRoute requireAdmin>
-            <Templates />
+            <Templates module="legal" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/templates/hr"
+        element={
+          <ProtectedRoute requireAdmin>
+            <Templates module="hr" />
           </ProtectedRoute>
         }
       />
