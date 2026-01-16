@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { certificationService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -271,7 +271,17 @@ export default function Certifications() {
   const [initialType, setInitialType] = useState(null)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const location = useLocation()
   const { isHR, isAdmin } = useAuth()
+
+  // Auto-open modal if navigated with openNew state (from Dashboard quick action)
+  useEffect(() => {
+    if (location.state?.openNew) {
+      setShowNewModal(true)
+      // Clear the state to prevent re-opening on subsequent renders
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, location.pathname, navigate])
 
   const { data, isLoading } = useQuery({
     queryKey: ['certifications', { status: statusFilter, type: typeFilter }],

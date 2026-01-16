@@ -59,7 +59,7 @@ function StatCard({ title, value, icon: Icon, color, subtitle, href, onClick }) 
   return content
 }
 
-function QuickAction({ title, description, icon: Icon, href, color, onClick }) {
+function QuickAction({ title, description, icon: Icon, href, color, onClick, state }) {
   const colors = {
     blue: 'bg-blue-500 hover:bg-blue-600',
     green: 'bg-green-500 hover:bg-green-600',
@@ -93,6 +93,7 @@ function QuickAction({ title, description, icon: Icon, href, color, onClick }) {
   return (
     <Link
       to={href}
+      state={state}
       className={`flex items-center gap-4 p-4 rounded-xl text-white transition-colors ${colors[color]}`}
     >
       {content}
@@ -346,6 +347,7 @@ export default function Dashboard() {
               description="Solicita días libres"
               icon={Calendar}
               href="/hr/my-requests/vacations"
+              state={{ openNew: true }}
               color="blue"
             />
             <QuickAction
@@ -353,6 +355,7 @@ export default function Dashboard() {
               description="Certificado laboral"
               icon={Award}
               href="/hr/my-requests/certifications"
+              state={{ openNew: true }}
               color="green"
             />
             <QuickAction

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { vacationService, publicTemplateService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -696,6 +697,17 @@ export default function Vacations() {
   const [selectedVacation, setSelectedVacation] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
   const queryClient = useQueryClient()
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Auto-open modal if navigated with openNew state (from Dashboard quick action)
+  useEffect(() => {
+    if (location.state?.openNew) {
+      setShowNewModal(true)
+      // Clear the state to prevent re-opening on subsequent renders
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, location.pathname, navigate])
 
   const { data, isLoading } = useQuery({
     queryKey: ['vacations', { status: statusFilter }],
