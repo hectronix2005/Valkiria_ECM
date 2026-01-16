@@ -791,10 +791,16 @@ export default function HRDocuments() {
           <p className="text-gray-500 mt-1">Documentos generados por Recursos Humanos</p>
         </div>
         {(isAdmin || isHR) && (
-          <Button variant="secondary" onClick={() => setShowVariablesPanel(true)}>
-            <Variable className="w-4 h-4" />
-            Variables
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => navigate('/admin/templates/hr')}>
+              <FileText className="w-4 h-4" />
+              Templates
+            </Button>
+            <Button variant="secondary" onClick={() => setShowVariablesPanel(true)}>
+              <Variable className="w-4 h-4" />
+              Variables
+            </Button>
+          </div>
         )}
       </div>
 
