@@ -24,7 +24,8 @@ import {
   FileUp,
   Pencil,
   Download,
-  Users
+  Users,
+  Building2
 } from 'lucide-react'
 
 const STATUS_LABELS = {
@@ -604,6 +605,26 @@ const MODULE_COLORS = {
   admin: 'bg-slate-100 text-slate-700'
 }
 
+// Module tabs configuration
+const MODULE_TABS = [
+  {
+    id: 'legal',
+    label: 'Gestión Legal',
+    mainCategory: 'comercial',
+    icon: 'Building2',
+    color: 'indigo',
+    description: 'Templates para contratos y documentos legales'
+  },
+  {
+    id: 'hr',
+    label: 'Recursos Humanos',
+    mainCategory: 'laboral',
+    icon: 'Users',
+    color: 'emerald',
+    description: 'Templates para documentos de RRHH'
+  }
+]
+
 export default function Templates() {
   const queryClient = useQueryClient()
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -613,15 +634,18 @@ export default function Templates() {
   const [templateToPreview, setTemplateToPreview] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [mainCategoryFilter, setMainCategoryFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [activeModule, setActiveModule] = useState('legal') // 'legal' or 'hr'
+
+  // Get current module config
+  const currentModuleConfig = MODULE_TABS.find(m => m.id === activeModule) || MODULE_TABS[0]
 
   const { data: templatesData, isLoading } = useQuery({
-    queryKey: ['templates', { q: searchQuery, status: statusFilter, main_category: mainCategoryFilter, category: categoryFilter }],
+    queryKey: ['templates', { q: searchQuery, status: statusFilter, main_category: currentModuleConfig.mainCategory, category: categoryFilter }],
     queryFn: () => templateService.list({
       q: searchQuery || undefined,
       status: statusFilter || undefined,
-      main_category: mainCategoryFilter || undefined,
+      main_category: currentModuleConfig.mainCategory,
       category: categoryFilter || undefined
     })
   })
@@ -679,10 +703,17 @@ export default function Templates() {
   }
 
   const templates = templatesData?.data?.data || []
-  const mainCategories = categoriesData?.data?.main_categories || []
   const grouped = categoriesData?.data?.grouped || {}
-  const filteredSubcategories = mainCategoryFilter ? (grouped[mainCategoryFilter] || []) : (categoriesData?.data?.subcategories || [])
+  // Filter subcategories based on current module's main category
+  const filteredSubcategories = grouped[currentModuleConfig.mainCategory] || []
   const meta = templatesData?.data?.meta || {}
+
+  // Handle module change - reset category filter
+  const handleModuleChange = (moduleId) => {
+    setActiveModule(moduleId)
+    setCategoryFilter('')
+    setSearchQuery('')
+  }
 
   return (
     <div className="space-y-6">
@@ -690,7 +721,7 @@ export default function Templates() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Templates de Documentos</h1>
-          <p className="text-gray-500">Gestiona los templates para generacion de documentos</p>
+          <p className="text-gray-500">Gestiona los templates para generación de documentos</p>
         </div>
         <div className="flex items-center gap-2">
           <Link to="/admin/signatory-types">
@@ -704,6 +735,44 @@ export default function Templates() {
             Nuevo Template
           </Button>
         </div>
+      </div>
+
+      {/* Module Tabs */}
+      <div className="flex gap-4">
+        {MODULE_TABS.map((tab) => {
+          const isActive = activeModule === tab.id
+          const colorClasses = tab.color === 'indigo'
+            ? (isActive ? 'border-indigo-500 bg-indigo-50' : 'border-transparent hover:border-gray-300 hover:bg-gray-50')
+            : (isActive ? 'border-emerald-500 bg-emerald-50' : 'border-transparent hover:border-gray-300 hover:bg-gray-50')
+          const iconColorClasses = tab.color === 'indigo'
+            ? (isActive ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-500')
+            : (isActive ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-500')
+          const textColorClasses = tab.color === 'indigo'
+            ? (isActive ? 'text-indigo-900' : 'text-gray-700')
+            : (isActive ? 'text-emerald-900' : 'text-gray-700')
+
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleModuleChange(tab.id)}
+              className={`flex-1 p-4 border-2 rounded-xl transition-all ${colorClasses}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${iconColorClasses}`}>
+                  {tab.id === 'legal' ? (
+                    <Building2 className="w-5 h-5" />
+                  ) : (
+                    <Users className="w-5 h-5" />
+                  )}
+                </div>
+                <div className="text-left">
+                  <p className={`font-semibold ${textColorClasses}`}>{tab.label}</p>
+                  <p className="text-xs text-gray-500">{tab.description}</p>
+                </div>
+              </div>
+            </button>
+          )
+        })}
       </div>
 
       {/* Filters */}
@@ -732,22 +801,6 @@ export default function Templates() {
               <option value="draft">Borrador</option>
               <option value="active">Activo</option>
               <option value="archived">Archivado</option>
-            </select>
-
-            <select
-              value={mainCategoryFilter}
-              onChange={(e) => {
-                setMainCategoryFilter(e.target.value)
-                setCategoryFilter('') // Reset subcategory when main changes
-              }}
-              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">Todas las categorías</option>
-              {mainCategories.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label}
-                </option>
-              ))}
             </select>
 
             <select
