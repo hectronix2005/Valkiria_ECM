@@ -622,7 +622,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
   )
 }
 
-function VacationCard({ vacation, onSubmit, onCancel, onDelete, onView, onDownload }) {
+function VacationCard({ vacation, onSubmit, onCancel, onDelete, onView, onDownload, onSign }) {
   const typeLabels = {
     vacation: 'Vacaciones',
     personal: 'Día Personal',
@@ -668,7 +668,14 @@ function VacationCard({ vacation, onSubmit, onCancel, onDelete, onView, onDownlo
             </Button>
           )}
 
-          {vacation.status === 'draft' && (
+          {vacation.status === 'draft' && vacation.needs_employee_signature && (
+            <Button variant="secondary" size="sm" onClick={() => onSign(vacation)} title="Firmar documento">
+              <PenTool className="w-4 h-4" />
+              Firmar
+            </Button>
+          )}
+
+          {vacation.status === 'draft' && !vacation.needs_employee_signature && (
             <Button variant="primary" size="sm" onClick={() => onSubmit(vacation.id)} title="Enviar solicitud">
               <Send className="w-4 h-4" />
             </Button>
@@ -738,10 +745,32 @@ export default function Vacations() {
     }
   })
 
+  const signMutation = useMutation({
+    mutationFn: (id) => vacationService.signDocument(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['vacations'])
+      alert('Documento firmado exitosamente. Ahora puedes enviar la solicitud.')
+    },
+    onError: (err) => {
+      const error = err.response?.data?.error || 'Error al firmar el documento'
+      if (err.response?.data?.action_required?.type === 'configure_signature') {
+        if (window.confirm('No tienes firma digital configurada. ¿Deseas configurarla ahora?')) {
+          navigate('/profile')
+        }
+      } else {
+        alert(error)
+      }
+    }
+  })
+
   const handleDelete = (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar esta solicitud? Esta acción no se puede deshacer.')) {
       deleteMutation.mutate(id)
     }
+  }
+
+  const handleSign = (vacation) => {
+    signMutation.mutate(vacation.id)
   }
 
   const vacations = data?.data?.data || []
@@ -865,6 +894,7 @@ export default function Vacations() {
               onDelete={handleDelete}
               onView={handleView}
               onDownload={handleDownload}
+              onSign={handleSign}
             />
           ))}
         </div>

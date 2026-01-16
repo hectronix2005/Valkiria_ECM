@@ -265,6 +265,13 @@ module Api
         end
 
         def vacation_json(vacation, detailed: false) # rubocop:disable Metrics/MethodLength
+          # Check if document exists and needs employee signature
+          needs_signature = false
+          if vacation.document_uuid.present?
+            doc = ::Templates::GeneratedDocument.find_by(uuid: vacation.document_uuid)
+            needs_signature = doc && !employee_has_signed?(doc)
+          end
+
           json = {
             id: vacation.uuid,
             request_number: vacation.request_number,
@@ -277,6 +284,7 @@ module Api
             submitted_at: vacation.submitted_at&.iso8601,
             created_at: vacation.created_at.iso8601,
             has_document: vacation.document_uuid.present?,
+            needs_employee_signature: needs_signature,
             can_delete: can_delete_for_user?(vacation)
           }
 
