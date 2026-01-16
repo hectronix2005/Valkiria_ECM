@@ -20,7 +20,7 @@ gem "pundit", "~> 2.4"
 
 # Background Jobs
 gem "redis", ">= 4.0.1"
-gem "sidekiq", "~> 7.3"
+gem "sidekiq", "~> 8.1"
 
 # API & Serialization
 gem "jsonapi-serializer", "~> 2.2"
