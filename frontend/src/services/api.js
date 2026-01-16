@@ -76,6 +76,7 @@ export const certificationService = {
   generateDocument: (id) => api.post(`/hr/certifications/${id}/generate_document`),
   signDocument: (id) => api.post(`/hr/certifications/${id}/sign_document`),
   downloadDocument: (id) => api.get(`/hr/certifications/${id}/download_document`, { responseType: 'blob' }),
+  getAvailableTypes: () => api.get('/hr/certifications/available_types'),
 }
 
 // HR - Approvals

@@ -28,6 +28,13 @@ module Api
           render json: { data: certification_json(@certification, detailed: true) }
         end
 
+        # GET /api/v1/hr/certifications/available_types
+        # Returns only certification types that have active templates
+        def available_types
+          available = fetch_available_certification_types
+          render json: { data: available }
+        end
+
         # POST /api/v1/hr/certifications
         def create
           @certification = ::Hr::EmploymentCertificationRequest.new(certification_params)
@@ -331,12 +338,53 @@ module Api
         end
 
         def find_template_for_certification
-          # Find active template for certification category
+          # Find active template for certification category that matches the certification type
           ::Templates::Template
             .for_organization(current_organization)
             .active
             .where(category: "certification")
+            .where(certification_type: @certification.certification_type)
             .first
+        end
+
+        # Returns certification types that have active templates
+        def fetch_available_certification_types
+          # All possible certification types
+          all_types = ::Hr::EmploymentCertificationRequest::CERTIFICATION_TYPES
+
+          # Find which types have active templates
+          active_templates = ::Templates::Template
+            .for_organization(current_organization)
+            .active
+            .where(category: "certification")
+            .where(:certification_type.in => all_types)
+            .pluck(:certification_type)
+            .uniq
+
+          # Map to type info
+          type_labels = {
+            "employment" => "Certificado de Empleo",
+            "salary" => "Certificado de Salario",
+            "position" => "Certificado de Cargo",
+            "full" => "Certificado Completo",
+            "custom" => "Certificado Personalizado"
+          }
+
+          type_descriptions = {
+            "employment" => "Verificación básica de empleo",
+            "salary" => "Incluye información salarial",
+            "position" => "Detalla cargo y responsabilidades",
+            "full" => "Información completa de empleo",
+            "custom" => "Contenido personalizado según necesidad"
+          }
+
+          active_templates.map do |type|
+            {
+              value: type,
+              label: type_labels[type] || type.humanize,
+              description: type_descriptions[type] || ""
+            }
+          end
         end
 
         def generated_document_json(doc)

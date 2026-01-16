@@ -11,7 +11,8 @@ import Select from '../../components/ui/Select'
 import { FileText, Plus, X, Eye, Filter, Clock, CheckCircle, AlertCircle, Calendar, Download, FilePlus, Loader2, AlertTriangle, ExternalLink, Trash2, PenTool } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
-const certificationTypes = [
+// Default certification types (fallback if API fails)
+const defaultCertificationTypes = [
   { value: 'employment', label: 'Certificación Laboral Básica' },
   { value: 'salary', label: 'Certificación con Salario' },
   { value: 'position', label: 'Certificación de Cargo' },
@@ -48,10 +49,7 @@ const statusFilters = [
   { value: 'cancelled', label: 'Cancelado' },
 ]
 
-const typeFilters = [
-  { value: '', label: 'Todos los tipos' },
-  ...certificationTypes,
-]
+// Type filters will be built dynamically from available types
 
 const typeLabels = {
   employment: 'Certificación Laboral',
@@ -78,15 +76,23 @@ const estimatedDays = {
   custom: 3,
 }
 
-function CertificationForm({ onSubmit, onCancel, loading, initialType }) {
+function CertificationForm({ onSubmit, onCancel, loading, initialType, availableTypes }) {
+  // Use available types from API, or fall back to defaults
+  const certificationTypes = availableTypes?.length > 0 ? availableTypes : defaultCertificationTypes
+
+  // Get the first available type as default
+  const defaultType = initialType && certificationTypes.find(t => t.value === initialType)
+    ? initialType
+    : certificationTypes[0]?.value || 'employment'
+
   const [formData, setFormData] = useState({
-    certification_type: initialType || 'employment',
+    certification_type: defaultType,
     purpose: 'bank',
     purpose_details: '',
     language: 'es',
     delivery_method: 'digital',
     addressee: '',
-    include_salary: initialType === 'salary' || initialType === 'full',
+    include_salary: defaultType === 'salary' || defaultType === 'full',
     include_position: true,
     include_start_date: true,
     include_department: false,
@@ -95,14 +101,14 @@ function CertificationForm({ onSubmit, onCancel, loading, initialType }) {
 
   // Update form when initialType changes (when clicking info cards)
   useEffect(() => {
-    if (initialType) {
+    if (initialType && certificationTypes.find(t => t.value === initialType)) {
       setFormData(prev => ({
         ...prev,
         certification_type: initialType,
         include_salary: initialType === 'salary' || initialType === 'full',
       }))
     }
-  }, [initialType])
+  }, [initialType, certificationTypes])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -283,6 +289,21 @@ export default function Certifications() {
     }
   }, [location.state, location.pathname, navigate])
 
+  // Fetch available certification types (only those with templates)
+  const { data: availableTypesData } = useQuery({
+    queryKey: ['certification-available-types'],
+    queryFn: () => certificationService.getAvailableTypes(),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  })
+
+  const availableTypes = availableTypesData?.data?.data || []
+
+  // Build type filters dynamically from available types
+  const typeFilters = [
+    { value: '', label: 'Todos los tipos' },
+    ...availableTypes.map(t => ({ value: t.value, label: t.label }))
+  ]
+
   const { data, isLoading } = useQuery({
     queryKey: ['certifications', { status: statusFilter, type: typeFilter }],
     queryFn: () => certificationService.list({
@@ -436,7 +457,11 @@ export default function Certifications() {
           <h1 className="text-2xl font-bold text-gray-900">Certificaciones</h1>
           <p className="text-gray-500">Solicita certificaciones laborales para distintos trámites</p>
         </div>
-        <Button onClick={() => setShowNewModal(true)}>
+        <Button
+          onClick={() => setShowNewModal(true)}
+          disabled={availableTypes.length === 0}
+          title={availableTypes.length === 0 ? 'No hay tipos de certificación disponibles' : ''}
+        >
           <Plus className="w-4 h-4" />
           Nueva Solicitud
         </Button>
@@ -463,51 +488,103 @@ export default function Certifications() {
         </CardContent>
       </Card>
 
-      {/* Info Cards - Clickable shortcuts */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card
-          className="bg-blue-50 border-blue-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
-          onClick={() => { setInitialType('employment'); setShowNewModal(true); }}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <FileText className="w-8 h-8 text-blue-600" />
-              <div>
-                <p className="font-medium text-blue-900">Certificación Laboral</p>
-                <p className="text-sm text-blue-700">Confirma tu vínculo laboral actual</p>
-              </div>
+      {/* Info Cards - Clickable shortcuts - Only show available types */}
+      {availableTypes.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {availableTypes.find(t => t.value === 'employment') && (
+            <Card
+              className="bg-blue-50 border-blue-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
+              onClick={() => { setInitialType('employment'); setShowNewModal(true); }}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-8 h-8 text-blue-600" />
+                  <div>
+                    <p className="font-medium text-blue-900">Certificación Laboral</p>
+                    <p className="text-sm text-blue-700">Confirma tu vínculo laboral actual</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {availableTypes.find(t => t.value === 'salary') && (
+            <Card
+              className="bg-green-50 border-green-200 cursor-pointer hover:shadow-md hover:border-green-300 transition-all"
+              onClick={() => { setInitialType('salary'); setShowNewModal(true); }}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                  <div>
+                    <p className="font-medium text-green-900">Con Información Salarial</p>
+                    <p className="text-sm text-green-700">Incluye detalles de tu compensación</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {availableTypes.find(t => t.value === 'full') && (
+            <Card
+              className="bg-purple-50 border-purple-200 cursor-pointer hover:shadow-md hover:border-purple-300 transition-all"
+              onClick={() => { setInitialType('full'); setShowNewModal(true); }}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <Clock className="w-8 h-8 text-purple-600" />
+                  <div>
+                    <p className="font-medium text-purple-900">Certificación Completa</p>
+                    <p className="text-sm text-purple-700">Incluye toda tu información laboral</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {availableTypes.find(t => t.value === 'position') && (
+            <Card
+              className="bg-amber-50 border-amber-200 cursor-pointer hover:shadow-md hover:border-amber-300 transition-all"
+              onClick={() => { setInitialType('position'); setShowNewModal(true); }}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-8 h-8 text-amber-600" />
+                  <div>
+                    <p className="font-medium text-amber-900">Certificación de Cargo</p>
+                    <p className="text-sm text-amber-700">Detalla cargo y responsabilidades</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {availableTypes.find(t => t.value === 'custom') && (
+            <Card
+              className="bg-gray-50 border-gray-200 cursor-pointer hover:shadow-md hover:border-gray-300 transition-all"
+              onClick={() => { setInitialType('custom'); setShowNewModal(true); }}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-8 h-8 text-gray-600" />
+                  <div>
+                    <p className="font-medium text-gray-900">Certificación Personalizada</p>
+                    <p className="text-sm text-gray-700">Contenido según necesidad</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-600" />
+            <div>
+              <p className="font-medium text-amber-900">No hay tipos de certificación disponibles</p>
+              <p className="text-sm text-amber-700">
+                Contacta al administrador para configurar los templates de certificación.
+              </p>
             </div>
-          </CardContent>
-        </Card>
-        <Card
-          className="bg-green-50 border-green-200 cursor-pointer hover:shadow-md hover:border-green-300 transition-all"
-          onClick={() => { setInitialType('salary'); setShowNewModal(true); }}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle className="w-8 h-8 text-green-600" />
-              <div>
-                <p className="font-medium text-green-900">Con Información Salarial</p>
-                <p className="text-sm text-green-700">Incluye detalles de tu compensación</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card
-          className="bg-purple-50 border-purple-200 cursor-pointer hover:shadow-md hover:border-purple-300 transition-all"
-          onClick={() => { setInitialType('full'); setShowNewModal(true); }}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Clock className="w-8 h-8 text-purple-600" />
-              <div>
-                <p className="font-medium text-purple-900">Certificación Completa</p>
-                <p className="text-sm text-purple-700">Incluye toda tu información laboral</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* Certification List */}
       <Card>
@@ -705,7 +782,11 @@ export default function Certifications() {
                     <p className="text-sm text-gray-500 mb-4">
                       Solicita una certificación laboral para tus trámites
                     </p>
-                    <Button size="sm" onClick={() => setShowNewModal(true)}>
+                    <Button
+                      size="sm"
+                      onClick={() => setShowNewModal(true)}
+                      disabled={availableTypes.length === 0}
+                    >
                       <Plus className="w-4 h-4" />
                       Nueva Solicitud
                     </Button>
@@ -736,6 +817,7 @@ export default function Certifications() {
           onCancel={() => { setShowNewModal(false); setInitialType(null); }}
           loading={createMutation.isPending}
           initialType={initialType}
+          availableTypes={availableTypes}
         />
       </Modal>
 

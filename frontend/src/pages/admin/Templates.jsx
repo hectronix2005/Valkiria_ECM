@@ -33,6 +33,16 @@ const STATUS_LABELS = {
   archived: { label: 'Archivado', color: 'bg-yellow-100 text-yellow-700' }
 }
 
+// Certification types for the dropdown
+const CERTIFICATION_TYPES = [
+  { value: '', label: 'Seleccionar tipo...' },
+  { value: 'employment', label: 'Certificado de Empleo' },
+  { value: 'salary', label: 'Certificado de Salario' },
+  { value: 'position', label: 'Certificado de Cargo' },
+  { value: 'full', label: 'Certificado Completo' },
+  { value: 'custom', label: 'Certificado Personalizado' },
+]
+
 function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
@@ -40,6 +50,7 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
   const [moduleType, setModuleType] = useState('hr')
   const [mainCategory, setMainCategory] = useState('laboral')
   const [category, setCategory] = useState('other')
+  const [certificationType, setCertificationType] = useState('')
   const [error, setError] = useState('')
 
   const { data: categoriesData } = useQuery({
@@ -65,6 +76,7 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
     setModuleType('hr')
     setMainCategory('laboral')
     setCategory('other')
+    setCertificationType('')
     setError('')
     onClose()
   }
@@ -75,7 +87,12 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
       setError('El nombre es requerido')
       return
     }
-    createMutation.mutate({ name, description, module_type: moduleType, main_category: mainCategory, category })
+    const data = { name, description, module_type: moduleType, main_category: mainCategory, category }
+    // Include certification_type only for certification templates
+    if (category === 'certification' && certificationType) {
+      data.certification_type = certificationType
+    }
+    createMutation.mutate(data)
   }
 
   const modules = categoriesData?.data?.modules || []
@@ -193,6 +210,29 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
             </div>
           </div>
 
+          {/* Certification type - only shown for certification templates */}
+          {category === 'certification' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Certificación
+              </label>
+              <select
+                value={certificationType}
+                onChange={(e) => setCertificationType(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {CERTIFICATION_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Solo los tipos de certificación con template aparecerán en el selector de solicitudes
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Descripcion (opcional)
@@ -228,6 +268,7 @@ function EditTemplateModal({ isOpen, onClose, template }) {
   const [moduleType, setModuleType] = useState('hr')
   const [mainCategory, setMainCategory] = useState('laboral')
   const [category, setCategory] = useState('')
+  const [certificationType, setCertificationType] = useState('')
   const [error, setError] = useState('')
 
   const { data: categoriesData } = useQuery({
@@ -260,6 +301,7 @@ function EditTemplateModal({ isOpen, onClose, template }) {
       setModuleType(template.module_type || 'hr')
       setMainCategory(template.main_category || 'laboral')
       setCategory(template.category || 'other')
+      setCertificationType(template.certification_type || '')
       setError('')
     }
   }, [isOpen, template?.id])
@@ -294,7 +336,12 @@ function EditTemplateModal({ isOpen, onClose, template }) {
       setError('El nombre es requerido')
       return
     }
-    updateMutation.mutate({ name, description, module_type: moduleType, main_category: mainCategory, category })
+    const data = { name, description, module_type: moduleType, main_category: mainCategory, category }
+    // Include certification_type for certification templates (can be empty to clear)
+    if (category === 'certification') {
+      data.certification_type = certificationType || null
+    }
+    updateMutation.mutate(data)
   }
 
   if (!isOpen || !template) return null
@@ -378,6 +425,29 @@ function EditTemplateModal({ isOpen, onClose, template }) {
               </select>
             </div>
           </div>
+
+          {/* Certification type - only shown for certification templates */}
+          {category === 'certification' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Certificación
+              </label>
+              <select
+                value={certificationType}
+                onChange={(e) => setCertificationType(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {CERTIFICATION_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Solo los tipos de certificación con template aparecerán en el selector de solicitudes
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

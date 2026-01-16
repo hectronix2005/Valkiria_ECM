@@ -163,6 +163,9 @@ Rails.application.routes.draw do
         end
 
         resources :certifications do
+          collection do
+            get :available_types
+          end
           member do
             post :cancel
             post :generate_document

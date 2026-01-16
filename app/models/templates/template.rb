@@ -81,6 +81,11 @@ module Templates
     # Default third party type for this template (provider, client, contractor, partner, other)
     field :default_third_party_type, type: String
 
+    # For certification templates: which certification type this template is for
+    # Maps to Hr::EmploymentCertificationRequest::CERTIFICATION_TYPES
+    # (employment, salary, position, full, custom)
+    field :certification_type, type: String
+
     # Preview settings for signature positioning
     field :preview_scale, type: Float, default: 0.7
     field :preview_page_height, type: Integer, default: 792  # Letter size height
@@ -109,6 +114,7 @@ module Templates
     index({ status: 1 })
     index({ name: 1 })
     index({ organization_id: 1, module_type: 1, main_category: 1, category: 1, status: 1 })
+    index({ organization_id: 1, category: 1, certification_type: 1, status: 1 })
 
     # Validations
     validates :name, presence: true, length: { maximum: 200 }
@@ -133,6 +139,7 @@ module Templates
     scope :by_category, ->(category) { where(category: category) }
     scope :by_subcategory, ->(subcategory) { where(category: subcategory) }
     scope :for_organization, ->(org) { where(organization_id: org.id) }
+    scope :for_certification_type, ->(cert_type) { where(certification_type: cert_type) }
 
     # Instance methods
     def draft?
