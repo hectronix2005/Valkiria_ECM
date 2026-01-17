@@ -189,7 +189,8 @@ GEM
       logger
       mime-types-data (~> 3.2025, >= 3.2025.0507)
     mime-types-data (3.2025.0924)
-    mini_magick (4.13.2)
+    mini_magick (5.3.1)
+      logger
     mini_mime (1.1.5)
     minitest (5.27.0)
     mongo (2.22.0)
@@ -456,7 +457,7 @@ DEPENDENCIES
   hexapdf (~> 0.40)
   jsonapi-serializer (~> 2.2)
   listen (~> 3.9)
-  mini_magick (~> 4.12)
+  mini_magick (~> 5.3)
   mongoid (~> 9.0)
   mongoid-grid_fs (~> 2.5)
   mongoid-rspec (~> 4.2)
