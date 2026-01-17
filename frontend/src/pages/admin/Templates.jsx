@@ -25,7 +25,8 @@ import {
   Pencil,
   Download,
   Users,
-  Building2
+  Building2,
+  Briefcase
 } from 'lucide-react'
 
 const STATUS_LABELS = {
@@ -734,6 +735,14 @@ export default function Templates({ module = 'legal' }) {
           <p className="text-gray-500">{currentModuleConfig.description}</p>
         </div>
         <div className="flex items-center gap-2">
+          {activeModule === 'legal' && (
+            <Link to="/legal/contracts">
+              <Button variant="secondary">
+                <Briefcase className="w-4 h-4" />
+                Contratos
+              </Button>
+            </Link>
+          )}
           <Link to="/admin/signatory-types">
             <Button variant="secondary">
               <Users className="w-4 h-4" />
