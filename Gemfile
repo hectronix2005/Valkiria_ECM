@@ -7,7 +7,7 @@ ruby "~> 3.4.0"
 # Core Framework
 gem "bootsnap", require: false
 gem "puma", ">= 5.0"
-gem "rails", "~> 7.2.3"
+gem "rails", "~> 8.1.2"
 
 # MongoDB ODM
 gem "mongoid", "~> 9.0"
