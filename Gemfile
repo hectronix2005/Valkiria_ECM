@@ -57,7 +57,7 @@ group :development, :test do
   gem "factory_bot_rails", "~> 6.4"
   gem "faker", "~> 3.5"
   gem "mongoid-rspec", "~> 4.2"
-  gem "rspec-rails", "~> 7.1"
+  gem "rspec-rails", "~> 8.0"
   gem "shoulda-matchers", "~> 6.4"
 
   # Code Quality
