@@ -111,8 +111,8 @@ module Api
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
 
-          # Get user's signature
-          signature = current_user.signatures.find_by(is_default: true) || current_user.signatures.first
+          # Get user's signature (use where().first to avoid Mongoid::Errors::DocumentNotFound)
+          signature = current_user.signatures.where(is_default: true).first || current_user.signatures.first
           unless signature
             return render json: { error: "No tienes una firma configurada. Ve a tu perfil para crear una." }, status: :unprocessable_content
           end
