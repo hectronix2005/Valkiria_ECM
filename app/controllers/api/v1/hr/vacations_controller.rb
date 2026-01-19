@@ -75,10 +75,12 @@ module Api
         def submit
           authorize @vacation, :submit?
 
-          # Verify employee has signed the document
+          # Verify employee has signed the document (only if PDF is ready)
           if @vacation.document_uuid
             doc = ::Templates::GeneratedDocument.find_by(uuid: @vacation.document_uuid)
-            if doc && !employee_has_signed?(doc)
+            # Only require signature if PDF is available (not pending)
+            pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
+            if pdf_ready && !employee_has_signed?(doc)
               return render json: {
                 error: "Debes firmar el documento antes de enviar la solicitud"
               }, status: :unprocessable_content
@@ -267,9 +269,11 @@ module Api
         def vacation_json(vacation, detailed: false) # rubocop:disable Metrics/MethodLength
           # Check if document exists and needs employee signature
           needs_signature = false
+          pdf_ready = false
           if vacation.document_uuid.present?
             doc = ::Templates::GeneratedDocument.find_by(uuid: vacation.document_uuid)
             needs_signature = doc && !employee_has_signed?(doc)
+            pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
           end
 
           json = {
@@ -284,6 +288,7 @@ module Api
             submitted_at: vacation.submitted_at&.iso8601,
             created_at: vacation.created_at.iso8601,
             has_document: vacation.document_uuid.present?,
+            pdf_ready: pdf_ready,
             needs_employee_signature: needs_signature,
             can_delete: can_delete_for_user?(vacation)
           }

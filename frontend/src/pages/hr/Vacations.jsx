@@ -70,8 +70,8 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
       setDocumentInfo(doc)
       setSignError('')
 
-      // Cargar PDF para preview
-      if (vacation?.id && vacation?.has_document) {
+      // Cargar PDF para preview (solo si está listo)
+      if (vacation?.id && vacation?.pdf_ready) {
         try {
           const pdfResponse = await vacationService.downloadDocument(vacation.id)
           const blob = new Blob([pdfResponse.data], { type: 'application/pdf' })
@@ -81,7 +81,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
           setPdfUrl(null)
         }
       } else {
-        // No se generó documento - marcar como sin documento
+        // PDF no disponible (pendiente de generación o sin documento)
         setPdfUrl(null)
       }
 
@@ -300,6 +300,8 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
   }
 
   const employeeSigned = documentInfo?.employee_signed || false
+  const pdfPending = createdVacation?.pdf_ready === false
+  const canSubmit = employeeSigned || pdfPending // Can submit if signed OR if PDF is pending
 
   return (
     <div className="space-y-6">
@@ -472,6 +474,12 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
                 title="Vista previa del documento"
               />
             </div>
+          ) : createdVacation?.pdf_ready === false ? (
+            <div className="border rounded-lg p-8 text-center bg-amber-50 border-amber-200">
+              <AlertCircle className="w-8 h-8 mx-auto text-amber-500 mb-2" />
+              <p className="text-amber-700 font-medium">El documento está pendiente de generación</p>
+              <p className="text-amber-600 text-sm mt-1">El PDF se generará próximamente. Puedes continuar con el proceso.</p>
+            </div>
           ) : (
             <div className="border rounded-lg p-8 text-center bg-gray-50">
               <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
@@ -530,7 +538,17 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
             </div>
           )}
 
-          {!employeeSigned && (
+          {pdfPending && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="font-medium">Documento pendiente de generación</p>
+                <p className="mt-1">Puedes enviar la solicitud ahora. El documento se generará y firmará posteriormente.</p>
+              </div>
+            </div>
+          )}
+
+          {!pdfPending && !employeeSigned && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
               <div className="text-sm text-amber-800">
@@ -540,7 +558,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
             </div>
           )}
 
-          {employeeSigned && (
+          {!pdfPending && employeeSigned && (
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
               <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
               <div className="text-sm text-green-800">
@@ -557,7 +575,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
             <Button
               onClick={handleSubmit}
               loading={submitMutation.isPending}
-              disabled={!employeeSigned}
+              disabled={!canSubmit}
             >
               <Send className="w-4 h-4" />
               Enviar Solicitud
