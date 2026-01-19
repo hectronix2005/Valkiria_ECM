@@ -353,7 +353,7 @@ module Api
         def generate_vacation_document_if_available
           template = find_vacation_template
           Rails.logger.info "=== Vacation Document Generation ==="
-          Rails.logger.info "Looking for template with: module_type=hr, category=vacaciones, org=#{current_organization.id}"
+          Rails.logger.info "Looking for template with: module_type=hr, category=vacation, org=#{current_organization.id}"
           Rails.logger.info "Template found: #{template&.name || 'NONE'}"
           return unless template
 
