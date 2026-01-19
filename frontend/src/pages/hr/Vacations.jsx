@@ -680,7 +680,7 @@ function VacationCard({ vacation, onSubmit, onCancel, onDelete, onView, onDownlo
             <Eye className="w-4 h-4" />
           </Button>
 
-          {vacation.has_document && (
+          {vacation.pdf_ready && (
             <Button variant="ghost" size="sm" onClick={() => onDownload(vacation.id)} title="Descargar documento">
               <FileDown className="w-4 h-4" />
             </Button>
@@ -992,7 +992,7 @@ export default function Vacations() {
               </div>
             )}
 
-            {selectedVacation.has_document && (
+            {selectedVacation.pdf_ready && (
               <div className="pt-4 border-t">
                 <Button
                   variant="secondary"
