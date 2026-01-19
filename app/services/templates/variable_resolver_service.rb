@@ -449,6 +449,9 @@ module Templates
       # Periodicidad de pago
       when "periodicidad_pago", "frecuencia_pago"
         format_payment_frequency(@employee.payment_frequency)
+      # Días de vacaciones pendientes/disponibles
+      when "pendientes", "dias_pendientes", "vacaciones_pendientes", "dias_disponibles"
+        @employee.available_vacation_days
       else
         nil
       end
