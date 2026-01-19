@@ -341,11 +341,11 @@ module Api
         end
 
         def find_vacation_template
-          # Search by subcategory (category field) = "vacaciones"
+          # Search for vacation template (hr module, vacation category)
           ::Templates::Template.where(
             organization_id: current_organization.id,
             module_type: "hr",
-            category: "vacaciones",
+            category: "vacation",
             status: "active"
           ).first
         end

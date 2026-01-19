@@ -53,7 +53,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
   const { data: templateData } = useQuery({
     queryKey: ['vacation-template'],
     queryFn: async () => {
-      const response = await publicTemplateService.list({ category: 'vacaciones' })
+      const response = await publicTemplateService.list({ category: 'vacation' })
       return response.data?.data?.[0] || null
     },
   })
