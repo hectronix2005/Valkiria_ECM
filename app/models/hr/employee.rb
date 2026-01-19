@@ -194,7 +194,7 @@ module Hr
 
     # Check if has sufficient vacation balance
     def has_vacation_balance?(days) # rubocop:disable Naming/PredicatePrefix
-      vacation_balance_days >= days
+      available_vacation_days >= days
     end
 
     # Deduct vacation days (called when request is approved)

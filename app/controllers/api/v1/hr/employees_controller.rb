@@ -62,11 +62,12 @@ module Api
           render json: {
             data: {
               employee_id: @employee.uuid,
-              balance_days: @employee.vacation_balance_days,
-              used_ytd: @employee.vacation_used_ytd,
-              accrued_ytd: @employee.vacation_accrued_ytd,
+              accrued_days: @employee.accrued_vacation_days,
+              used_days: @employee.total_used_vacation_days,
+              scheduled_days: @employee.scheduled_vacation_days,
+              enjoyed_days: @employee.enjoyed_vacation_days,
               pending_days: pending_vacation_days(@employee),
-              available_days: @employee.vacation_balance_days - pending_vacation_days(@employee)
+              available_days: @employee.available_vacation_days
             }
           }
         end
@@ -368,7 +369,7 @@ module Api
               is_supervisor: employee.supervisor?,
               is_hr_staff: employee.hr_staff?,
               is_hr_manager: employee.hr_manager?,
-              vacation_balance_days: can_view_balance?(employee) ? employee.vacation_balance_days : nil,
+              vacation_balance_days: can_view_balance?(employee) ? employee.available_vacation_days : nil,
               # Contract fields
               contract_type: employee.contract_type,
               contract_template_id: employee.contract_template_id,

@@ -49,7 +49,8 @@ RSpec.describe Hr::VacationRequest, type: :model do
     end
 
     it "validates sufficient balance for vacation type" do
-      low_balance = create(:hr_employee, vacation_balance_days: 2.0, organization: organization)
+      # Employee with recent hire_date has ~2 days accrued (50 days / 365.25 * 15 ≈ 2.05)
+      low_balance = create(:hr_employee, hire_date: 50.days.ago, organization: organization)
       request = build(:vacation_request,
                       employee: low_balance,
                       organization: organization,
@@ -59,7 +60,8 @@ RSpec.describe Hr::VacationRequest, type: :model do
     end
 
     it "does not require balance for sick leave" do
-      low_balance = create(:hr_employee, vacation_balance_days: 0.0, organization: organization)
+      # Employee with no accrued days (hired today)
+      low_balance = create(:hr_employee, hire_date: Date.current, organization: organization)
       request = build(:vacation_request, :sick_leave,
                       employee: low_balance,
                       organization: organization)
