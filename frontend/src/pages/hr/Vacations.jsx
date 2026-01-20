@@ -125,7 +125,8 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
   })
 
   const reloadPdf = async () => {
-    if (createdVacation?.id) {
+    // Only reload if PDF is available (not pending)
+    if (createdVacation?.id && createdVacation?.pdf_ready) {
       try {
         const pdfResponse = await vacationService.downloadDocument(createdVacation.id)
         const blob = new Blob([pdfResponse.data], { type: 'application/pdf' })
