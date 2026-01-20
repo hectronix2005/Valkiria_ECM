@@ -973,6 +973,7 @@ module Templates
         pdf_generation_status: "pending"
       )
 
+      generated_doc.initialize_signatures!
       Rails.logger.info "Document created with pending PDF generation: #{generated_doc.uuid}"
       generated_doc
     end
