@@ -19,6 +19,39 @@ module Api
         @current_organization ||= current_user&.organization
       end
 
+      # Employee mode - when active, user acts as regular employee regardless of actual roles
+      def employee_mode?
+        request.headers["X-Employee-Mode"] == "true"
+      end
+
+      # Check if user has admin role (respects employee mode)
+      def admin?
+        return false if employee_mode?
+
+        current_user&.has_role?(:admin)
+      end
+
+      # Check if user has HR role (respects employee mode)
+      def hr_or_admin?
+        return false if employee_mode?
+
+        current_user&.has_role?(:admin) ||
+          current_user&.has_role?(:hr) ||
+          current_user&.has_role?(:hr_manager)
+      end
+
+      # Check if user is supervisor (respects employee mode)
+      def supervisor?
+        return false if employee_mode?
+
+        current_user&.try(:is_supervisor)
+      end
+
+      # Get current employee record
+      def current_employee
+        @current_employee ||= current_user&.employee
+      end
+
       def authenticate_user!
         return if current_user
 

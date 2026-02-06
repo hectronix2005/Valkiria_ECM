@@ -73,6 +73,21 @@ export default function Layout({ children }) {
   const location = useLocation()
   const navigate = useNavigate()
 
+  // Auto-redirect when entering employee mode from admin pages
+  const handleToggleEmployeeMode = () => {
+    const newMode = !employeeMode
+    toggleEmployeeMode()
+
+    // If switching TO employee mode from an admin/elevated page, redirect
+    if (newMode) {
+      const adminPaths = ['/admin', '/hr/approvals', '/hr/employees', '/hr/documents', '/hr/dashboard', '/legal']
+      const isOnAdminPage = adminPaths.some(path => location.pathname.startsWith(path))
+      if (isOnAdminPage) {
+        navigate('/hr/my-requests/vacations')
+      }
+    }
+  }
+
   // Fetch pending HR approvals count for badge
   const { data: hrApprovalsData } = useQuery({
     queryKey: ['hr-approvals-count'],
@@ -220,28 +235,43 @@ export default function Layout({ children }) {
         <div className="p-4 overflow-y-auto h-[calc(100%-4rem)]">
           {/* Mode Toggle for users with elevated roles */}
           {hasElevatedRole && (
-            <div className="mb-4 p-2 bg-gray-50 rounded-lg">
-              <button
-                onClick={toggleEmployeeMode}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  employeeMode
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-white text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {employeeMode ? (
-                  <>
-                    <UserCircle className="w-4 h-4" />
-                    <span>Modo Empleado</span>
-                    <span className="ml-auto text-xs bg-primary-200 px-2 py-0.5 rounded">Activo</span>
-                  </>
-                ) : (
-                  <>
-                    <Shield className="w-4 h-4" />
-                    <span>Cambiar a Empleado</span>
-                  </>
-                )}
-              </button>
+            <div className={`mb-4 p-2 rounded-lg border-2 transition-colors ${
+              employeeMode
+                ? 'bg-amber-50 border-amber-300'
+                : 'bg-gray-50 border-transparent'
+            }`}>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">
+                Modo de Vista
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={employeeMode ? handleToggleEmployeeMode : undefined}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-xs font-medium transition-colors ${
+                    !employeeMode
+                      ? 'bg-primary-600 text-white shadow-sm'
+                      : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Admin</span>
+                </button>
+                <button
+                  onClick={!employeeMode ? handleToggleEmployeeMode : undefined}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-xs font-medium transition-colors ${
+                    employeeMode
+                      ? 'bg-amber-500 text-white shadow-sm'
+                      : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  <UserCircle className="w-3.5 h-3.5" />
+                  <span>Empleado</span>
+                </button>
+              </div>
+              {employeeMode && (
+                <p className="text-xs text-amber-700 mt-2 px-1">
+                  Viendo como empleado regular
+                </p>
+              )}
             </div>
           )}
 

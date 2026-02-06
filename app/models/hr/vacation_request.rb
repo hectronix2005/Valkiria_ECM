@@ -147,9 +147,47 @@ module Hr
       STATUS_LABELS[status] || status
     end
 
+    # Effective status considering dates (for display purposes)
+    def effective_status
+      return status unless approved?
+
+      if end_date < Date.current
+        STATUS_ENJOYED  # Ya pasó - disfrutada
+      elsif start_date <= Date.current && end_date >= Date.current
+        "in_progress"   # En curso
+      else
+        status          # Programada (futuro)
+      end
+    end
+
+    def effective_status_label
+      case effective_status
+      when "in_progress"
+        "En Curso"
+      when STATUS_ENJOYED
+        "Disfrutada"
+      else
+        STATUS_LABELS[effective_status] || effective_status
+      end
+    end
+
     # Check if vacation period has passed and should be marked as enjoyed
     def should_mark_as_enjoyed?
       approved? && end_date < Date.current
+    end
+
+    # Mark as enjoyed (called when vacation period ends)
+    def mark_as_enjoyed!
+      return unless should_mark_as_enjoyed?
+
+      self.status = STATUS_ENJOYED
+      record_history("enjoyed", nil, "Vacaciones disfrutadas")
+      save!
+    end
+
+    # Class method to update all past approved vacations to enjoyed
+    def self.update_past_to_enjoyed!
+      past.each(&:mark_as_enjoyed!)
     end
 
     # Submit request for approval
@@ -263,10 +301,25 @@ module Hr
       # Must be in same organization
       return false unless actor.organization_id == organization_id
 
-      return true if actor.hr_manager?
-      return true if actor.hr_staff? && employee.supervisor.nil?
+      # HR Manager or HR Staff can approve after all document signatures are complete
+      if actor.hr_manager? || actor.hr_staff?
+        # If there's a document, all signatures must be complete
+        return document_fully_signed? if document_uuid.present?
+        return true
+      end
 
+      # Supervisors can approve their subordinates' requests
       actor.supervises?(employee)
+    end
+
+    # Check if the associated document has all required signatures
+    def document_fully_signed?
+      return true unless document_uuid.present?
+
+      doc = ::Templates::GeneratedDocument.find_by(uuid: document_uuid)
+      return true unless doc # No document means no signatures required
+
+      doc.all_required_signed?
     end
 
     # Check if actor can view this request

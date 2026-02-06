@@ -234,6 +234,15 @@ module Templates
         @employee.nationality
       when "date_of_birth"
         format_date(@employee.date_of_birth)
+      # Vacation fields
+      when "available_vacation_days", "vacation_days_available"
+        @employee.available_vacation_days.to_i
+      when "accrued_vacation_days"
+        @employee.accrued_vacation_days.to_i
+      when "scheduled_vacation_days"
+        @employee.scheduled_vacation_days.to_i
+      when "enjoyed_vacation_days"
+        @employee.enjoyed_vacation_days.to_i
       else
         @employee.try(field)
       end
@@ -393,7 +402,7 @@ module Templates
       when "end_date"
         format_date(@request.try(:end_date))
       when "days_requested"
-        @request.try(:days_requested)
+        format_number(@request.try(:days_requested))
       when "vacation_type"
         format_vacation_type
       when "status"
@@ -451,7 +460,7 @@ module Templates
         format_payment_frequency(@employee.payment_frequency)
       # Días de vacaciones pendientes/disponibles
       when "pendientes", "dias_pendientes", "vacaciones_pendientes", "dias_disponibles"
-        @employee.available_vacation_days
+        format_number(@employee.available_vacation_days)
       else
         nil
       end
@@ -461,6 +470,14 @@ module Templates
       return nil unless date
 
       date.strftime("%d/%m/%Y")
+    end
+
+    # Format number removing unnecessary decimals (3.0 -> 3, 3.5 -> 3.5)
+    def format_number(number)
+      return nil unless number
+
+      number = number.to_f
+      number == number.to_i ? number.to_i.to_s : number.to_s
     end
 
     def format_date_text(date)

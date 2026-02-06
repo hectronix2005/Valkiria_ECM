@@ -686,6 +686,12 @@ export default function HRDocuments() {
   }
 
   const handleDownload = async (document) => {
+    // Check if PDF is available
+    if (!document.pdf_ready) {
+      alert('El PDF aún no está disponible. El documento está pendiente de generación.')
+      return
+    }
+
     try {
       setDownloading(document.id)
       const response = await generatedDocumentService.download(document.id)
@@ -708,6 +714,12 @@ export default function HRDocuments() {
   }
 
   const handlePreview = async (document) => {
+    // Check if PDF is available
+    if (!document.pdf_ready) {
+      alert('El PDF aún no está disponible. El documento está pendiente de generación.')
+      return
+    }
+
     try {
       setPreviewDocument(document)
       setShowPreviewModal(true)
@@ -719,7 +731,7 @@ export default function HRDocuments() {
       setPreviewDocument({ ...document, blobUrl })
     } catch (error) {
       console.error('Preview error:', error)
-      alert('Error al cargar la vista previa')
+      alert('Error al cargar la vista previa. El PDF puede no estar disponible.')
       setShowPreviewModal(false)
       setPreviewDocument(null)
     }
@@ -1037,7 +1049,8 @@ export default function HRDocuments() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handlePreview(doc)}
-                              title="Previsualizar"
+                              title={doc.pdf_ready ? "Previsualizar" : "PDF pendiente de generación"}
+                              className={!doc.pdf_ready ? "opacity-50 cursor-not-allowed" : ""}
                             >
                               <FileSearch className="w-4 h-4" />
                             </Button>
@@ -1054,7 +1067,8 @@ export default function HRDocuments() {
                               size="sm"
                               onClick={() => handleDownload(doc)}
                               loading={downloading === doc.id}
-                              title="Descargar PDF"
+                              title={doc.pdf_ready ? "Descargar PDF" : "PDF pendiente de generación"}
+                              className={!doc.pdf_ready ? "opacity-50 cursor-not-allowed" : ""}
                             >
                               <Download className="w-4 h-4" />
                             </Button>
@@ -1270,7 +1284,7 @@ export default function HRDocuments() {
                 <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
                   Cerrar
                 </Button>
-                {selectedDocument.can_download && (
+                {selectedDocument.pdf_ready && (
                   <>
                     <Button
                       variant="secondary"
@@ -1287,6 +1301,9 @@ export default function HRDocuments() {
                       Descargar PDF
                     </Button>
                   </>
+                )}
+                {!selectedDocument.pdf_ready && (
+                  <span className="text-sm text-amber-600">PDF pendiente de generación</span>
                 )}
               </div>
             </div>

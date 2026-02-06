@@ -21,10 +21,17 @@ export const LEVEL_NAMES = {
 
 const AuthContext = createContext(null)
 
+// Key for localStorage
+const EMPLOYEE_MODE_KEY = 'valkyria_employee_mode'
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [employeeMode, setEmployeeMode] = useState(false)
+  // Initialize from localStorage
+  const [employeeMode, setEmployeeMode] = useState(() => {
+    const stored = localStorage.getItem(EMPLOYEE_MODE_KEY)
+    return stored === 'true'
+  })
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
@@ -115,9 +122,19 @@ export function AuthProvider({ children }) {
   const isSupervisor = employeeMode ? false : realIsSupervisor
   const mustChangePassword = user?.must_change_password || false
 
-  // Toggle employee mode
+  // Toggle employee mode - persist to localStorage
   const toggleEmployeeMode = useCallback(() => {
-    setEmployeeMode(prev => !prev)
+    setEmployeeMode(prev => {
+      const newValue = !prev
+      localStorage.setItem(EMPLOYEE_MODE_KEY, String(newValue))
+      return newValue
+    })
+  }, [])
+
+  // Set employee mode explicitly
+  const setEmployeeModeValue = useCallback((value) => {
+    setEmployeeMode(value)
+    localStorage.setItem(EMPLOYEE_MODE_KEY, String(value))
   }, [])
 
   const updateUser = useCallback((userData) => {
@@ -141,6 +158,7 @@ export function AuthProvider({ children }) {
     // Employee mode
     employeeMode,
     toggleEmployeeMode,
+    setEmployeeModeValue,
     hasElevatedRole,
     // Permission levels
     permissionLevel,

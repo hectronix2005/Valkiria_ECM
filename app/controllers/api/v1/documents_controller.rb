@@ -206,6 +206,8 @@ module Api
           name: document.name,
           file_name: document.file_name,
           status: document.status,
+          pdf_status: document.pdf_generation_status,
+          pdf_ready: document.draft_file_id.present? || document.final_file_id.present?,
           template_name: template&.name,
           template_category: template&.category,
           employee_name: employee&.full_name,

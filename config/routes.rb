@@ -179,6 +179,8 @@ Rails.application.routes.draw do
           member do
             post :approve
             post :reject
+            get :download_document
+            post :sign_document
           end
         end
 

@@ -7,7 +7,7 @@ module Api
       # rubocop:disable Metrics/ClassLength
       class ApprovalsController < BaseController
         before_action :ensure_approver_access
-        before_action :set_approvable, only: [:show, :approve, :reject]
+        before_action :set_approvable, only: [:show, :approve, :reject, :download_document, :sign_document]
 
         # GET /api/v1/hr/approvals
         # Params: status=pending (default) or status=history
@@ -75,6 +75,84 @@ module Api
           handle_approval_error(e)
         end
 
+        # GET /api/v1/hr/approvals/:id/download_document
+        def download_document
+          unless @approvable.document_uuid
+            return render json: { error: "No hay documento generado" }, status: :not_found
+          end
+
+          generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @approvable.document_uuid)
+          unless generated_doc
+            return render json: { error: "Documento no encontrado" }, status: :not_found
+          end
+
+          pdf_content = generated_doc.file_content
+          unless pdf_content
+            return render json: { error: "Archivo PDF no encontrado" }, status: :not_found
+          end
+
+          filename = case @approvable
+                     when ::Hr::VacationRequest
+                       "solicitud_vacaciones_#{@approvable.request_number}.pdf"
+                     when ::Hr::EmploymentCertificationRequest
+                       "certificacion_#{@approvable.request_number}.pdf"
+                     else
+                       "documento_#{@approvable.request_number}.pdf"
+                     end
+
+          send_data pdf_content,
+                    type: "application/pdf",
+                    filename: filename,
+                    disposition: "inline"
+        end
+
+        # POST /api/v1/hr/approvals/:id/sign_document
+        def sign_document
+          unless @approvable.document_uuid
+            return render json: { error: "No hay documento para firmar" }, status: :not_found
+          end
+
+          generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @approvable.document_uuid)
+          unless generated_doc
+            return render json: { error: "Documento no encontrado" }, status: :not_found
+          end
+
+          # Get user's digital signature
+          signature = current_user.signatures.where(is_default: true).first || current_user.signatures.first
+          unless signature
+            return render json: {
+              error: "No tienes una firma configurada. Ve a tu perfil para crear una.",
+              action_required: { type: "configure_signature" }
+            }, status: :unprocessable_content
+          end
+
+          # Find pending signature for this user by user_id (direct assignment takes priority)
+          # This is important because a user might have multiple roles (hr AND supervisor)
+          # but they should sign in the slot specifically assigned to them
+          sig_slot = generated_doc.signatures.find { |s| s["user_id"] == current_user.id.to_s && s["signed_at"].blank? }
+
+          unless sig_slot
+            return render json: {
+              error: "No tienes firma pendiente en este documento",
+              available_signatures: generated_doc.signatures.select { |s| s["signed_at"].blank? }.map { |s| s["label"] }
+            }, status: :unprocessable_content
+          end
+
+          # Sign the document using the standard method (which respects signature order)
+          generated_doc.sign!(user: current_user, signature: signature)
+
+          render json: {
+            data: approvable_json(@approvable, detailed: true),
+            message: "Documento firmado exitosamente como #{sig_slot['label']}"
+          }
+        rescue ::Templates::GeneratedDocument::SignatureError => e
+          render json: { error: e.message }, status: :unprocessable_content
+        rescue StandardError => e
+          Rails.logger.error("Error signing approval document: #{e.message}")
+          Rails.logger.error(e.backtrace.first(5).join("\n"))
+          render json: { error: "Error al firmar: #{e.message}" }, status: :unprocessable_content
+        end
+
         private
 
         def ensure_approver_access
@@ -115,7 +193,10 @@ module Api
         end
 
         def pending_certifications_scope
-          base_scope(::Hr::EmploymentCertificationRequest).pending.order(submitted_at: :asc)
+          # Include both pending and processing (with document awaiting signatures)
+          base_scope(::Hr::EmploymentCertificationRequest)
+            .where(:status.in => %w[pending processing])
+            .order(submitted_at: :asc)
         end
 
         def history_vacations_scope
@@ -150,6 +231,10 @@ module Api
         end
 
         def vacation_json(vacation, detailed: false)
+          # Check document status
+          doc = vacation.document_uuid.present? ? ::Templates::GeneratedDocument.find_by(uuid: vacation.document_uuid) : nil
+          pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
+
           json = {
             id: vacation.uuid,
             type: "vacation_request",
@@ -158,23 +243,52 @@ module Api
             start_date: vacation.start_date&.iso8601,
             end_date: vacation.end_date&.iso8601,
             days_requested: vacation.days_requested,
-            status: vacation.status,
+            status: vacation.effective_status,
+            status_label: vacation.effective_status_label,
             submitted_at: vacation.submitted_at&.iso8601,
-            employee: employee_summary(vacation.employee)
+            employee: employee_summary(vacation.employee),
+            has_document: vacation.document_uuid.present?,
+            document_uuid: vacation.document_uuid,
+            pdf_ready: pdf_ready
           }
 
           if detailed
             json.merge!(
               reason: vacation.reason,
               notes: vacation.notes,
-              history: vacation.history
+              history: vacation.history,
+              document: doc ? document_info(doc) : nil
             )
           end
 
           json
         end
 
+        def document_info(doc)
+          {
+            uuid: doc.uuid,
+            name: doc.name,
+            status: doc.status,
+            pdf_ready: !doc.pending_pdf? && doc.draft_file_id.present?,
+            signatures: doc.signatures.map do |sig|
+              {
+                signatory_type_code: sig["signatory_type_code"],
+                label: sig["label"],
+                position: sig["position"],
+                signed: sig["signed_at"].present?,
+                signed_at: sig["signed_at"],
+                signed_by_name: sig["signed_by_name"],
+                required: sig["required"]
+              }
+            end
+          }
+        end
+
         def certification_json(certification, detailed: false)
+          # Check document status
+          doc = certification.document_uuid.present? ? ::Templates::GeneratedDocument.find_by(uuid: certification.document_uuid) : nil
+          pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
+
           json = {
             id: certification.uuid,
             type: "certification_request",
@@ -184,7 +298,10 @@ module Api
             status: certification.status,
             estimated_days: certification.estimated_days,
             submitted_at: certification.submitted_at&.iso8601,
-            employee: employee_summary(certification.employee)
+            employee: employee_summary(certification.employee),
+            has_document: certification.document_uuid.present?,
+            document_uuid: certification.document_uuid,
+            pdf_ready: pdf_ready
           }
 
           if detailed
@@ -192,7 +309,8 @@ module Api
               language: certification.language,
               include_salary: certification.include_salary,
               include_position: certification.include_position,
-              additional_info: certification.additional_info
+              additional_info: certification.additional_info,
+              document: doc ? document_info(doc) : nil
             )
           end
 

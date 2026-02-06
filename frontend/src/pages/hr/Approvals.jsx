@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { approvalService, certificationService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
-import { Calendar, Award, CheckCircle, XCircle, Eye, User, Clock, History, FileText, Download, Loader2 } from 'lucide-react'
+import {
+  Calendar, Award, CheckCircle, XCircle, Eye, User, Clock, History,
+  FileText, Download, Loader2, PenTool, ExternalLink, AlertCircle
+} from 'lucide-react'
 
 function ApprovalCard({ request, type, onApprove, onReject, onView, showActions = true }) {
   const isVacation = type === 'vacation'
@@ -48,23 +51,29 @@ function ApprovalCard({ request, type, onApprove, onReject, onView, showActions 
                   </p>
                   <div className="flex items-center gap-4 mt-1">
                     <p className="text-sm font-medium text-primary-600">
-                      {Math.floor(request.days_requested)} días solicitados
+                      {Math.floor(request.days_requested)} dias solicitados
                     </p>
                     <p className="text-sm text-gray-500">
-                      <span className="font-medium text-green-600">{Math.floor(request.employee?.available_vacation_days || 0)}</span> días disponibles
+                      <span className="font-medium text-green-600">{Math.floor(request.employee?.available_vacation_days || 0)}</span> dias disponibles
                     </p>
                   </div>
+                  {request.has_document && (
+                    <div className="flex items-center gap-1 mt-1 text-sm text-blue-600">
+                      <FileText className="w-4 h-4" />
+                      <span>Documento adjunto</span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Tipo:</span> Certificación {request.certification_type}
+                    <span className="font-medium">Tipo:</span> Certificacion {request.certification_type}
                   </p>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Propósito:</span> {request.purpose}
+                    <span className="font-medium">Proposito:</span> {request.purpose}
                   </p>
                   <p className="text-sm text-gray-500">
-                    Tiempo estimado: {request.estimated_days} días
+                    Tiempo estimado: {request.estimated_days} dias
                   </p>
                 </>
               )}
@@ -96,6 +105,502 @@ function ApprovalCard({ request, type, onApprove, onReject, onView, showActions 
   )
 }
 
+// Componente para mostrar el detalle de una solicitud de vacaciones con documento
+function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
+  const [pdfUrl, setPdfUrl] = useState(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [signError, setSignError] = useState('')
+  const queryClient = useQueryClient()
+
+  // Cargar PDF
+  useEffect(() => {
+    if (request.pdf_ready && request.document_uuid) {
+      loadPdf()
+    }
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl)
+    }
+  }, [request.id])
+
+  const loadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      const response = await approvalService.downloadDocument(request.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      setPdfUrl(URL.createObjectURL(blob))
+    } catch (err) {
+      console.error('Error loading PDF:', err)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const signMutation = useMutation({
+    mutationFn: (id) => approvalService.signDocument(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['approvals'])
+      setSignError('')
+      // Reload PDF to show updated signature
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl)
+        setPdfUrl(null)
+      }
+      loadPdf()
+    },
+    onError: (err) => {
+      setSignError(err.response?.data?.error || 'Error al firmar el documento')
+    }
+  })
+
+  const handleSign = () => {
+    setSignError('')
+    signMutation.mutate(request.id)
+  }
+
+  const openPdfInNewTab = () => {
+    if (pdfUrl) {
+      window.open(pdfUrl, '_blank')
+    }
+  }
+
+  const documentInfo = request.document
+
+  // Determine which signature slots belong to the current approver
+  const supervisorSig = documentInfo?.signatures?.find(s => s.signatory_type_code === 'supervisor')
+  const hrSig = documentInfo?.signatures?.find(s => s.signatory_type_code === 'hr')
+  const employeeSig = documentInfo?.signatures?.find(s => s.signatory_type_code === 'employee')
+
+  // Check if current user can sign (has pending signature)
+  const canSign = (supervisorSig && !supervisorSig.signed) || (hrSig && !hrSig.signed)
+
+  return (
+    <div className="space-y-6">
+      {/* Employee Info */}
+      <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+        <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+          <User className="w-6 h-6 text-primary-600" />
+        </div>
+        <div>
+          <p className="font-semibold text-gray-900">{request.employee?.name}</p>
+          <p className="text-sm text-gray-500">
+            {request.employee?.department} • {request.employee?.job_title}
+          </p>
+        </div>
+      </div>
+
+      {/* Request Details */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm text-gray-500">Numero de Solicitud</p>
+          <p className="font-medium">{request.request_number}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Estado</p>
+          <Badge status={request.status} />
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Tipo</p>
+          <p className="font-medium">{request.vacation_type}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Dias Solicitados</p>
+          <p className="font-medium text-primary-600">{request.days_requested}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Fecha Inicio</p>
+          <p className="font-medium">{new Date(request.start_date).toLocaleDateString('es-ES')}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Fecha Fin</p>
+          <p className="font-medium">{new Date(request.end_date).toLocaleDateString('es-ES')}</p>
+        </div>
+      </div>
+
+      {request.reason && (
+        <div>
+          <p className="text-sm text-gray-500 mb-1">Motivo</p>
+          <p className="p-3 bg-gray-50 rounded-lg text-gray-700">{request.reason}</p>
+        </div>
+      )}
+
+      {/* Document Preview Section */}
+      {request.has_document && (
+        <div className="border-t pt-4">
+          <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary-600" />
+            Documento de Solicitud
+          </h3>
+
+          {/* PDF Preview */}
+          {pdfLoading ? (
+            <div className="border rounded-lg p-8 text-center bg-gray-50">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
+              <p className="text-gray-500">Cargando documento...</p>
+            </div>
+          ) : pdfUrl ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-4 py-2 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Vista Previa del Documento</span>
+                <Button variant="ghost" size="sm" onClick={openPdfInNewTab}>
+                  <ExternalLink className="w-4 h-4" />
+                  Abrir en nueva pestana
+                </Button>
+              </div>
+              <iframe
+                src={pdfUrl}
+                className="w-full h-[350px] border-0"
+                title="Vista previa del documento"
+              />
+            </div>
+          ) : request.pdf_ready === false ? (
+            <div className="border rounded-lg p-6 text-center bg-amber-50 border-amber-200">
+              <AlertCircle className="w-8 h-8 mx-auto text-amber-500 mb-2" />
+              <p className="text-amber-700 font-medium">Documento pendiente de generacion</p>
+              <p className="text-amber-600 text-sm mt-1">El PDF se generara proximamente</p>
+            </div>
+          ) : (
+            <div className="border rounded-lg p-6 text-center bg-gray-50">
+              <FileText className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+              <p className="text-gray-500">No se pudo cargar el documento</p>
+            </div>
+          )}
+
+          {/* Signatures Status */}
+          {documentInfo?.signatures && documentInfo.signatures.length > 0 && (
+            <div className="mt-4 p-4 bg-white border rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                <PenTool className="w-4 h-4" />
+                Firmas del Documento
+              </h4>
+              <div className="space-y-3">
+                {documentInfo.signatures.map((sig, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{sig.label}</p>
+                        <p className="text-xs text-gray-500">
+                          {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
+                          {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
+                          {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
+                        </p>
+                        {sig.signed && (
+                          <p className="text-xs text-green-600 mt-0.5">
+                            Firmado por {sig.signed_by_name} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {!sig.signed && (
+                      <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                        Pendiente
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Sign Button for Approvers */}
+              {canSign && request.status === 'pending' && (
+                <div className="mt-4 pt-4 border-t">
+                  <Button
+                    onClick={handleSign}
+                    loading={signMutation.isPending}
+                    className="w-full"
+                  >
+                    <PenTool className="w-4 h-4" />
+                    Firmar Documento
+                  </Button>
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    Tu firma se aplicara en el espacio correspondiente a tu rol
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {signError && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">{signError}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      {request.status === 'pending' && (
+        <div className="pt-4 border-t">
+          {/* Check if document needs signatures and they're not all complete */}
+          {request.has_document && documentInfo?.signatures?.some(s => !s.signed) && (
+            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-amber-700">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm">
+                Para aprobar esta solicitud, primero deben completarse todas las firmas del documento.
+              </span>
+            </div>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={onClose}>
+              Cerrar
+            </Button>
+            <Button variant="danger" onClick={() => onReject(request)}>
+              <XCircle className="w-4 h-4" />
+              Rechazar
+            </Button>
+            <Button
+              variant="success"
+              onClick={() => onApprove(request)}
+              disabled={request.has_document && documentInfo?.signatures?.some(s => !s.signed)}
+            >
+              <CheckCircle className="w-4 h-4" />
+              Aprobar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {request.status !== 'pending' && (
+        <div className="flex justify-end pt-4 border-t">
+          <Button variant="secondary" onClick={onClose}>
+            Cerrar
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Componente para mostrar el detalle de una solicitud de certificación con documento
+function CertificationDetailWithDocument({ request, onClose, onApprove, onReject }) {
+  const [pdfUrl, setPdfUrl] = useState(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [signError, setSignError] = useState('')
+  const queryClient = useQueryClient()
+
+  // Cargar PDF
+  useEffect(() => {
+    if (request.pdf_ready && request.document_uuid) {
+      loadPdf()
+    }
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl)
+    }
+  }, [request.id])
+
+  const loadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      const response = await approvalService.downloadDocument(request.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      setPdfUrl(URL.createObjectURL(blob))
+    } catch (err) {
+      console.error('Error loading PDF:', err)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const signMutation = useMutation({
+    mutationFn: (id) => approvalService.signDocument(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['approvals'])
+      setSignError('')
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl)
+        setPdfUrl(null)
+      }
+      loadPdf()
+    },
+    onError: (err) => {
+      setSignError(err.response?.data?.error || 'Error al firmar el documento')
+    }
+  })
+
+  const handleSign = () => {
+    setSignError('')
+    signMutation.mutate(request.id)
+  }
+
+  const openPdfInNewTab = () => {
+    if (pdfUrl) {
+      window.open(pdfUrl, '_blank')
+    }
+  }
+
+  const documentInfo = request.document
+  const canSign = documentInfo?.signatures?.some(s => !s.signed)
+
+  return (
+    <div className="space-y-6">
+      {/* Employee Info */}
+      <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+        <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+          <User className="w-6 h-6 text-primary-600" />
+        </div>
+        <div>
+          <p className="font-semibold text-gray-900">{request.employee?.name}</p>
+          <p className="text-sm text-gray-500">
+            {request.employee?.department} • {request.employee?.job_title}
+          </p>
+        </div>
+      </div>
+
+      {/* Request Details */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm text-gray-500">Numero de Solicitud</p>
+          <p className="font-medium">{request.request_number}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Estado</p>
+          <Badge status={request.status} />
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Tipo de Certificacion</p>
+          <p className="font-medium">{request.certification_type}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Proposito</p>
+          <p className="font-medium">{request.purpose}</p>
+        </div>
+      </div>
+
+      {/* Document Preview Section */}
+      {request.has_document && (
+        <div className="border-t pt-4">
+          <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary-600" />
+            Documento de Certificacion
+          </h3>
+
+          {/* PDF Preview */}
+          {pdfLoading ? (
+            <div className="border rounded-lg p-8 text-center bg-gray-50">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
+              <p className="text-gray-500">Cargando documento...</p>
+            </div>
+          ) : pdfUrl ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-4 py-2 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Vista Previa del Documento</span>
+                <Button variant="ghost" size="sm" onClick={openPdfInNewTab}>
+                  <ExternalLink className="w-4 h-4" />
+                  Abrir en nueva pestana
+                </Button>
+              </div>
+              <iframe
+                src={pdfUrl}
+                className="w-full h-[350px] border-0"
+                title="Vista previa del documento"
+              />
+            </div>
+          ) : request.pdf_ready === false ? (
+            <div className="border rounded-lg p-6 text-center bg-amber-50 border-amber-200">
+              <AlertCircle className="w-8 h-8 mx-auto text-amber-500 mb-2" />
+              <p className="text-amber-700 font-medium">Documento pendiente de generacion</p>
+              <p className="text-amber-600 text-sm mt-1">El PDF se generara proximamente</p>
+            </div>
+          ) : (
+            <div className="border rounded-lg p-6 text-center bg-gray-50">
+              <FileText className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+              <p className="text-gray-500">No se pudo cargar el documento</p>
+            </div>
+          )}
+
+          {/* Signatures Status */}
+          {documentInfo?.signatures && documentInfo.signatures.length > 0 && (
+            <div className="mt-4 p-4 bg-white border rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                <PenTool className="w-4 h-4" />
+                Firmas del Documento
+              </h4>
+              <div className="space-y-3">
+                {documentInfo.signatures.map((sig, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{sig.label}</p>
+                        <p className="text-xs text-gray-500">
+                          {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
+                          {sig.signatory_type_code === 'supervisor' && 'Supervisor'}
+                          {sig.signatory_type_code === 'legal' && 'Legal'}
+                        </p>
+                        {sig.signed && (
+                          <p className="text-xs text-green-600 mt-0.5">
+                            Firmado por {sig.signed_by_name} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {!sig.signed && (
+                      <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                        Pendiente
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Sign Button */}
+              {canSign && (
+                <div className="mt-4 pt-4 border-t">
+                  <Button
+                    onClick={handleSign}
+                    loading={signMutation.isPending}
+                    className="w-full"
+                  >
+                    <PenTool className="w-4 h-4" />
+                    Firmar Documento
+                  </Button>
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    Tu firma se aplicara en el espacio correspondiente a tu rol
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {signError && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">{signError}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        <Button variant="secondary" onClick={onClose}>
+          Cerrar
+        </Button>
+        {request.status === 'pending' && (
+          <>
+            <Button variant="danger" onClick={() => onReject(request)}>
+              <XCircle className="w-4 h-4" />
+              Rechazar
+            </Button>
+            <Button variant="success" onClick={() => onApprove(request)}>
+              <CheckCircle className="w-4 h-4" />
+              Aprobar
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Approvals() {
   const [activeTab, setActiveTab] = useState('pending')
   const [showRejectModal, setShowRejectModal] = useState(false)
@@ -116,11 +621,19 @@ export default function Approvals() {
     enabled: activeTab === 'history',
   })
 
+  // Fetch detailed info when viewing a request
+  const { data: detailData } = useQuery({
+    queryKey: ['approval-detail', selectedRequest?.id],
+    queryFn: () => approvalService.get(selectedRequest.id),
+    enabled: !!selectedRequest?.id && showDetailModal,
+  })
+
   const approveMutation = useMutation({
     mutationFn: ({ id }) => approvalService.approve(id, {}),
     onSuccess: () => {
       queryClient.invalidateQueries(['approvals'])
       queryClient.invalidateQueries(['approvals-count'])
+      setShowDetailModal(false)
     },
   })
 
@@ -139,7 +652,6 @@ export default function Approvals() {
     onSuccess: (response) => {
       queryClient.invalidateQueries(['approvals'])
       alert('Documento generado exitosamente')
-      // Update selectedRequest with the new document_uuid
       if (response.data?.data?.certification) {
         setSelectedRequest(prev => ({
           ...prev,
@@ -177,7 +689,7 @@ export default function Approvals() {
   const totalHistory = (historyApprovals.vacation_requests?.length || 0) + (historyApprovals.certification_requests?.length || 0)
 
   const handleApprove = (request, type) => {
-    if (window.confirm('¿Estás seguro de aprobar esta solicitud?')) {
+    if (window.confirm('Estas seguro de aprobar esta solicitud?')) {
       approveMutation.mutate({ id: request.id, type })
     }
   }
@@ -205,11 +717,14 @@ export default function Approvals() {
   const currentApprovals = activeTab === 'pending' ? pendingApprovals : historyApprovals
   const isLoading = activeTab === 'pending' ? pendingLoading : historyLoading
 
+  // Merge detail data with selected request
+  const detailedRequest = detailData?.data?.data || selectedRequest
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Gestión de Aprobaciones</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Gestion de Aprobaciones</h1>
         <p className="text-gray-500">
           Administra las solicitudes de vacaciones y certificaciones
         </p>
@@ -333,7 +848,7 @@ export default function Approvals() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Award className="w-5 h-5 text-purple-600" />
-            Solicitudes de Certificación
+            Solicitudes de Certificacion
           </h2>
           <div className="space-y-4">
             {currentApprovals.certification_requests.map((request) => (
@@ -361,10 +876,10 @@ export default function Approvals() {
               <>
                 <CheckCircle className="w-16 h-16 mx-auto text-green-300 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  ¡Todo al día!
+                  Todo al dia!
                 </h3>
                 <p className="text-gray-500">
-                  No tienes solicitudes pendientes de aprobación
+                  No tienes solicitudes pendientes de aprobacion
                 </p>
               </>
             ) : (
@@ -374,7 +889,7 @@ export default function Approvals() {
                   Sin historial
                 </h3>
                 <p className="text-gray-500">
-                  Aún no hay solicitudes procesadas
+                  Aun no hay solicitudes procesadas
                 </p>
               </>
             )}
@@ -429,134 +944,23 @@ export default function Approvals() {
         isOpen={showDetailModal}
         onClose={() => setShowDetailModal(false)}
         title="Detalle de Solicitud"
-        size="lg"
+        size="xl"
       >
-        {selectedRequest && (
-          <div className="space-y-6">
-            {/* Employee Info */}
-            <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-              <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-                <User className="w-6 h-6 text-primary-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{selectedRequest.employee?.name}</p>
-                <p className="text-sm text-gray-500">
-                  {selectedRequest.employee?.department} • {selectedRequest.employee?.job_title}
-                </p>
-              </div>
-            </div>
-
-            {/* Request Details */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-500">Número de Solicitud</p>
-                <p className="font-medium">{selectedRequest.request_number}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Estado</p>
-                <Badge status={selectedRequest.status} />
-              </div>
-              {selectedType === 'vacation' ? (
-                <>
-                  <div>
-                    <p className="text-sm text-gray-500">Tipo</p>
-                    <p className="font-medium">{selectedRequest.vacation_type}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Días Solicitados</p>
-                    <p className="font-medium text-primary-600">{selectedRequest.days_requested}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Fecha Inicio</p>
-                    <p className="font-medium">{new Date(selectedRequest.start_date).toLocaleDateString('es-ES')}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Fecha Fin</p>
-                    <p className="font-medium">{new Date(selectedRequest.end_date).toLocaleDateString('es-ES')}</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <p className="text-sm text-gray-500">Tipo de Certificación</p>
-                    <p className="font-medium">{selectedRequest.certification_type}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Propósito</p>
-                    <p className="font-medium">{selectedRequest.purpose}</p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {selectedRequest.reason && (
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Motivo</p>
-                <p className="p-3 bg-gray-50 rounded-lg text-gray-700">{selectedRequest.reason}</p>
-              </div>
-            )}
-
-            {selectedRequest.status === 'pending' && (
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
-                  Cerrar
-                </Button>
-                <Button variant="danger" onClick={() => { setShowDetailModal(false); handleReject(selectedRequest, selectedType) }}>
-                  Rechazar
-                </Button>
-                <Button variant="success" onClick={() => { setShowDetailModal(false); handleApprove(selectedRequest, selectedType) }}>
-                  Aprobar
-                </Button>
-              </div>
-            )}
-
-            {selectedRequest.status !== 'pending' && (
-              <div className="space-y-4 pt-4 border-t">
-                {/* Document Generation for Certifications */}
-                {selectedType === 'certification' && selectedRequest.status === 'approved' && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
-                      <FileText className="w-4 h-4" />
-                      Generacion de Documento
-                    </h4>
-                    {selectedRequest.document_uuid ? (
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-blue-700">Documento generado</p>
-                        <Button
-                          size="sm"
-                          onClick={() => handleDownloadDocument(selectedRequest.id)}
-                        >
-                          <Download className="w-4 h-4" />
-                          Descargar PDF
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-blue-700">
-                          Genera el documento de certificacion para el empleado
-                        </p>
-                        <Button
-                          size="sm"
-                          onClick={() => generateDocMutation.mutate(selectedRequest.id)}
-                          loading={generateDocMutation.isPending}
-                        >
-                          <FileText className="w-4 h-4" />
-                          Generar Documento
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex justify-end">
-                  <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
-                    Cerrar
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {selectedRequest && selectedType === 'vacation' ? (
+          <VacationDetailWithDocument
+            request={detailedRequest}
+            onClose={() => setShowDetailModal(false)}
+            onApprove={(req) => { setShowDetailModal(false); handleApprove(req, 'vacation') }}
+            onReject={(req) => { setShowDetailModal(false); handleReject(req, 'vacation') }}
+          />
+        ) : selectedRequest && selectedType === 'certification' ? (
+          <CertificationDetailWithDocument
+            request={detailedRequest}
+            onClose={() => setShowDetailModal(false)}
+            onApprove={(req) => { setShowDetailModal(false); handleApprove(req, 'certification') }}
+            onReject={(req) => { setShowDetailModal(false); handleReject(req, 'certification') }}
+          />
+        ) : null}
       </Modal>
     </div>
   )

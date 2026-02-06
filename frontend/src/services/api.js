@@ -7,11 +7,16 @@ const api = axios.create({
   },
 })
 
-// Request interceptor - add auth token
+// Request interceptor - add auth token and employee mode header
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  // Add employee mode header if active
+  const employeeMode = localStorage.getItem('valkyria_employee_mode') === 'true'
+  if (employeeMode) {
+    config.headers['X-Employee-Mode'] = 'true'
   }
   return config
 })
@@ -85,6 +90,9 @@ export const approvalService = {
   get: (id) => api.get(`/hr/approvals/${id}`),
   approve: (id, data) => api.post(`/hr/approvals/${id}/approve`, data),
   reject: (id, reason) => api.post(`/hr/approvals/${id}/reject`, { reason }),
+  // Document operations for vacation approvals
+  downloadDocument: (id) => api.get(`/hr/approvals/${id}/download_document`, { responseType: 'blob' }),
+  signDocument: (id) => api.post(`/hr/approvals/${id}/sign_document`),
 }
 
 // HR - Employees

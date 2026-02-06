@@ -43,6 +43,27 @@ module Api
 
           authorize @vacation
 
+          # Pre-validate that we have all required data for the vacation template
+          template = find_vacation_template
+          if template
+            missing_data = validate_vacation_template_data(template)
+            if missing_data[:variables].any?
+              return render json: {
+                error: "Faltan datos requeridos para generar la solicitud de vacaciones",
+                missing_fields: missing_data[:variables].map { |v|
+                  {
+                    field: v[:field],
+                    label: v[:field_label] || v[:field],
+                    source: v[:source],
+                    variable: v[:variable]
+                  }
+                },
+                employee_id: current_employee.uuid,
+                message: build_missing_data_message(missing_data)
+              }, status: :unprocessable_content
+            end
+          end
+
           if @vacation.save
             # Auto-generate document immediately after creation
             generate_vacation_document_if_available
@@ -283,8 +304,9 @@ module Api
             start_date: vacation.start_date&.iso8601,
             end_date: vacation.end_date&.iso8601,
             days_requested: vacation.days_requested,
-            status: vacation.status,
-            status_label: vacation.status_label,
+            status: vacation.effective_status,
+            status_label: vacation.effective_status_label,
+            raw_status: vacation.status,
             submitted_at: vacation.submitted_at&.iso8601,
             created_at: vacation.created_at.iso8601,
             has_document: vacation.document_uuid.present?,
@@ -348,6 +370,42 @@ module Api
             category: "vacation",
             status: "active"
           ).first
+        end
+
+        # Validate that all required data is available for the vacation template
+        def validate_vacation_template_data(template)
+          # Build a temporary request context for validation
+          temp_request = ::Hr::VacationRequest.new(vacation_params)
+          temp_request.employee = current_employee
+          temp_request.organization = current_organization
+
+          context = {
+            employee: current_employee,
+            organization: current_organization,
+            request: temp_request,
+            user: current_user
+          }
+
+          generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
+          generator.validate_variables
+        end
+
+        def build_missing_data_message(missing_data)
+          messages = []
+
+          by_source = missing_data[:variables].group_by { |v| v[:source] }
+
+          if by_source["employee"]&.any?
+            fields = by_source["employee"].map { |v| v[:field_label] || v[:field] }.join(", ")
+            messages << "Complete los siguientes datos del empleado: #{fields}"
+          end
+
+          if by_source["organization"]&.any?
+            fields = by_source["organization"].map { |v| v[:field_label] || v[:field] }.join(", ")
+            messages << "Faltan datos de la organización: #{fields}. Contacte al administrador."
+          end
+
+          messages.join(". ")
         end
 
         def generate_vacation_document_if_available

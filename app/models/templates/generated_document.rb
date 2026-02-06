@@ -141,8 +141,13 @@ module Templates
 
     # Apply a user's signature
     # custom_position: { x:, y:, width:, height: } - optional override for signature position
-    def sign!(user:, signature:, custom_position: nil)
-      sig_entry = find_pending_signature_for(user)
+    # signatory_type_code: optional - search by signatory type instead of user_id (for approvers)
+    def sign!(user:, signature:, custom_position: nil, signatory_type_code: nil)
+      sig_entry = if signatory_type_code.present?
+                    find_pending_signature_by_type(signatory_type_code)
+                  else
+                    find_pending_signature_for(user)
+                  end
 
       raise SignatureError, "No hay firma pendiente para este usuario" unless sig_entry
       raise SignatureError, "Usuario no tiene firma digital configurada" unless signature
@@ -184,6 +189,9 @@ module Templates
 
       pdf_content = file_content
       return unless pdf_content
+
+      # Save original PDF before first signature is applied (for potential reset)
+      save_original_pdf_if_needed!(pdf_content)
 
       # Create working files
       input_pdf = Tempfile.new(["input", ".pdf"])
@@ -372,9 +380,24 @@ module Templates
       )
 
       # Keep as draft_file_id to maintain the workflow
-      # Delete old file if exists
-      Mongoid::GridFs.delete(draft_file_id) if draft_file_id
+      # Delete old file if exists (but NOT the original)
+      if draft_file_id && draft_file_id != original_draft_file_id
+        Mongoid::GridFs.delete(draft_file_id)
+      end
       update!(draft_file_id: pdf_file.id)
+    end
+
+    # Save the original clean PDF before any signatures are applied
+    def save_original_pdf_if_needed!(pdf_content)
+      return if original_draft_file_id.present?
+
+      original_file = Mongoid::GridFs.put(
+        StringIO.new(pdf_content),
+        filename: "#{file_name_base}-original.pdf",
+        content_type: "application/pdf"
+      )
+      update!(original_draft_file_id: original_file.id)
+      Rails.logger.info "Saved original PDF: #{original_file.id}"
     end
 
     def file_name_base
@@ -492,6 +515,10 @@ module Templates
       pdf_generation_status == "pending"
     end
 
+    def pdf_ready?
+      pdf_generation_status == "completed" && (draft_file_id.present? || final_file_id.present?)
+    end
+
     def store_pdf_from_sync!(pdf_content)
       file_name = "#{name.parameterize}.pdf"
       pdf_file = Mongoid::GridFs.put(
@@ -561,21 +588,75 @@ module Templates
     end
 
     def find_pending_signature_for(user)
-      signatures.find do |s|
+      # First, try to find a signature slot directly assigned to this user
+      direct_match = signatures.find do |s|
         s["user_id"] == user.id.to_s && s["status"] == "pending"
+      end
+      return direct_match if direct_match
+
+      # If no direct match, check if user has a role matching any pending signature slot
+      # This allows any user with the appropriate role to sign (e.g., any HR staff can sign HR slot)
+      user_role_names = user.roles.pluck(:name)
+
+      signatures.find do |s|
+        next false unless s["status"] == "pending"
+
+        signatory_type = s["signatory_type_code"]
+        next false if signatory_type.blank?
+
+        # Check if user has a role that matches the signatory type
+        # Map signatory types to acceptable roles
+        acceptable_roles = roles_for_signatory_type(signatory_type)
+        (user_role_names & acceptable_roles).any?
+      end
+    end
+
+    # Map signatory type codes to the roles that can fulfill them
+    def roles_for_signatory_type(signatory_type)
+      case signatory_type
+      when "hr"
+        %w[hr hr_manager hr_staff]
+      when "hr_manager"
+        %w[hr_manager]
+      when "supervisor"
+        %w[supervisor manager]
+      when "legal", "legal_representative"
+        %w[legal legal_representative]
+      when "admin"
+        %w[admin]
+      when "ceo", "general_manager"
+        %w[ceo general_manager]
+      when "accountant"
+        %w[accountant]
+      else
+        [signatory_type] # For custom types, require exact role match
+      end
+    end
+
+    def find_pending_signature_by_type(signatory_type_code)
+      signatures.find do |s|
+        s["signatory_type_code"] == signatory_type_code && s["signed_at"].blank?
       end
     end
 
     def check_completion!
       return unless all_required_signed?
 
-      # Generate final PDF with all signatures (non-blocking on error)
+      # Signatures are already applied to draft_file_id by apply_signature_to_pdf!
+      # Just copy draft to final for the completed document
       begin
-        Templates::PdfSignatureService.new(self).apply_all_signatures!
+        if draft_file_id.present?
+          draft_content = Mongoid::GridFs.get(draft_file_id).data
+          final_file = Mongoid::GridFs.put(
+            StringIO.new(draft_content),
+            filename: file_name&.sub(".pdf", "-firmado.pdf") || "documento-firmado.pdf",
+            content_type: "application/pdf"
+          )
+          self.final_file_id = final_file.id
+        end
       rescue StandardError => e
-        Rails.logger.error("Error generating final PDF: #{e.message}")
-        Rails.logger.error(e.backtrace.first(5).join("\n"))
-        # Continue to mark as completed even if PDF generation fails
+        Rails.logger.error("Error copying draft to final PDF: #{e.message}")
+        # Continue to mark as completed even if copy fails
       end
 
       update!(status: COMPLETED, completed_at: Time.current)

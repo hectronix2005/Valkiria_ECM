@@ -47,7 +47,9 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
+  const [missingFields, setMissingFields] = useState(null)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   // Obtener template de vacaciones
   const { data: templateData } = useQuery({
@@ -88,11 +90,17 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
       setStep(2)
     },
     onError: (err) => {
-      const errors = err.response?.data?.errors
-      if (Array.isArray(errors)) {
-        setSignError(errors.join(', '))
+      const data = err.response?.data
+      // Check if it's a missing fields error
+      if (data?.missing_fields && Array.isArray(data.missing_fields)) {
+        setMissingFields(data.missing_fields)
+        setSignError(data.message || 'Faltan datos requeridos')
+      } else if (Array.isArray(data?.errors)) {
+        setSignError(data.errors.join(', '))
+        setMissingFields(null)
       } else {
-        setSignError(err.response?.data?.error || 'Error al crear la solicitud')
+        setSignError(data?.error || 'Error al crear la solicitud')
+        setMissingFields(null)
       }
     }
   })
@@ -371,7 +379,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
               type="date"
               value={formData.start_date}
               min={new Date().toISOString().split('T')[0]}
-              onChange={(e) => { setFormData({ ...formData, start_date: e.target.value }); setSignError(''); }}
+              onChange={(e) => { setFormData({ ...formData, start_date: e.target.value }); setSignError(''); setMissingFields(null); }}
               required
             />
             <Input
@@ -379,7 +387,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
               type="date"
               value={formData.end_date}
               min={formData.start_date || new Date().toISOString().split('T')[0]}
-              onChange={(e) => { setFormData({ ...formData, end_date: e.target.value }); setSignError(''); }}
+              onChange={(e) => { setFormData({ ...formData, end_date: e.target.value }); setSignError(''); setMissingFields(null); }}
               required
             />
           </div>
@@ -401,10 +409,50 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
             </div>
           )}
 
-          {signError && (
+          {signError && !missingFields && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
               <AlertCircle className="w-4 h-4" />
               <span className="text-sm">{signError}</span>
+            </div>
+          )}
+
+          {missingFields && missingFields.length > 0 && (
+            <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium text-amber-800 mb-2">
+                    Faltan datos requeridos para generar la solicitud
+                  </p>
+                  <p className="text-sm text-amber-700 mb-3">
+                    Por favor complete los siguientes datos antes de continuar:
+                  </p>
+                  <ul className="text-sm text-amber-700 space-y-1 mb-4">
+                    {missingFields.map((field, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                        <span>{field.label || field.field}</span>
+                        {field.source === 'employee' && (
+                          <span className="text-xs text-amber-500">(Perfil del empleado)</span>
+                        )}
+                        {field.source === 'organization' && (
+                          <span className="text-xs text-amber-500">(Configuración de la empresa)</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {missingFields.some(f => f.source === 'employee') && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => navigate('/profile')}
+                    >
+                      Ir a mi Perfil para completar datos
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -717,6 +765,252 @@ function VacationCard({ vacation, onSubmit, onCancel, onDelete, onView, onDownlo
   )
 }
 
+// Componente para ver el detalle de una solicitud con documento
+function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
+  const [pdfUrl, setPdfUrl] = useState(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [detailData, setDetailData] = useState(null)
+  const [documentInfo, setDocumentInfo] = useState(null)
+  const [signError, setSignError] = useState('')
+  const queryClient = useQueryClient()
+
+  const typeLabels = {
+    vacation: 'Vacaciones',
+    personal: 'Día Personal',
+    sick: 'Enfermedad',
+    bereavement: 'Duelo',
+    unpaid: 'Sin Goce',
+  }
+
+  // Fetch detailed vacation info including document/signatures
+  const fetchDetail = async () => {
+    try {
+      const response = await vacationService.get(vacation.id)
+      setDetailData(response.data?.data)
+      setDocumentInfo(response.data?.document)
+    } catch (err) {
+      console.error('Error fetching vacation detail:', err)
+    }
+  }
+
+  useEffect(() => {
+    fetchDetail()
+  }, [vacation.id])
+
+  // Sign mutation
+  const signMutation = useMutation({
+    mutationFn: (id) => vacationService.signDocument(id),
+    onSuccess: (response) => {
+      setDocumentInfo(response.data?.document)
+      setSignError('')
+      queryClient.invalidateQueries(['vacations'])
+      // Reload PDF to show signature
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl)
+        setPdfUrl(null)
+      }
+      loadPdf()
+      fetchDetail()
+    },
+    onError: (err) => {
+      setSignError(err.response?.data?.error || 'Error al firmar el documento')
+    }
+  })
+
+  const handleSign = () => {
+    setSignError('')
+    signMutation.mutate(vacation.id)
+  }
+
+  // Load PDF if available
+  useEffect(() => {
+    if (vacation.pdf_ready && vacation.id) {
+      loadPdf()
+    }
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl)
+    }
+  }, [vacation.id, vacation.pdf_ready])
+
+  const loadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      const response = await vacationService.downloadDocument(vacation.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      setPdfUrl(URL.createObjectURL(blob))
+    } catch (err) {
+      console.error('Error loading PDF:', err)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const openPdfInNewTab = () => {
+    if (pdfUrl) {
+      window.open(pdfUrl, '_blank')
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Request Summary */}
+      <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+        <div>
+          <span className="text-sm text-gray-500">Número:</span>
+          <p className="font-medium">{vacation.request_number}</p>
+        </div>
+        <div>
+          <span className="text-sm text-gray-500">Estado:</span>
+          <div className="mt-1"><Badge status={vacation.status} /></div>
+        </div>
+        <div>
+          <span className="text-sm text-gray-500">Tipo:</span>
+          <p className="font-medium">{typeLabels[vacation.vacation_type] || vacation.vacation_type}</p>
+        </div>
+        <div>
+          <span className="text-sm text-gray-500">Días:</span>
+          <p className="font-bold text-primary-600">{vacation.days_requested}</p>
+        </div>
+        <div className="col-span-2">
+          <span className="text-sm text-gray-500">Fechas:</span>
+          <p className="font-medium">
+            {new Date(vacation.start_date).toLocaleDateString('es-ES')} - {new Date(vacation.end_date).toLocaleDateString('es-ES')}
+          </p>
+        </div>
+      </div>
+
+      {vacation.reason && (
+        <div>
+          <span className="text-sm text-gray-500 block mb-1">Motivo:</span>
+          <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{vacation.reason}</p>
+        </div>
+      )}
+
+      {vacation.decision_reason && (
+        <div>
+          <span className="text-sm text-gray-500 block mb-1">Comentario del aprobador:</span>
+          <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{vacation.decision_reason}</p>
+        </div>
+      )}
+
+      {/* Document Preview Section */}
+      {vacation.has_document && (
+        <div className="border-t pt-4">
+          <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary-600" />
+            Documento de Solicitud
+          </h3>
+
+          {/* PDF Preview */}
+          {pdfLoading ? (
+            <div className="border rounded-lg p-8 text-center bg-gray-50">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
+              <p className="text-gray-500">Cargando documento...</p>
+            </div>
+          ) : pdfUrl ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-4 py-2 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Vista Previa del Documento</span>
+                <Button variant="ghost" size="sm" onClick={openPdfInNewTab}>
+                  <ExternalLink className="w-4 h-4" />
+                  Abrir en nueva pestaña
+                </Button>
+              </div>
+              <iframe
+                src={pdfUrl}
+                className="w-full h-[350px] border-0"
+                title="Vista previa del documento"
+              />
+            </div>
+          ) : vacation.pdf_ready === false ? (
+            <div className="border rounded-lg p-6 text-center bg-amber-50 border-amber-200">
+              <AlertCircle className="w-8 h-8 mx-auto text-amber-500 mb-2" />
+              <p className="text-amber-700 font-medium">Documento pendiente de generación</p>
+              <p className="text-amber-600 text-sm mt-1">El PDF se generará próximamente</p>
+            </div>
+          ) : (
+            <div className="border rounded-lg p-6 text-center bg-gray-50">
+              <FileText className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+              <p className="text-gray-500">No se pudo cargar el documento</p>
+            </div>
+          )}
+
+          {/* Signatures Status */}
+          {documentInfo?.signatures && documentInfo.signatures.length > 0 && (
+            <div className="mt-4 p-4 bg-white border rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                <PenTool className="w-4 h-4" />
+                Firmas del Documento
+              </h4>
+              <div className="space-y-3">
+                {documentInfo.signatures.map((sig, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{sig.label}</p>
+                        <p className="text-xs text-gray-500">
+                          {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
+                          {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
+                          {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
+                        </p>
+                        {sig.signed && (
+                          <p className="text-xs text-green-600 mt-0.5">
+                            Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {sig.signatory_type_code === 'employee' && !sig.signed && (
+                      <Button
+                        size="sm"
+                        onClick={handleSign}
+                        loading={signMutation.isPending}
+                      >
+                        <PenTool className="w-4 h-4" />
+                        Firmar
+                      </Button>
+                    )}
+                    {sig.signatory_type_code !== 'employee' && !sig.signed && (
+                      <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                        Pendiente
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {signError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-sm">{signError}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        {vacation.pdf_ready && (
+          <Button variant="secondary" onClick={() => onDownload(vacation.id)}>
+            <FileDown className="w-4 h-4" />
+            Descargar PDF
+          </Button>
+        )}
+        <Button onClick={onClose}>
+          Cerrar
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default function Vacations() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
@@ -954,58 +1248,14 @@ export default function Vacations() {
         isOpen={showDetailModal}
         onClose={() => setShowDetailModal(false)}
         title="Detalle de Solicitud"
-        size="md"
+        size="xl"
       >
         {selectedVacation && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">Número:</span>
-              <span className="font-medium">{selectedVacation.request_number}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">Estado:</span>
-              <Badge status={selectedVacation.status} />
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">Tipo:</span>
-              <span>{selectedVacation.vacation_type}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">Fechas:</span>
-              <span>
-                {new Date(selectedVacation.start_date).toLocaleDateString('es-ES')} - {new Date(selectedVacation.end_date).toLocaleDateString('es-ES')}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">Días:</span>
-              <span className="font-medium text-primary-600">{selectedVacation.days_requested}</span>
-            </div>
-            {selectedVacation.reason && (
-              <div>
-                <span className="text-gray-500 block mb-1">Motivo:</span>
-                <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{selectedVacation.reason}</p>
-              </div>
-            )}
-            {selectedVacation.decision_reason && (
-              <div>
-                <span className="text-gray-500 block mb-1">Comentario del aprobador:</span>
-                <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{selectedVacation.decision_reason}</p>
-              </div>
-            )}
-
-            {selectedVacation.pdf_ready && (
-              <div className="pt-4 border-t">
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  onClick={() => handleDownload(selectedVacation.id)}
-                >
-                  <FileDown className="w-4 h-4" />
-                  Descargar Documento
-                </Button>
-              </div>
-            )}
-          </div>
+          <VacationDetailView
+            vacation={selectedVacation}
+            onClose={() => setShowDetailModal(false)}
+            onDownload={handleDownload}
+          />
         )}
       </Modal>
     </div>

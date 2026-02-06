@@ -93,11 +93,13 @@ module Api
           module_type: template.module_type,
           main_category: template.main_category,
           category: template.category,
+          certification_type: template.certification_type,
           default_third_party_type: template.default_third_party_type,
           uses_third_party: template.uses_third_party_variables?,
           signatories_count: template.signatories.count,
           sequential_signing: template.sequential_signing != false,
-          variables_count: template.variables&.count || 0
+          variables_count: template.variables&.count || 0,
+          variables: template.variables
         }
 
         if detailed

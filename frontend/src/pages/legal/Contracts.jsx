@@ -1899,6 +1899,19 @@ export default function Contracts() {
     setCreateStep(2)
   }
 
+  // Helper to parse blob error responses
+  const parseBlobError = async (error) => {
+    if (error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        return JSON.parse(text)
+      } catch {
+        return null
+      }
+    }
+    return error.response?.data
+  }
+
   const handleDownload = async (id) => {
     try {
       const response = await contractService.downloadDocument(id)
@@ -1911,8 +1924,8 @@ export default function Contracts() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error downloading document:', error)
-      const errorMessage = error.response?.data?.error || 'Error al descargar el documento'
-      alert(errorMessage)
+      const errorData = await parseBlobError(error)
+      alert(errorData?.error || errorData?.message || 'Error al descargar el documento')
     }
   }
 
@@ -1927,8 +1940,8 @@ export default function Contracts() {
       setDocumentUrl(url)
     } catch (error) {
       console.error('Error loading document:', error)
-      const errorMessage = error.response?.data?.error || 'Error al cargar el documento'
-      alert(errorMessage)
+      const errorData = await parseBlobError(error)
+      alert(errorData?.error || errorData?.message || 'Error al cargar el documento')
       setDocumentContract(null)
     } finally {
       setDocumentLoading(false)

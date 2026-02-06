@@ -228,9 +228,18 @@ module Api
             }, status: :forbidden
           end
 
+          # Check if PDF is available
+          unless generated_doc.pdf_ready?
+            return render json: {
+              error: "PDF pendiente de generación",
+              message: "El documento PDF aún no está listo. Por favor intente más tarde.",
+              pdf_status: generated_doc.pdf_generation_status
+            }, status: :unprocessable_entity
+          end
+
           file_content = generated_doc.file_content
           unless file_content
-            return render json: { error: "Error al leer el archivo" }, status: :internal_server_error
+            return render json: { error: "Error al leer el archivo del servidor" }, status: :internal_server_error
           end
 
           send_data file_content,
@@ -278,7 +287,9 @@ module Api
             if generated_doc
               doc_info = {
                 status: generated_doc.status,
-                can_download: can_download_document?(generated_doc),
+                pdf_ready: generated_doc.pdf_ready?,
+                pdf_status: generated_doc.pdf_generation_status,
+                can_download: can_download_document?(generated_doc) && generated_doc.pdf_ready?,
                 pending_signatures: generated_doc.pending_signatories.map { |s| s["signatory_label"] },
                 completed_signatures: generated_doc.signed_signatories.map { |s| s["signatory_label"] },
                 all_signed: generated_doc.all_required_signed?
@@ -347,42 +358,53 @@ module Api
             .first
         end
 
-        # Returns certification types that have active templates
+        # Returns certification types that have active templates (1:1 relationship)
         def fetch_available_certification_types
-          # All possible certification types
-          all_types = ::Hr::EmploymentCertificationRequest::CERTIFICATION_TYPES
+          # Type configuration with labels and descriptions
+          type_config = {
+            "employment" => {
+              label: "Certificado Laboral",
+              description: "Certificación de empleo con información laboral básica"
+            },
+            "salary" => {
+              label: "Certificado con Salario",
+              description: "Incluye información salarial detallada"
+            },
+            "position" => {
+              label: "Certificado de Cargo",
+              description: "Detalla cargo y responsabilidades"
+            },
+            "full" => {
+              label: "Certificado Completo",
+              description: "Información completa de empleo, salario y cargo"
+            },
+            "custom" => {
+              label: "Certificado Personalizado",
+              description: "Contenido personalizado según necesidad"
+            }
+          }
 
-          # Find which types have active templates
-          active_templates = ::Templates::Template
+          # Find templates with certification_type set (1:1 mapping)
+          templates = ::Templates::Template
             .for_organization(current_organization)
             .active
             .where(category: "certification")
-            .where(:certification_type.in => all_types)
-            .pluck(:certification_type)
-            .uniq
+            .where(:certification_type.ne => nil)
 
-          # Map to type info
-          type_labels = {
-            "employment" => "Certificado de Empleo",
-            "salary" => "Certificado de Salario",
-            "position" => "Certificado de Cargo",
-            "full" => "Certificado Completo",
-            "custom" => "Certificado Personalizado"
-          }
+          # Build response with template info for each type
+          templates.map do |template|
+            type = template.certification_type
+            config = type_config[type] || {}
 
-          type_descriptions = {
-            "employment" => "Verificación básica de empleo",
-            "salary" => "Incluye información salarial",
-            "position" => "Detalla cargo y responsabilidades",
-            "full" => "Información completa de empleo",
-            "custom" => "Contenido personalizado según necesidad"
-          }
-
-          active_templates.map do |type|
             {
               value: type,
-              label: type_labels[type] || type.humanize,
-              description: type_descriptions[type] || ""
+              label: config[:label] || template.name,
+              description: config[:description] || "",
+              template: {
+                id: template.uuid,
+                name: template.name,
+                file_name: template.file_name
+              }
             }
           end
         end
@@ -441,11 +463,7 @@ module Api
           false
         end
 
-        def hr_or_admin?
-          current_user.has_role?(:admin) ||
-            current_user.has_role?(:hr) ||
-            current_user.has_role?(:hr_manager)
-        end
+        # hr_or_admin? is now defined in BaseController and respects employee_mode
       end
     end
   end

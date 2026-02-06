@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { certificationService } from '../../services/api'
+import { certificationService, templateService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
-import { FileText, Plus, X, Eye, Filter, Clock, CheckCircle, AlertCircle, Calendar, Download, FilePlus, Loader2, AlertTriangle, ExternalLink, Trash2, PenTool } from 'lucide-react'
+import { FileText, Plus, X, Eye, Filter, Clock, CheckCircle, AlertCircle, Calendar, Download, FilePlus, Loader2, AlertTriangle, ExternalLink, Trash2, PenTool, Settings, Save, FileCheck } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 // Default certification types (fallback if API fails)
@@ -27,12 +27,6 @@ const purposes = [
   { value: 'government', label: 'Trámite Gubernamental' },
   { value: 'legal', label: 'Proceso Legal' },
   { value: 'other', label: 'Otro' },
-]
-
-const deliveryMethods = [
-  { value: 'digital', label: 'Digital (PDF)' },
-  { value: 'physical', label: 'Física (Impresa)' },
-  { value: 'both', label: 'Digital y Física' },
 ]
 
 const languages = [
@@ -90,12 +84,7 @@ function CertificationForm({ onSubmit, onCancel, loading, initialType, available
     purpose: 'bank',
     purpose_details: '',
     language: 'es',
-    delivery_method: 'digital',
     addressee: '',
-    include_salary: defaultType === 'salary' || defaultType === 'full',
-    include_position: true,
-    include_start_date: true,
-    include_department: false,
     special_instructions: '',
   })
 
@@ -105,7 +94,6 @@ function CertificationForm({ onSubmit, onCancel, loading, initialType, available
       setFormData(prev => ({
         ...prev,
         certification_type: initialType,
-        include_salary: initialType === 'salary' || initialType === 'full',
       }))
     }
   }, [initialType, certificationTypes])
@@ -123,12 +111,7 @@ function CertificationForm({ onSubmit, onCancel, loading, initialType, available
         label="Tipo de Certificación"
         options={certificationTypes}
         value={formData.certification_type}
-        onChange={(e) => {
-          const newType = e.target.value
-          // Reset include_salary if type is not salary or full
-          const newIncludeSalary = (newType === 'salary' || newType === 'full') ? formData.include_salary : false
-          setFormData({ ...formData, certification_type: newType, include_salary: newIncludeSalary })
-        }}
+        onChange={(e) => setFormData({ ...formData, certification_type: e.target.value })}
         required
       />
 
@@ -159,20 +142,12 @@ function CertificationForm({ onSubmit, onCancel, loading, initialType, available
         />
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <Select
-          label="Idioma"
-          options={languages}
-          value={formData.language}
-          onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-        />
-        <Select
-          label="Método de Entrega"
-          options={deliveryMethods}
-          value={formData.delivery_method}
-          onChange={(e) => setFormData({ ...formData, delivery_method: e.target.value })}
-        />
-      </div>
+      <Select
+        label="Idioma"
+        options={languages}
+        value={formData.language}
+        onChange={(e) => setFormData({ ...formData, language: e.target.value })}
+      />
 
       <Input
         label="Dirigido a (opcional)"
@@ -180,52 +155,6 @@ function CertificationForm({ onSubmit, onCancel, loading, initialType, available
         onChange={(e) => setFormData({ ...formData, addressee: e.target.value })}
         placeholder="Ej: A quien corresponda, Banco XYZ, Embajada..."
       />
-
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          Información a incluir
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
-            <input
-              type="checkbox"
-              checked={formData.include_start_date}
-              onChange={(e) => setFormData({ ...formData, include_start_date: e.target.checked })}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-sm">Fecha de ingreso</span>
-          </label>
-          <label className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
-            <input
-              type="checkbox"
-              checked={formData.include_position}
-              onChange={(e) => setFormData({ ...formData, include_position: e.target.checked })}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-sm">Cargo actual</span>
-          </label>
-          <label className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
-            <input
-              type="checkbox"
-              checked={formData.include_department}
-              onChange={(e) => setFormData({ ...formData, include_department: e.target.checked })}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-sm">Departamento</span>
-          </label>
-          {(formData.certification_type === 'salary' || formData.certification_type === 'full') && (
-            <label className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
-              <input
-                type="checkbox"
-                checked={formData.include_salary}
-                onChange={(e) => setFormData({ ...formData, include_salary: e.target.checked })}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="text-sm">Información salarial</span>
-            </label>
-          )}
-        </div>
-      </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -260,10 +189,296 @@ const statusIcons = {
   cancelled: <X className="w-4 h-4 text-gray-400" />,
 }
 
+// Admin component for managing certification types
+function CertificationTypeConfig({ onClose }) {
+  const [certTypes, setCertTypes] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [editingCode, setEditingCode] = useState(null)
+  const [newType, setNewType] = useState({ code: '', label: '', description: '', template_id: '' })
+  const queryClient = useQueryClient()
+
+  // Fetch certification templates
+  const { data: templatesData, isLoading: loadingTemplates } = useQuery({
+    queryKey: ['admin-certification-templates'],
+    queryFn: () => templateService.list({ category: 'certification', status: 'active' }),
+  })
+
+  const templates = templatesData?.data?.data || []
+
+  // Initialize certTypes from templates that have certification_type set
+  useEffect(() => {
+    if (templates.length > 0) {
+      const typesFromTemplates = templates
+        .filter(t => t.certification_type)
+        .map(t => ({
+          code: t.certification_type,
+          label: typeLabels[t.certification_type] || t.certification_type,
+          description: '',
+          template_id: t.id,
+          template_name: t.name,
+          variables: t.variables || []
+        }))
+      setCertTypes(typesFromTemplates)
+    }
+  }, [templates])
+
+  // Available templates for a given type (not assigned OR currently assigned to this type)
+  const getAvailableTemplatesForType = (currentTemplateId) => {
+    return templates.filter(t => !t.certification_type || t.id === currentTemplateId)
+  }
+
+  // Available templates (not yet assigned to a certification type)
+  const availableTemplates = templates.filter(t => !t.certification_type)
+
+  const handleAddType = () => {
+    if (!newType.code || !newType.template_id) {
+      alert('Debe ingresar un código y seleccionar un template')
+      return
+    }
+    if (certTypes.find(t => t.code === newType.code)) {
+      alert('Ya existe un tipo con ese código')
+      return
+    }
+    const template = templates.find(t => t.id === newType.template_id)
+    setCertTypes([...certTypes, {
+      ...newType,
+      template_name: template?.name,
+      variables: template?.variables || []
+    }])
+    setNewType({ code: '', label: '', description: '', template_id: '' })
+  }
+
+  const handleRemoveType = (code) => {
+    setCertTypes(certTypes.filter(t => t.code !== code))
+    if (editingCode === code) setEditingCode(null)
+  }
+
+  const handleEditType = (code) => {
+    setEditingCode(editingCode === code ? null : code)
+  }
+
+  const handleUpdateTypeTemplate = (code, newTemplateId) => {
+    const template = templates.find(t => t.id === newTemplateId)
+    setCertTypes(certTypes.map(t =>
+      t.code === code
+        ? { ...t, template_id: newTemplateId, template_name: template?.name, variables: template?.variables || [] }
+        : t
+    ))
+  }
+
+  const handleUpdateTypeLabel = (code, newLabel) => {
+    setCertTypes(certTypes.map(t =>
+      t.code === code ? { ...t, label: newLabel } : t
+    ))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      // First, clear certification_type from all templates that are no longer in the list
+      // or have been reassigned to a different type
+      for (const template of templates) {
+        const assignedType = certTypes.find(t => t.template_id === template.id)
+        if (template.certification_type && !assignedType) {
+          // Template was assigned but is no longer in the list
+          await templateService.update(template.id, {
+            template: { certification_type: null }
+          })
+        } else if (template.certification_type && assignedType && template.certification_type !== assignedType.code) {
+          // Template's type code changed (edge case)
+          await templateService.update(template.id, {
+            template: { certification_type: assignedType.code }
+          })
+        }
+      }
+
+      // Update each template with its certification_type
+      for (const certType of certTypes) {
+        if (certType.template_id) {
+          await templateService.update(certType.template_id, {
+            template: { certification_type: certType.code }
+          })
+        }
+      }
+
+      queryClient.invalidateQueries(['certification-available-types'])
+      queryClient.invalidateQueries(['admin-certification-templates'])
+      alert('Configuración guardada exitosamente')
+      onClose()
+    } catch (error) {
+      console.error('Error saving certification types:', error)
+      alert('Error al guardar: ' + (error.response?.data?.error || error.message))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-gray-600">
+        Configure los tipos de certificación disponibles. Cada tipo debe tener un template asociado.
+      </p>
+
+      {/* Existing types */}
+      <div className="space-y-3">
+        <h4 className="font-medium text-gray-900">Tipos Configurados</h4>
+        {certTypes.length === 0 ? (
+          <p className="text-sm text-gray-500 italic">No hay tipos configurados</p>
+        ) : (
+          <div className="space-y-2">
+            {certTypes.map((type) => (
+              <div key={type.code} className={`p-3 border rounded-lg ${editingCode === type.code ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'}`}>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <code className="text-sm font-mono bg-gray-200 px-2 py-0.5 rounded">{type.code}</code>
+                      {editingCode === type.code ? (
+                        <input
+                          type="text"
+                          value={type.label}
+                          onChange={(e) => handleUpdateTypeLabel(type.code, e.target.value)}
+                          className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Etiqueta"
+                        />
+                      ) : (
+                        <span className="font-medium">{type.label}</span>
+                      )}
+                    </div>
+                    {editingCode === type.code ? (
+                      <div className="mt-2">
+                        <label className="block text-xs text-gray-500 mb-1">Template asociado:</label>
+                        <select
+                          value={type.template_id}
+                          onChange={(e) => handleUpdateTypeTemplate(type.code, e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {getAvailableTemplatesForType(type.template_id).map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
+                        <FileCheck className="w-4 h-4" />
+                        <span>{type.template_name}</span>
+                      </div>
+                    )}
+                    {type.variables?.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-500 mb-1">Variables requeridas:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {type.variables.slice(0, 5).map((v, i) => (
+                            <span key={i} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                              {v}
+                            </span>
+                          ))}
+                          {type.variables.length > 5 && (
+                            <span className="text-xs text-gray-500">+{type.variables.length - 5} más</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleEditType(type.code)}
+                      className={`p-1 rounded ${editingCode === type.code ? 'text-blue-600 bg-blue-100' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                      title={editingCode === type.code ? "Cerrar edición" : "Editar"}
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleRemoveType(type.code)}
+                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                      title="Eliminar"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add new type */}
+      <div className="border-t pt-4">
+        <h4 className="font-medium text-gray-900 mb-3">Agregar Nuevo Tipo</h4>
+        {availableTemplates.length === 0 && templates.length > 0 ? (
+          <p className="text-sm text-amber-600">
+            Todos los templates de certificación ya tienen un tipo asignado.
+            Para agregar más tipos, primero suba nuevos templates de certificación.
+          </p>
+        ) : loadingTemplates ? (
+          <div className="flex items-center gap-2 text-gray-500">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Cargando templates...</span>
+          </div>
+        ) : templates.length === 0 ? (
+          <p className="text-sm text-amber-600">
+            No hay templates de certificación disponibles.
+            Primero debe subir templates con categoría "certification" desde Administración → Templates.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Código"
+              value={newType.code}
+              onChange={(e) => setNewType({ ...newType, code: e.target.value.toLowerCase().replace(/\s/g, '_') })}
+              placeholder="ej: employment, salary"
+            />
+            <Input
+              label="Etiqueta"
+              value={newType.label}
+              onChange={(e) => setNewType({ ...newType, label: e.target.value })}
+              placeholder="ej: Certificación Laboral"
+            />
+            <div className="col-span-2">
+              <Select
+                label="Template Asociado"
+                options={[
+                  { value: '', label: 'Seleccione un template...' },
+                  ...availableTemplates.map(t => ({ value: t.id, label: t.name }))
+                ]}
+                value={newType.template_id}
+                onChange={(e) => setNewType({ ...newType, template_id: e.target.value })}
+              />
+            </div>
+            <div className="col-span-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleAddType}
+                disabled={!newType.code || !newType.template_id}
+              >
+                <Plus className="w-4 h-4" />
+                Agregar Tipo
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        <Button variant="ghost" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button onClick={handleSave} loading={saving}>
+          <Save className="w-4 h-4" />
+          Guardar Configuración
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default function Certifications() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
+  const [showConfigModal, setShowConfigModal] = useState(false)
   const [errorData, setErrorData] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [selectedCertification, setSelectedCertification] = useState(null)
@@ -401,6 +616,19 @@ export default function Certifications() {
     generateMutation.mutate(id)
   }
 
+  // Helper to parse blob error responses
+  const parseBlobError = async (error) => {
+    if (error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        return JSON.parse(text)
+      } catch {
+        return null
+      }
+    }
+    return error.response?.data
+  }
+
   const handleDownloadDocument = async (certification) => {
     try {
       setDownloadingId(certification.id)
@@ -416,7 +644,8 @@ export default function Certifications() {
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error downloading document:', error)
-      alert('Error al descargar documento')
+      const errorData = await parseBlobError(error)
+      alert(errorData?.error || errorData?.message || 'Error al descargar documento')
     } finally {
       setDownloadingId(null)
     }
@@ -431,12 +660,8 @@ export default function Certifications() {
       setPreviewUrl(url)
     } catch (error) {
       console.error('Error previewing document:', error)
-      const errorData = error.response?.data
-      if (errorData?.error) {
-        alert(errorData.error)
-      } else {
-        alert('Error al previsualizar documento')
-      }
+      const errorData = await parseBlobError(error)
+      alert(errorData?.error || errorData?.message || 'Error al previsualizar documento')
     } finally {
       setPreviewingId(null)
     }
@@ -457,14 +682,26 @@ export default function Certifications() {
           <h1 className="text-2xl font-bold text-gray-900">Certificaciones</h1>
           <p className="text-gray-500">Solicita certificaciones laborales para distintos trámites</p>
         </div>
-        <Button
-          onClick={() => setShowNewModal(true)}
-          disabled={availableTypes.length === 0}
-          title={availableTypes.length === 0 ? 'No hay tipos de certificación disponibles' : ''}
-        >
-          <Plus className="w-4 h-4" />
-          Nueva Solicitud
-        </Button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant="secondary"
+              onClick={() => setShowConfigModal(true)}
+              title="Configurar tipos de certificación"
+            >
+              <Settings className="w-4 h-4" />
+              Configurar Tipos
+            </Button>
+          )}
+          <Button
+            onClick={() => setShowNewModal(true)}
+            disabled={availableTypes.length === 0}
+            title={availableTypes.length === 0 ? 'No hay tipos de certificación disponibles' : ''}
+          >
+            <Plus className="w-4 h-4" />
+            Nueva Solicitud
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -738,8 +975,18 @@ export default function Certifications() {
                             )}
                           </button>
                         )}
+                        {/* Indicador de PDF pendiente */}
+                        {certification.document_uuid && !certification.document_info?.pdf_ready && (
+                          <span
+                            className="inline-flex items-center px-2 py-1 text-xs text-blue-700 bg-blue-50 rounded"
+                            title="El PDF se está generando"
+                          >
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            PDF pendiente
+                          </span>
+                        )}
                         {/* Indicador de firmas pendientes (para empleados sin permisos de firma) */}
-                        {certification.document_uuid && !certification.document_info?.can_download && !(isHR || isAdmin) && (
+                        {certification.document_uuid && certification.document_info?.pdf_ready && !certification.document_info?.can_download && !(isHR || isAdmin) && (
                           <span
                             className="inline-flex items-center px-2 py-1 text-xs text-amber-700 bg-amber-50 rounded"
                             title={`Pendiente: ${certification.document_info?.pending_signatures?.join(', ')}`}
@@ -859,17 +1106,6 @@ export default function Certifications() {
               <div className="flex justify-between items-center">
                 <span className="text-gray-500">Idioma:</span>
                 <span>{selectedCertification.language === 'es' ? 'Español' : 'Inglés'}</span>
-              </div>
-            )}
-
-            {selectedCertification.delivery_method && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500">Entrega:</span>
-                <span>
-                  {selectedCertification.delivery_method === 'digital' && 'Digital (PDF)'}
-                  {selectedCertification.delivery_method === 'physical' && 'Física (Impresa)'}
-                  {selectedCertification.delivery_method === 'both' && 'Digital y Física'}
-                </span>
               </div>
             )}
 
@@ -1078,6 +1314,21 @@ export default function Certifications() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Admin Configuration Modal */}
+      <Modal
+        isOpen={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        title="Configurar Tipos de Certificación"
+        size="lg"
+      >
+        <CertificationTypeConfig
+          onClose={() => {
+            setShowConfigModal(false)
+            queryClient.invalidateQueries(['certification-available-types'])
+          }}
+        />
       </Modal>
     </div>
   )
