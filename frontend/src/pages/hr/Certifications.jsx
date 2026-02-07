@@ -605,6 +605,7 @@ export default function Certifications() {
   })
 
   const certifications = data?.data?.data || []
+  const hasInProgressCertifications = certifications.some(c => ['pending', 'processing'].includes(c.status))
 
   const handleView = (certification) => {
     setSelectedCertification(certification)
@@ -695,8 +696,8 @@ export default function Certifications() {
           )}
           <Button
             onClick={() => setShowNewModal(true)}
-            disabled={availableTypes.length === 0}
-            title={availableTypes.length === 0 ? 'No hay tipos de certificación disponibles' : ''}
+            disabled={availableTypes.length === 0 || hasInProgressCertifications}
+            title={availableTypes.length === 0 ? 'No hay tipos de certificación disponibles' : hasInProgressCertifications ? 'Certificados en trámite' : ''}
           >
             <Plus className="w-4 h-4" />
             Nueva Solicitud
@@ -726,7 +727,7 @@ export default function Certifications() {
       </Card>
 
       {/* Info Cards - Clickable shortcuts - Only show available types */}
-      {availableTypes.length > 0 ? (
+      {availableTypes.length > 0 && !hasInProgressCertifications ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {availableTypes.find(t => t.value === 'employment') && (
             <Card
@@ -814,10 +815,21 @@ export default function Certifications() {
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-6 h-6 text-amber-600" />
             <div>
-              <p className="font-medium text-amber-900">No hay tipos de certificación disponibles</p>
-              <p className="text-sm text-amber-700">
-                Contacta al administrador para configurar los templates de certificación.
-              </p>
+              {hasInProgressCertifications ? (
+                <>
+                  <p className="font-medium text-amber-900">Los certificados existentes configurados ya están en trámite</p>
+                  <p className="text-sm text-amber-700">
+                    Por favor esperar que sean finalizados para solicitar otro certificado.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-amber-900">No hay tipos de certificación disponibles</p>
+                  <p className="text-sm text-amber-700">
+                    Contacta al administrador para configurar los templates de certificación.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>

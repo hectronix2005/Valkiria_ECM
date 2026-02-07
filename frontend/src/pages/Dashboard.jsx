@@ -269,7 +269,7 @@ export default function Dashboard() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          Bienvenido, {user?.first_name}
+          Bienvenid@, {user?.first_name}
         </h1>
         <p className="text-gray-500">
           Aquí tienes un resumen de tu actividad
