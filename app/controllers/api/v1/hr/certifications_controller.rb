@@ -218,7 +218,8 @@ module Api
           end
 
           # Empleados solo pueden descargar documentos con todas las firmas
-          unless can_download_document?(generated_doc)
+          # El dueño de la certificación siempre puede previsualizar/descargar su documento
+          unless can_download_document?(generated_doc, @certification)
             pending = generated_doc.pending_signatories.map { |s| s["signatory_label"] }.join(", ")
             return render json: {
               error: "Documento pendiente de firmas",
@@ -289,7 +290,7 @@ module Api
                 status: generated_doc.status,
                 pdf_ready: generated_doc.pdf_ready?,
                 pdf_status: generated_doc.pdf_generation_status,
-                can_download: can_download_document?(generated_doc) && generated_doc.pdf_ready?,
+                can_download: can_download_document?(generated_doc, certification) && generated_doc.pdf_ready?,
                 pending_signatures: generated_doc.pending_signatories.map { |s| s["signatory_label"] },
                 completed_signatures: generated_doc.signed_signatories.map { |s| s["signatory_label"] },
                 all_signed: generated_doc.all_required_signed?
@@ -456,11 +457,13 @@ module Api
         end
 
         # HR/Admin pueden descargar documentos sin firmas completas
-        # Empleados solo pueden descargar documentos completamente firmados
-        def can_download_document?(generated_doc)
+        # El dueño de la certificación puede previsualizar/descargar su propio documento
+        # Otros empleados solo pueden descargar documentos completamente firmados
+        def can_download_document?(generated_doc, certification = nil)
           return true if hr_or_admin?
           return true if generated_doc.completed?
           return true if generated_doc.signatures.empty? # Sin requisito de firmas
+          return true if certification&.employee_id == current_employee&.id
 
           false
         end
