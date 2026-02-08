@@ -390,7 +390,7 @@ module Api
             default_third_party_type: template.default_third_party_type,
             uses_third_party: template.uses_third_party_variables?,
             company_id: template.company_id,
-            company_name: template.company_id.present? ? ::Identity::Company.find_by(uuid: template.company_id, organization_id: current_organization.id)&.name : nil,
+            company_name: template.company_id.present? ? ::Identity::Company.where(uuid: template.company_id, organization_id: current_organization.id).first&.name : nil,
             sequential_signing: template.sequential_signing != false,
             preview_scale: template.preview_scale || 0.7,
             preview_page_height: template.preview_page_height || 842,
