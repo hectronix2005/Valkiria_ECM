@@ -90,7 +90,7 @@ module Api
 
       # POST /api/v1/folders/:id/documents
       def add_document
-        document = ::Templates::GeneratedDocument.find_by(uuid: params[:document_id])
+        document = ::Templates::GeneratedDocument.where(uuid: params[:document_id]).first
 
         unless document
           return render json: { error: "Documento no encontrado" }, status: :not_found
@@ -113,7 +113,7 @@ module Api
 
       # DELETE /api/v1/folders/:id/documents/:document_id
       def remove_document
-        document = ::Templates::GeneratedDocument.find_by(uuid: params[:document_id])
+        document = ::Templates::GeneratedDocument.where(uuid: params[:document_id]).first
 
         unless document
           return render json: { error: "Documento no encontrado" }, status: :not_found

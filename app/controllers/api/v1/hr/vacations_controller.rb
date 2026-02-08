@@ -98,7 +98,7 @@ module Api
 
           # Verify employee has signed the document (only if PDF is ready)
           if @vacation.document_uuid
-            doc = ::Templates::GeneratedDocument.find_by(uuid: @vacation.document_uuid)
+            doc = ::Templates::GeneratedDocument.where(uuid: @vacation.document_uuid).first
             # Only require signature if PDF is available (not pending)
             pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
             if pdf_ready && !employee_has_signed?(doc)
@@ -127,7 +127,7 @@ module Api
             return render json: { error: "No hay documento para firmar" }, status: :not_found
           end
 
-          generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @vacation.document_uuid)
+          generated_doc = ::Templates::GeneratedDocument.where(uuid: @vacation.document_uuid).first
           unless generated_doc
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
@@ -190,7 +190,7 @@ module Api
 
           # Delete associated document if exists
           if @vacation.document_uuid
-            doc = ::Templates::GeneratedDocument.find_by(uuid: @vacation.document_uuid)
+            doc = ::Templates::GeneratedDocument.where(uuid: @vacation.document_uuid).first
             doc&.destroy
           end
 
@@ -243,7 +243,7 @@ module Api
             return render json: { error: "No hay documento generado" }, status: :not_found
           end
 
-          generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @vacation.document_uuid)
+          generated_doc = ::Templates::GeneratedDocument.where(uuid: @vacation.document_uuid).first
           unless generated_doc
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
@@ -292,7 +292,7 @@ module Api
           needs_signature = false
           pdf_ready = false
           if vacation.document_uuid.present?
-            doc = ::Templates::GeneratedDocument.find_by(uuid: vacation.document_uuid)
+            doc = ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
             needs_signature = doc && !employee_has_signed?(doc)
             pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
           end
@@ -445,7 +445,7 @@ module Api
         def document_info
           return nil unless @vacation.document_uuid
 
-          doc = ::Templates::GeneratedDocument.find_by(uuid: @vacation.document_uuid)
+          doc = ::Templates::GeneratedDocument.where(uuid: @vacation.document_uuid).first
           return nil unless doc
 
           {
@@ -494,7 +494,7 @@ module Api
 
           # If there's a document, check that no one else has signed
           if vacation.document_uuid
-            doc = ::Templates::GeneratedDocument.find_by(uuid: vacation.document_uuid)
+            doc = ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
             if doc
               # Check for any signatures from non-employee signatories
               other_signatures = doc.signatures.select do |sig|

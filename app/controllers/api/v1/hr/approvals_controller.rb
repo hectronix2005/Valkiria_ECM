@@ -81,7 +81,7 @@ module Api
             return render json: { error: "No hay documento generado" }, status: :not_found
           end
 
-          generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @approvable.document_uuid)
+          generated_doc = ::Templates::GeneratedDocument.where(uuid: @approvable.document_uuid).first
           unless generated_doc
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
@@ -112,7 +112,7 @@ module Api
             return render json: { error: "No hay documento para firmar" }, status: :not_found
           end
 
-          generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @approvable.document_uuid)
+          generated_doc = ::Templates::GeneratedDocument.where(uuid: @approvable.document_uuid).first
           unless generated_doc
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
@@ -232,7 +232,7 @@ module Api
 
         def vacation_json(vacation, detailed: false)
           # Check document status
-          doc = vacation.document_uuid.present? ? ::Templates::GeneratedDocument.find_by(uuid: vacation.document_uuid) : nil
+          doc = vacation.document_uuid.present? ? ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first : nil
           pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
 
           json = {
@@ -286,7 +286,7 @@ module Api
 
         def certification_json(certification, detailed: false)
           # Check document status
-          doc = certification.document_uuid.present? ? ::Templates::GeneratedDocument.find_by(uuid: certification.document_uuid) : nil
+          doc = certification.document_uuid.present? ? ::Templates::GeneratedDocument.where(uuid: certification.document_uuid).first : nil
           pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
 
           json = {

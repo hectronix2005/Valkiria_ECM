@@ -82,7 +82,7 @@ module Api
 
           # Also delete associated generated document if exists
           if @contract.document_uuid
-            doc = ::Templates::GeneratedDocument.find_by(uuid: @contract.document_uuid)
+            doc = ::Templates::GeneratedDocument.where(uuid: @contract.document_uuid).first
             doc&.destroy
           end
 
@@ -347,7 +347,7 @@ module Api
             return render json: { error: "Este contrato no tiene documento generado. Por favor genere el documento primero." }, status: :not_found
           end
 
-          generated_doc = ::Templates::GeneratedDocument.find_by(uuid: @contract.document_uuid)
+          generated_doc = ::Templates::GeneratedDocument.where(uuid: @contract.document_uuid).first
           unless generated_doc
             return render json: { error: "El documento asociado no fue encontrado. Por favor regenere el documento." }, status: :not_found
           end
