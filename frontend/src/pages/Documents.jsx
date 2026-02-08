@@ -64,6 +64,23 @@ export default function Documents() {
     queryFn: () => generatedDocumentService.list({ page, per_page: 20 })
   })
 
+  const [signing, setSigning] = useState(null)
+
+  const signMutation = useMutation({
+    mutationFn: (id) => generatedDocumentService.sign(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['generated-documents'])
+      queryClient.invalidateQueries(['pending-signatures'])
+      setShowDetailModal(false)
+      setSelectedDocument(null)
+      alert('Documento firmado exitosamente')
+    },
+    onError: (error) => {
+      alert(error.response?.data?.error || 'Error al firmar el documento')
+    },
+    onSettled: () => setSigning(null)
+  })
+
   const deleteMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.delete(id),
     onSuccess: () => {
@@ -77,6 +94,13 @@ export default function Documents() {
       alert(error.response?.data?.error || 'Error al eliminar el documento')
     }
   })
+
+  const handleSign = (doc) => {
+    if (window.confirm('¿Firmar este documento?')) {
+      setSigning(doc.id)
+      signMutation.mutate(doc.id)
+    }
+  }
 
   const documentsRaw = data?.data?.data || []
   const meta = data?.data?.meta || {}
@@ -152,9 +176,16 @@ export default function Documents() {
       : <ArrowDown className="w-3 h-3 text-primary-600" />
   }
 
-  const handleView = (document) => {
+  const handleView = async (document) => {
     setSelectedDocument(document)
     setShowDetailModal(true)
+    // Fetch detailed info with signatures
+    try {
+      const response = await generatedDocumentService.get(document.id)
+      setSelectedDocument(response.data?.data || document)
+    } catch (e) {
+      console.error('Error fetching document detail:', e)
+    }
   }
 
   const handleDeleteClick = (document) => {
@@ -427,6 +458,18 @@ export default function Documents() {
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
+                            {doc.can_sign && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSign(doc)}
+                                loading={signing === doc.id}
+                                title="Firmar documento"
+                                className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                              >
+                                <PenTool className="w-4 h-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -533,6 +576,37 @@ export default function Documents() {
               )}
             </div>
 
+            {/* Signatures */}
+            {selectedDocument.status === 'pending_signatures' && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-gray-700">Firmas</h4>
+                <div className="space-y-2">
+                  {(selectedDocument.signatures || []).map((sig, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        {sig.status === 'signed' ? (
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-amber-500" />
+                        )}
+                        <div>
+                          <p className="text-sm font-medium">{sig.signatory_label || sig.label}</p>
+                          <p className="text-xs text-gray-500">
+                            {sig.status === 'signed'
+                              ? `Firmado por ${sig.signed_by_name || '-'}`
+                              : sig.user_name || 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
+                      {sig.signed_at && (
+                        <span className="text-xs text-gray-400">{formatDate(sig.signed_at)}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex justify-between pt-4 border-t">
               <div>
@@ -550,6 +624,16 @@ export default function Documents() {
                 <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
                   Cerrar
                 </Button>
+                {selectedDocument.can_sign && (
+                  <Button
+                    onClick={() => handleSign(selectedDocument)}
+                    loading={signing === selectedDocument.id}
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                  >
+                    <PenTool className="w-4 h-4" />
+                    Firmar
+                  </Button>
+                )}
                 <Button onClick={() => handleDownload(selectedDocument)} loading={downloading === selectedDocument.id}>
                   <Download className="w-4 h-4" />
                   Descargar PDF
