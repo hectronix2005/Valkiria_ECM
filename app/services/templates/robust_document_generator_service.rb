@@ -204,6 +204,11 @@ module Templates
         # Read the processed DOCX content
         docx_content = File.binread(output_file.path)
 
+        # Validate processed DOCX is not empty (can happen with ZIP processing issues)
+        if docx_content.blank?
+          raise GenerationError, "El DOCX procesado está vacío. Posible error en el procesamiento del template."
+        end
+
         # Try to convert to PDF
         pdf_content = convert_to_pdf(output_file.path)
 

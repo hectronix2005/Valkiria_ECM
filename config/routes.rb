@@ -108,6 +108,9 @@ Rails.application.routes.draw do
           end
         end
 
+        # Companies management
+        resources :companies
+
         # Signatory types management
         resources :signatory_types do
           member do

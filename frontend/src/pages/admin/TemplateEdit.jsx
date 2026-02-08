@@ -1735,6 +1735,12 @@ export default function TemplateEdit() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
+              {template.company_name && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Compañía</span>
+                  <span className="font-medium">{template.company_name}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-500">Version</span>
                 <span className="font-medium">{template.version}</span>

@@ -291,6 +291,14 @@ export const legalDashboardService = {
   getStats: () => api.get('/legal/dashboard'),
 }
 
+// Admin - Companies
+export const companyService = {
+  list: (params) => api.get('/admin/companies', { params }),
+  create: (data) => api.post('/admin/companies', { company: data }),
+  update: (id, data) => api.patch(`/admin/companies/${id}`, { company: data }),
+  delete: (id) => api.delete(`/admin/companies/${id}`),
+}
+
 // Admin - Settings
 export const settingsService = {
   get: () => api.get('/admin/settings'),

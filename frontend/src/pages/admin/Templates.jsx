@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { templateService } from '../../services/api'
+import { templateService, companyService } from '../../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
@@ -271,11 +271,17 @@ function EditTemplateModal({ isOpen, onClose, template }) {
   const [mainCategory, setMainCategory] = useState('laboral')
   const [category, setCategory] = useState('')
   const [certificationType, setCertificationType] = useState('')
+  const [companyId, setCompanyId] = useState('')
   const [error, setError] = useState('')
 
   const { data: categoriesData } = useQuery({
     queryKey: ['template-categories'],
     queryFn: () => templateService.getCategories()
+  })
+
+  const { data: companiesData } = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => companyService.list({ active: 'true' })
   })
 
   const updateMutation = useMutation({
@@ -295,6 +301,8 @@ function EditTemplateModal({ isOpen, onClose, template }) {
   const categoryToModule = categoriesData?.data?.category_to_module || {}
   const filteredSubcategories = grouped[mainCategory] || []
 
+  const companies = companiesData?.data?.data || []
+
   // Update form when template changes
   useEffect(() => {
     if (isOpen && template) {
@@ -304,6 +312,7 @@ function EditTemplateModal({ isOpen, onClose, template }) {
       setMainCategory(template.main_category || 'laboral')
       setCategory(template.category || 'other')
       setCertificationType(template.certification_type || '')
+      setCompanyId(template.company_id || '')
       setError('')
     }
   }, [isOpen, template?.id])
@@ -338,7 +347,7 @@ function EditTemplateModal({ isOpen, onClose, template }) {
       setError('El nombre es requerido')
       return
     }
-    const data = { name, description, module_type: moduleType, main_category: mainCategory, category }
+    const data = { name, description, module_type: moduleType, main_category: mainCategory, category, company_id: companyId || null }
     // Include certification_type for certification templates (can be empty to clear)
     if (category === 'certification') {
       data.certification_type = certificationType || null
@@ -462,6 +471,24 @@ function EditTemplateModal({ isOpen, onClose, template }) {
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Compañía
+            </label>
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Sin compañía</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.nit ? ` (${c.nit})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
@@ -676,7 +703,10 @@ export default function Templates({ module = 'legal' }) {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => templateService.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['templates'])
+    onSuccess: () => queryClient.invalidateQueries(['templates']),
+    onError: (err) => {
+      alert(err.response?.data?.error || 'Error al eliminar template')
+    }
   })
 
   const handleAction = (action, template) => {
@@ -743,6 +773,12 @@ export default function Templates({ module = 'legal' }) {
               </Button>
             </Link>
           )}
+          <Link to="/admin/companies">
+            <Button variant="secondary">
+              <Building2 className="w-4 h-4" />
+              Compañías
+            </Button>
+          </Link>
           <Link to="/admin/signatory-types">
             <Button variant="secondary">
               <Users className="w-4 h-4" />
@@ -863,25 +899,28 @@ export default function Templates({ module = 'legal' }) {
             <table className="w-full table-fixed">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="w-[30%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[25%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Template
                   </th>
                   <th className="w-[12%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
+                    Compañía
+                  </th>
+                  <th className="w-[10%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Módulo
                   </th>
-                  <th className="w-[15%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[13%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Categoría
                   </th>
-                  <th className="w-[6%] px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[5%] px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">
                     Vars
                   </th>
-                  <th className="w-[6%] px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[5%] px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">
                     Firm.
                   </th>
                   <th className="w-[10%] px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
-                  <th className="w-[21%] px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-[20%] px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
@@ -911,6 +950,15 @@ export default function Templates({ module = 'legal' }) {
                             )}
                           </div>
                         </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        {template.company_name ? (
+                          <span className="text-sm text-gray-700 truncate block" title={template.company_name}>
+                            {template.company_name}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${MODULE_COLORS[template.module_type] || 'bg-gray-100 text-gray-700'}`}>
@@ -988,15 +1036,13 @@ export default function Templates({ module = 'legal' }) {
                           >
                             <Copy className="w-4 h-4" />
                           </button>
-                          {template.status === 'draft' && (
-                            <button
-                              onClick={() => handleAction('delete', template)}
-                              title="Eliminar"
-                              className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleAction('delete', template)}
+                            title="Eliminar"
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>

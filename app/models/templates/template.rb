@@ -86,6 +86,12 @@ module Templates
     # (employment, salary, position, full, custom)
     field :certification_type, type: String
 
+    # Custom label for certification type (overrides default)
+    field :certification_type_label, type: String
+
+    # Company association (stores company UUID)
+    field :company_id, type: String
+
     # Preview settings for signature positioning
     field :preview_scale, type: Float, default: 0.7
     field :preview_page_height, type: Integer, default: 792  # Letter size height

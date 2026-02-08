@@ -89,14 +89,8 @@ module Api
 
         # DELETE /api/v1/admin/templates/:id
         def destroy
-          if @template.generated_documents.completed.any?
-            render json: {
-              error: "No se puede eliminar un template con documentos generados"
-            }, status: :unprocessable_content
-          else
-            @template.destroy
-            render json: { message: "Template eliminado exitosamente" }
-          end
+          @template.destroy
+          render json: { message: "Template eliminado exitosamente" }
         end
 
         # POST /api/v1/admin/templates/:id/activate
@@ -342,7 +336,9 @@ module Api
             :main_category,
             :category,
             :certification_type,
+            :certification_type_label,
             :default_third_party_type,
+            :company_id,
             :preview_scale,
             :preview_page_height,
             :sequential_signing,
@@ -390,8 +386,11 @@ module Api
             variables: template.variables,
             signatories_count: template.signatories.count,
             certification_type: template.certification_type,
+            certification_type_label: template.certification_type_label,
             default_third_party_type: template.default_third_party_type,
             uses_third_party: template.uses_third_party_variables?,
+            company_id: template.company_id,
+            company_name: template.company_id.present? ? ::Identity::Company.find_by(uuid: template.company_id, organization_id: current_organization.id)&.name : nil,
             sequential_signing: template.sequential_signing != false,
             preview_scale: template.preview_scale || 0.7,
             preview_page_height: template.preview_page_height || 842,

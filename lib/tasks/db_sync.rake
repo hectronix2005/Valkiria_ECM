@@ -310,8 +310,8 @@ namespace :db do
         print "   Converting: #{doc.name}..."
 
         docx_content = doc.docx_content
-        unless docx_content
-          puts " ⚠️  No DOCX content, skipped"
+        if docx_content.blank?
+          puts " ⚠️  No DOCX content (empty or missing), skipped"
           next
         end
 

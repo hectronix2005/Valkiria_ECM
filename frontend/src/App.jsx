@@ -16,6 +16,7 @@ const Orgchart = lazy(() => import('./pages/hr/Orgchart'))
 const HRDocuments = lazy(() => import('./pages/hr/HRDocuments'))
 const Templates = lazy(() => import('./pages/admin/Templates'))
 const TemplateEdit = lazy(() => import('./pages/admin/TemplateEdit'))
+const Companies = lazy(() => import('./pages/admin/Companies'))
 const SignatoryTypes = lazy(() => import('./pages/admin/SignatoryTypes'))
 const Settings = lazy(() => import('./pages/admin/Settings'))
 const Departments = lazy(() => import('./pages/admin/Departments'))
@@ -287,6 +288,16 @@ export default function App() {
         element={
           <ProtectedRoute requireAdmin>
             <TemplateEdit />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Companies */}
+      <Route
+        path="/admin/companies"
+        element={
+          <ProtectedRoute requireAdmin>
+            <Companies />
           </ProtectedRoute>
         }
       />

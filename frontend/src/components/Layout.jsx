@@ -57,6 +57,7 @@ const adminNavigation = [
   { name: 'Configuración', href: '/admin/settings', icon: Settings },
   { name: 'Usuarios', href: '/admin/users', icon: Shield },
   { name: 'Áreas', href: '/admin/departments', icon: Building2 },
+  { name: 'Compañías', href: '/admin/companies', icon: Building2 },
   { name: 'Templates', href: '/admin/templates', icon: FileText },
 ]
 
