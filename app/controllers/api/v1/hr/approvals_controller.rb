@@ -363,7 +363,8 @@ module Api
           when ::Hr::VacationRequest::InvalidStateError,
                ::Hr::EmploymentCertificationRequest::InvalidStateError,
                ::Hr::VacationRequest::ValidationError,
-               ::Hr::EmploymentCertificationRequest::ValidationError
+               ::Hr::EmploymentCertificationRequest::ValidationError,
+               Mongoid::Errors::Validations
             :unprocessable_content
           when ::Hr::VacationRequest::AuthorizationError,
                ::Hr::EmploymentCertificationRequest::AuthorizationError

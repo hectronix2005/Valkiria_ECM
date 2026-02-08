@@ -635,6 +635,9 @@ export default function Approvals() {
       queryClient.invalidateQueries(['approvals-count'])
       setShowDetailModal(false)
     },
+    onError: (err) => {
+      alert(err.response?.data?.error || 'Error al aprobar la solicitud')
+    },
   })
 
   const rejectMutation = useMutation({
@@ -644,6 +647,9 @@ export default function Approvals() {
       queryClient.invalidateQueries(['approvals-count'])
       setShowRejectModal(false)
       setRejectReason('')
+    },
+    onError: (err) => {
+      alert(err.response?.data?.error || 'Error al rechazar la solicitud')
     },
   })
 
