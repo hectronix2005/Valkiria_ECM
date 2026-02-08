@@ -18,7 +18,8 @@ import {
   Save,
   Lock,
   Database,
-  UserCheck
+  UserCheck,
+  Eye
 } from 'lucide-react'
 
 function TypeModal({ type, isOpen, onClose, onSuccess }) {
@@ -143,7 +144,65 @@ function TypeModal({ type, isOpen, onClose, onSuccess }) {
   )
 }
 
-function TypeRow({ type, onEdit, onToggle, onDelete }) {
+function DetailModal({ type, isOpen, onClose }) {
+  if (!isOpen || !type) return null
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="text-lg font-semibold">Detalle del Tipo de Firmante</h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-4 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase">Nombre</label>
+            <p className="text-sm font-medium mt-0.5">{type.name}</p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase">Codigo</label>
+            <p className="mt-0.5"><code className="px-2 py-1 bg-gray-100 rounded text-xs">{type.code}</code></p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase">Descripcion</label>
+            <p className="text-sm text-gray-700 mt-0.5">{type.description || 'Sin descripcion'}</p>
+          </div>
+          <div className="flex gap-4">
+            <div>
+              <label className="text-xs font-medium text-gray-500 uppercase">Tipo</label>
+              <p className="mt-0.5">
+                <Badge variant={type.is_system ? 'secondary' : 'default'} className="text-xs">
+                  {type.is_system ? 'Sistema' : 'Personalizado'}
+                </Badge>
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 uppercase">Estado</label>
+              <p className="mt-0.5">
+                <Badge variant={type.active ? 'success' : 'secondary'} className="text-xs">
+                  {type.active ? 'Activo' : 'Inactivo'}
+                </Badge>
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 uppercase">Uso</label>
+              <p className="text-sm mt-0.5">
+                {type.in_use ? `${type.usage_count} plantilla(s)` : 'Sin usar'}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end p-4 border-t">
+          <Button variant="secondary" onClick={onClose}>Cerrar</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TypeRow({ type, onEdit, onToggle, onDelete, onView }) {
   const isSystem = type.is_system
 
   return (
@@ -188,25 +247,28 @@ function TypeRow({ type, onEdit, onToggle, onDelete }) {
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1">
-          {!isSystem && (
-            <>
-              <button
-                onClick={() => onEdit(type)}
-                className="p-1.5 hover:bg-gray-100 rounded text-gray-600"
-                title="Editar"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => onDelete(type)}
-                className={`p-1.5 rounded ${type.in_use ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-red-50 text-red-500'}`}
-                title={type.in_use ? 'No se puede eliminar (en uso)' : 'Eliminar'}
-                disabled={type.in_use}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => onView(type)}
+            className="p-1.5 hover:bg-blue-50 rounded text-blue-600"
+            title="Ver detalle"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onEdit(type)}
+            className="p-1.5 hover:bg-gray-100 rounded text-gray-600"
+            title="Editar"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onDelete(type)}
+            className={`p-1.5 rounded ${type.in_use ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-red-50 text-red-500'}`}
+            title={type.in_use ? 'No se puede eliminar (en uso)' : 'Eliminar'}
+            disabled={type.in_use}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </td>
     </tr>
@@ -217,6 +279,7 @@ export default function SignatoryTypes() {
   const queryClient = useQueryClient()
   const [showModal, setShowModal] = useState(false)
   const [editingType, setEditingType] = useState(null)
+  const [viewingType, setViewingType] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
 
@@ -246,6 +309,10 @@ export default function SignatoryTypes() {
       queryClient.invalidateQueries(['signatory-types'])
     }
   })
+
+  const handleView = (type) => {
+    setViewingType(type)
+  }
 
   const handleEdit = (type) => {
     setEditingType(type)
@@ -392,6 +459,7 @@ export default function SignatoryTypes() {
                     <TypeRow
                       key={type.id}
                       type={type}
+                      onView={handleView}
                       onEdit={handleEdit}
                       onToggle={handleToggle}
                       onDelete={handleDelete}
@@ -411,11 +479,18 @@ export default function SignatoryTypes() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Edit/Create Modal */}
       <TypeModal
         type={editingType}
         isOpen={showModal}
         onClose={handleCloseModal}
+      />
+
+      {/* Detail Modal */}
+      <DetailModal
+        type={viewingType}
+        isOpen={!!viewingType}
+        onClose={() => setViewingType(null)}
       />
     </div>
   )
