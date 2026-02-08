@@ -213,8 +213,10 @@ module Hr
       raise InvalidStateError, "Can only approve pending requests" unless pending?
       raise AuthorizationError, "Not authorized to approve" unless can_approve?(actor)
 
-      # Check balance before changing state to avoid partial updates
-      if deducts_balance? && !employee.has_vacation_balance?(days_requested)
+      # Check actual stored balance before deduction to avoid Mongoid validation errors
+      # Note: has_vacation_balance? uses computed available_vacation_days which may differ
+      # from the stored vacation_balance_days field that actually gets decremented
+      if deducts_balance? && employee.vacation_balance_days < days_requested
         raise ValidationError,
               "Balance de vacaciones insuficiente. Disponible: #{employee.vacation_balance_days} días, solicitado: #{days_requested} días"
       end

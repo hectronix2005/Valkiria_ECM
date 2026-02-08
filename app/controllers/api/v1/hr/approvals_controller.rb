@@ -364,6 +364,7 @@ module Api
                ::Hr::EmploymentCertificationRequest::InvalidStateError,
                ::Hr::VacationRequest::ValidationError,
                ::Hr::EmploymentCertificationRequest::ValidationError,
+               ::Hr::Employee::InsufficientBalanceError,
                Mongoid::Errors::Validations
             :unprocessable_content
           when ::Hr::VacationRequest::AuthorizationError,

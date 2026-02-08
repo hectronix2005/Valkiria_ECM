@@ -199,7 +199,10 @@ module Hr
 
     # Deduct vacation days (called when request is approved)
     def deduct_vacation!(days)
-      raise InsufficientBalanceError, "Insufficient vacation balance" unless has_vacation_balance?(days)
+      unless vacation_balance_days >= days
+        raise InsufficientBalanceError,
+              "Balance de vacaciones insuficiente. Disponible: #{vacation_balance_days} días, solicitado: #{days} días"
+      end
 
       self.vacation_balance_days -= days
       self.vacation_used_ytd += days
