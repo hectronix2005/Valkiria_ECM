@@ -213,12 +213,11 @@ module Hr
       raise InvalidStateError, "Can only approve pending requests" unless pending?
       raise AuthorizationError, "Not authorized to approve" unless can_approve?(actor)
 
-      # Check actual stored balance before deduction to avoid Mongoid validation errors
-      # Note: has_vacation_balance? uses computed available_vacation_days which may differ
-      # from the stored vacation_balance_days field that actually gets decremented
-      if deducts_balance? && employee.vacation_balance_days < days_requested
+      # Check computed balance (accrued by hire_date - used by approved requests)
+      # This is the single source of truth shown in the UI
+      if deducts_balance? && employee.available_vacation_days < days_requested
         raise ValidationError,
-              "Balance de vacaciones insuficiente. Disponible: #{employee.vacation_balance_days} días, solicitado: #{days_requested} días"
+              "Balance de vacaciones insuficiente. Disponible: #{employee.available_vacation_days} días, solicitado: #{days_requested} días"
       end
 
       self.status = STATUS_APPROVED
@@ -226,8 +225,9 @@ module Hr
       self.decision_reason = reason
       self.approved_by_name = actor.full_name
 
-      # Deduct vacation balance
-      employee.deduct_vacation!(days_requested) if deducts_balance?
+      # Balance is tracked by the computed system (available_vacation_days)
+      # which automatically counts approved requests via total_used_vacation_days.
+      # No manual deduction needed - the status change to "approved" is sufficient.
 
       record_history("approved", actor, reason)
       save!
@@ -265,8 +265,8 @@ module Hr
       self.decided_at = Time.current
       self.decision_reason = reason
 
-      # Restore vacation balance if was approved
-      employee.restore_vacation!(days_requested) if was_approved && deducts_balance?
+      # Balance is restored automatically by the computed system -
+      # cancelled requests are excluded from total_used_vacation_days.
 
       record_history("cancelled", actor, reason)
       save!
