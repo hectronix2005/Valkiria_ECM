@@ -65,6 +65,8 @@ export default function Documents() {
   })
 
   const [signing, setSigning] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewing, setPreviewing] = useState(null)
 
   const signMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.sign(id),
@@ -100,6 +102,26 @@ export default function Documents() {
       setSigning(doc.id)
       signMutation.mutate(doc.id)
     }
+  }
+
+  const handlePreview = async (doc) => {
+    try {
+      setPreviewing(doc.id)
+      const response = await generatedDocumentService.download(doc.id)
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl(url)
+    } catch (error) {
+      alert('Error al previsualizar el documento')
+      console.error('Preview error:', error)
+    } finally {
+      setPreviewing(null)
+    }
+  }
+
+  const handleClosePreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(null)
   }
 
   const documentsRaw = data?.data?.data || []
@@ -458,6 +480,18 @@ export default function Documents() {
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
+                            {doc.pdf_ready && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handlePreview(doc)}
+                                loading={previewing === doc.id}
+                                title="Previsualizar PDF"
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                <FileSearch className="w-4 h-4" />
+                              </Button>
+                            )}
                             {doc.can_sign && (
                               <Button
                                 variant="ghost"
@@ -634,6 +668,14 @@ export default function Documents() {
                     Firmar
                   </Button>
                 )}
+                <Button
+                  variant="secondary"
+                  onClick={() => handlePreview(selectedDocument)}
+                  loading={previewing === selectedDocument.id}
+                >
+                  <FileSearch className="w-4 h-4" />
+                  Previsualizar
+                </Button>
                 <Button onClick={() => handleDownload(selectedDocument)} loading={downloading === selectedDocument.id}>
                   <Download className="w-4 h-4" />
                   Descargar PDF
@@ -680,6 +722,30 @@ export default function Documents() {
             >
               <Trash2 className="w-4 h-4" />
               Eliminar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* PDF Preview Modal */}
+      <Modal
+        isOpen={!!previewUrl}
+        onClose={handleClosePreview}
+        title="Previsualización de Documento"
+        size="full"
+      >
+        <div className="flex flex-col h-[80vh]">
+          {previewUrl && (
+            <iframe
+              src={previewUrl}
+              className="w-full flex-1 border rounded-lg bg-gray-100"
+              title="Vista previa del documento"
+            />
+          )}
+          <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+            <Button variant="secondary" onClick={handleClosePreview}>
+              <X className="w-4 h-4" />
+              Cerrar
             </Button>
           </div>
         </div>
