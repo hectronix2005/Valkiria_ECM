@@ -351,13 +351,13 @@ module Api
         end
 
         def find_template_for_certification
-          # Find active template for certification category that matches the certification type
-          ::Templates::Template
+          base = ::Templates::Template
             .for_organization(current_organization)
             .active
             .where(category: "certification")
-            .where(certification_type: @certification.certification_type)
-            .first
+
+          # Try exact match first, then fall back to any certification template
+          base.where(certification_type: @certification.certification_type).first || base.first
         end
 
         # Returns certification types that have active templates (1:1 relationship)
