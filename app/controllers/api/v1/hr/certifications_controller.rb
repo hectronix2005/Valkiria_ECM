@@ -307,7 +307,9 @@ module Api
             submitted_at: certification.submitted_at&.iso8601,
             created_at: certification.created_at.iso8601,
             document_uuid: certification.document_uuid,
-            document_info: doc_info
+            document_info: doc_info,
+            employee_id: certification.employee&.uuid,
+            is_mine: certification.employee_id == current_employee&.id
           }
 
           if detailed
@@ -398,7 +400,7 @@ module Api
 
             {
               value: type,
-              label: config[:label] || template.name,
+              label: template.certification_type_label.presence || config[:label] || template.name,
               description: config[:description] || "",
               template: {
                 id: template.uuid,

@@ -11,14 +11,6 @@ import Select from '../../components/ui/Select'
 import { FileText, Plus, X, Eye, Filter, Clock, CheckCircle, AlertCircle, Calendar, Download, FilePlus, Loader2, AlertTriangle, ExternalLink, Trash2, PenTool, Settings, Save, FileCheck } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
-// Default certification types (fallback if API fails)
-const defaultCertificationTypes = [
-  { value: 'employment', label: 'Certificación Laboral Básica' },
-  { value: 'salary', label: 'Certificación con Salario' },
-  { value: 'position', label: 'Certificación de Cargo' },
-  { value: 'full', label: 'Certificación Completa' },
-  { value: 'custom', label: 'Certificación Personalizada' },
-]
 
 const purposes = [
   { value: 'bank', label: 'Entidad Bancaria / Crédito' },
@@ -71,8 +63,8 @@ const estimatedDays = {
 }
 
 function CertificationForm({ onSubmit, onCancel, loading, initialType, availableTypes }) {
-  // Use available types from API, or fall back to defaults
-  const certificationTypes = availableTypes?.length > 0 ? availableTypes : defaultCertificationTypes
+  // Only use types that have templates configured (no fallback)
+  const certificationTypes = availableTypes?.length > 0 ? availableTypes : []
 
   // Get the first available type as default
   const defaultType = initialType && certificationTypes.find(t => t.value === initialType)
@@ -104,6 +96,27 @@ function CertificationForm({ onSubmit, onCancel, loading, initialType, available
   }
 
   const selectedType = formData.certification_type
+
+  if (certificationTypes.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <div>
+              <p className="font-medium text-amber-900">No hay tipos de certificación configurados</p>
+              <p className="text-sm text-amber-700 mt-1">
+                El administrador debe configurar los tipos de certificación y asociar cada uno a un template antes de poder crear solicitudes.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end pt-4">
+          <Button variant="secondary" onClick={onCancel}>Cerrar</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -190,7 +203,7 @@ const statusIcons = {
 }
 
 // Admin component for managing certification types
-function CertificationTypeConfig({ onClose }) {
+function CertificationTypeConfig({ onClose, onNavigateToTemplate }) {
   const [certTypes, setCertTypes] = useState([])
   const [saving, setSaving] = useState(false)
   const [editingCode, setEditingCode] = useState(null)
@@ -212,7 +225,7 @@ function CertificationTypeConfig({ onClose }) {
         .filter(t => t.certification_type)
         .map(t => ({
           code: t.certification_type,
-          label: typeLabels[t.certification_type] || t.certification_type,
+          label: t.certification_type_label || typeLabels[t.certification_type] || t.certification_type,
           description: '',
           template_id: t.id,
           template_name: t.name,
@@ -282,21 +295,21 @@ function CertificationTypeConfig({ onClose }) {
         if (template.certification_type && !assignedType) {
           // Template was assigned but is no longer in the list
           await templateService.update(template.id, {
-            template: { certification_type: null }
+            template: { certification_type: null, certification_type_label: null }
           })
         } else if (template.certification_type && assignedType && template.certification_type !== assignedType.code) {
           // Template's type code changed (edge case)
           await templateService.update(template.id, {
-            template: { certification_type: assignedType.code }
+            template: { certification_type: assignedType.code, certification_type_label: assignedType.label }
           })
         }
       }
 
-      // Update each template with its certification_type
+      // Update each template with its certification_type and label
       for (const certType of certTypes) {
         if (certType.template_id) {
           await templateService.update(certType.template_id, {
-            template: { certification_type: certType.code }
+            template: { certification_type: certType.code, certification_type_label: certType.label }
           })
         }
       }
@@ -360,7 +373,14 @@ function CertificationTypeConfig({ onClose }) {
                     ) : (
                       <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
                         <FileCheck className="w-4 h-4" />
-                        <span>{type.template_name}</span>
+                        <button
+                          onClick={() => onNavigateToTemplate(type.template_id)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                          title="Ir al template"
+                        >
+                          {type.template_name}
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
                       </div>
                     )}
                     {type.variables?.length > 0 && (
@@ -605,7 +625,9 @@ export default function Certifications() {
   })
 
   const certifications = data?.data?.data || []
-  const hasInProgressCertifications = certifications.some(c => ['pending', 'processing'].includes(c.status))
+  const hasInProgressCertifications = certifications
+    .filter(c => c.is_mine)
+    .some(c => ['pending', 'processing'].includes(c.status))
 
   const handleView = (certification) => {
     setSelectedCertification(certification)
@@ -812,25 +834,40 @@ export default function Certifications() {
         </div>
       ) : (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-6 h-6 text-amber-600" />
-            <div>
-              {hasInProgressCertifications ? (
-                <>
-                  <p className="font-medium text-amber-900">Los certificados existentes configurados ya están en trámite</p>
-                  <p className="text-sm text-amber-700">
-                    Por favor esperar que sean finalizados para solicitar otro certificado.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium text-amber-900">No hay tipos de certificación disponibles</p>
-                  <p className="text-sm text-amber-700">
-                    Contacta al administrador para configurar los templates de certificación.
-                  </p>
-                </>
-              )}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
+              <div>
+                {hasInProgressCertifications ? (
+                  <>
+                    <p className="font-medium text-amber-900">Los certificados existentes configurados ya están en trámite</p>
+                    <p className="text-sm text-amber-700">
+                      Por favor esperar que sean finalizados para solicitar otro certificado.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-amber-900">No hay tipos de certificación disponibles</p>
+                    <p className="text-sm text-amber-700">
+                      {isAdmin
+                        ? 'Configura los tipos de certificación y asocia cada uno a un template.'
+                        : 'Contacta al administrador para configurar los templates de certificación.'}
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
+            {isAdmin && !hasInProgressCertifications && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowConfigModal(true)}
+                className="flex-shrink-0"
+              >
+                <Settings className="w-4 h-4" />
+                Configurar Tipos
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -1044,7 +1081,7 @@ export default function Certifications() {
                     <Button
                       size="sm"
                       onClick={() => setShowNewModal(true)}
-                      disabled={availableTypes.length === 0}
+                      disabled={availableTypes.length === 0 || hasInProgressCertifications}
                     >
                       <Plus className="w-4 h-4" />
                       Nueva Solicitud
@@ -1339,6 +1376,10 @@ export default function Certifications() {
           onClose={() => {
             setShowConfigModal(false)
             queryClient.invalidateQueries(['certification-available-types'])
+          }}
+          onNavigateToTemplate={(templateId) => {
+            setShowConfigModal(false)
+            navigate(`/admin/templates/${templateId}`)
           }}
         />
       </Modal>
