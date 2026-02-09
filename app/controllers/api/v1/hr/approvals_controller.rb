@@ -319,7 +319,7 @@ module Api
               language: certification.language,
               include_salary: certification.include_salary,
               include_position: certification.include_position,
-              additional_info: certification.additional_info,
+              additional_info: certification.special_instructions,
               document: doc ? document_info(doc) : nil
             )
           end
