@@ -490,7 +490,7 @@ module Templates
     end
 
     def build_multipart_body(boundary, file_name, file_content)
-      body = ""
+      body = String.new(encoding: "BINARY")
       body << "--#{boundary}\r\n"
       body << "Content-Disposition: form-data; name=\"files\"; filename=\"#{file_name}\"\r\n"
       body << "Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n"
