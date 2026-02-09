@@ -431,12 +431,15 @@ module Templates
         return result if result
       end
 
-      # Priority 3: Local PDF sync workflow (for Heroku deployment)
-      # When LibreOffice and Gotenberg are unavailable, store DOCX for local conversion
-      # This preserves formatting by generating PDF locally with LibreOffice
-      # Use: rake db:sync:generate_pending_pdfs
-      Rails.logger.info "LibreOffice/Gotenberg unavailable - using local PDF sync workflow"
-      Rails.logger.info "Document will be created with 'pending' status. Run 'rake db:sync:generate_pending_pdfs' locally to generate PDF with proper formatting."
+      # Priority 3: Pandoc + wkhtmltopdf (available on Heroku, decent quality)
+      if pandoc_available?
+        result = convert_with_pandoc_wkhtmltopdf(docx_path)
+        return result if result
+      end
+
+      # Priority 4: Local PDF sync workflow (last resort)
+      Rails.logger.info "All PDF converters unavailable - using local PDF sync workflow"
+      Rails.logger.info "Document will be created with 'pending' status. Run 'rake db:sync:generate_pending_pdfs' locally."
       nil
     end
 
