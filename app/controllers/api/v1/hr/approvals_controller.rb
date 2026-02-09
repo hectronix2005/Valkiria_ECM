@@ -135,10 +135,9 @@ module Api
             }, status: :unprocessable_content
           end
 
-          # Find pending signature for this user by user_id (direct assignment takes priority)
-          # This is important because a user might have multiple roles (hr AND supervisor)
-          # but they should sign in the slot specifically assigned to them
-          sig_slot = generated_doc.signatures.find { |s| s["user_id"] == current_user.id.to_s && s["signed_at"].blank? }
+          # Find pending signature using model's role-based matching
+          # This allows any HR staff to sign HR slots, any supervisor to sign supervisor slots, etc.
+          sig_slot = generated_doc.pending_signature_for(current_user)
 
           unless sig_slot
             return render json: {
@@ -259,7 +258,7 @@ module Api
             has_document: vacation.document_uuid.present?,
             document_uuid: vacation.document_uuid,
             pdf_ready: pdf_ready,
-            can_sign: doc ? doc.signatures.any? { |s| s["user_id"] == current_user.id.to_s && s["signed_at"].blank? } : false
+            can_sign: doc ? doc.pending_signature_for(current_user).present? : false
           }
 
           if detailed
@@ -312,7 +311,7 @@ module Api
             has_document: certification.document_uuid.present?,
             document_uuid: certification.document_uuid,
             pdf_ready: pdf_ready,
-            can_sign: doc ? doc.signatures.any? { |s| s["user_id"] == current_user.id.to_s && s["signed_at"].blank? } : false
+            can_sign: doc ? doc.pending_signature_for(current_user).present? : false
           }
 
           if detailed

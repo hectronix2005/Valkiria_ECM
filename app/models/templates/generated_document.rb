@@ -573,6 +573,11 @@ module Templates
       )
     end
 
+    # Find a pending signature slot for a user (by direct user_id or role match)
+    def pending_signature_for(user)
+      find_pending_signature_for(user)
+    end
+
     private
 
     def signature_context
