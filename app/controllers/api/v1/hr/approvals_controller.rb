@@ -51,7 +51,7 @@ module Api
           when ::Hr::EmploymentCertificationRequest
             # Certifications need to go through processing first
             @approvable.start_processing!(actor: current_employee) if @approvable.pending?
-            @approvable.complete!(actor: current_employee, document_uuid: params[:document_uuid] || SecureRandom.uuid)
+            @approvable.complete!(actor: current_employee, document_uuid: params[:document_uuid] || @approvable.document_uuid || SecureRandom.uuid)
             NotificationService.certification_completed(@approvable)
           end
 
