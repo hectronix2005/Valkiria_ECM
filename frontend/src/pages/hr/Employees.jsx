@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { employeeService, publicTemplateService, generatedDocumentService } from '../../services/api'
+import { employeeService, publicTemplateService, generatedDocumentService, companyService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -17,6 +17,7 @@ import {
   Mail,
   Phone,
   Building,
+  Building2,
   Briefcase,
   Calendar,
   User,
@@ -204,7 +205,7 @@ const employmentTypeLabels = {
   intern: 'Pasante',
 }
 
-function EmployeeEditForm({ employee, employees, contractTemplates = [], departmentOptions = [], onSubmit, onCancel, loading, error }) {
+function EmployeeEditForm({ employee, employees, contractTemplates = [], departmentOptions = [], companies = [], onSubmit, onCancel, loading, error }) {
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -220,6 +221,7 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
     emergency_contact_name: '',
     emergency_contact_phone: '',
     supervisor_id: '',
+    company_id: '',
     // Contract fields
     contract_type: 'indefinite',
     contract_template_id: '',
@@ -263,6 +265,7 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
         emergency_contact_name: employee.emergency_contact_name || '',
         emergency_contact_phone: employee.emergency_contact_phone || '',
         supervisor_id: employee.supervisor_id || '',
+        company_id: employee.company_id || '',
         // Contract fields
         contract_type: employee.contract_type || 'indefinite',
         contract_template_id: employee.contract_template_id || '',
@@ -429,6 +432,15 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
                 onChange={(e) => setFormData({ ...formData, supervisor_id: e.target.value })}
               />
             </div>
+            <Select
+              label="Empresa"
+              options={[
+                { value: '', label: 'Seleccionar empresa' },
+                ...companies.map(c => ({ value: c.id, label: c.name }))
+              ]}
+              value={formData.company_id}
+              onChange={(e) => setFormData({ ...formData, company_id: e.target.value })}
+            />
             <Input
               label="Fecha de Contratacion"
               type="date"
@@ -728,7 +740,7 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
   )
 }
 
-function EmployeeCreateForm({ employees = [], contractTemplates = [], departmentOptions = [], onSubmit, onCancel, loading, error }) {
+function EmployeeCreateForm({ employees = [], contractTemplates = [], departmentOptions = [], companies = [], onSubmit, onCancel, loading, error }) {
   const [formData, setFormData] = useState({
     // Datos básicos (requeridos)
     first_name: '',
@@ -744,6 +756,7 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
     employment_type: 'full_time',
     hire_date: new Date().toISOString().split('T')[0],
     supervisor_id: '',
+    company_id: '',
     cost_center: '',
     // Contrato
     contract_type: 'indefinite',
@@ -792,6 +805,7 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
     if (!formData.identification_number.trim()) errors.identification_number = 'Número de documento es requerido'
     if (!formData.job_title.trim()) errors.job_title = 'Cargo es requerido'
     if (!formData.department) errors.department = 'Departamento es requerido'
+    if (!formData.company_id) errors.company_id = 'Empresa es requerida'
     // supervisor_id es opcional - puede ser "Sin supervisor"
     if (!formData.hire_date) errors.hire_date = 'Fecha de contratación es requerida'
     setValidationErrors(errors)
@@ -804,7 +818,7 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
       // Ir al tab que tiene errores
       if (validationErrors.first_name || validationErrors.last_name || validationErrors.personal_email || validationErrors.identification_number) {
         setActiveTab('basico')
-      } else if (validationErrors.job_title || validationErrors.department || validationErrors.supervisor_id || validationErrors.hire_date) {
+      } else if (validationErrors.job_title || validationErrors.department || validationErrors.company_id || validationErrors.supervisor_id || validationErrors.hire_date) {
         setActiveTab('laboral')
       }
       return
@@ -832,7 +846,7 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
 
   const hasTabError = (tabId) => {
     if (tabId === 'basico') return validationErrors.first_name || validationErrors.last_name || validationErrors.personal_email || validationErrors.identification_number
-    if (tabId === 'laboral') return validationErrors.job_title || validationErrors.department || validationErrors.hire_date
+    if (tabId === 'laboral') return validationErrors.job_title || validationErrors.department || validationErrors.company_id || validationErrors.hire_date
     return false
   }
 
@@ -962,6 +976,18 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
               />
               {validationErrors.department && <p className="text-xs text-red-600 mt-1">{validationErrors.department}</p>}
+            </div>
+            <div>
+              <Select
+                label="Empresa *"
+                options={[
+                  { value: '', label: 'Seleccionar empresa *' },
+                  ...companies.map(c => ({ value: c.id, label: c.name }))
+                ]}
+                value={formData.company_id}
+                onChange={(e) => setFormData({ ...formData, company_id: e.target.value })}
+              />
+              {validationErrors.company_id && <p className="text-xs text-red-600 mt-1">{validationErrors.company_id}</p>}
             </div>
             <Input
               label="Centro de Costo"
@@ -1282,6 +1308,12 @@ function EmployeeCard({ employee, onView }) {
                 <Building className="w-4 h-4 text-gray-400" />
                 <span className="truncate">{employee.department || 'Sin departamento'}</span>
               </div>
+              {employee.company_name && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Building2 className="w-4 h-4 text-gray-400" />
+                  <span className="truncate">{employee.company_name}</span>
+                </div>
+              )}
               {employee.email && (
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Mail className="w-4 h-4 text-gray-400" />
@@ -1331,6 +1363,7 @@ function EmployeeTable({ employees, onView, sortColumn, sortDirection, onSort })
               <SortableHeader column="full_name">Empleado</SortableHeader>
               <SortableHeader column="job_title">Cargo</SortableHeader>
               <SortableHeader column="department">Departamento</SortableHeader>
+              <SortableHeader column="company_name">Empresa</SortableHeader>
               <SortableHeader column="employment_status">Estado</SortableHeader>
               <SortableHeader column="hire_date">Fecha Ingreso</SortableHeader>
               <SortableHeader column="available_vacation_days" align="center">Vacaciones</SortableHeader>
@@ -1355,6 +1388,7 @@ function EmployeeTable({ employees, onView, sortColumn, sortDirection, onSort })
                 </td>
                 <td className="px-4 py-4 text-sm text-gray-600">{employee.job_title || '-'}</td>
                 <td className="px-4 py-4 text-sm text-gray-600">{employee.department || '-'}</td>
+                <td className="px-4 py-4 text-sm text-gray-600">{employee.company_name || '-'}</td>
                 <td className="px-4 py-4">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[employee.employment_status] || statusColors.active}`}>
                     {statusLabels[employee.employment_status] || employee.employment_status}
@@ -1500,6 +1534,13 @@ export default function Employees() {
 
   const contractTemplates = templatesData?.data?.data || []
 
+  // Query for companies
+  const { data: companiesData } = useQuery({
+    queryKey: ['companies-active'],
+    queryFn: () => companyService.list({ active: true }),
+  })
+  const companies = companiesData?.data?.data || []
+
   // Query for employee's generated documents (contracts)
   const { data: employeeDocumentsData } = useQuery({
     queryKey: ['employee-documents', selectedEmployee?.id],
@@ -1554,6 +1595,10 @@ export default function Employees() {
         case 'department':
           aVal = (a.department || '').toLowerCase()
           bVal = (b.department || '').toLowerCase()
+          break
+        case 'company_name':
+          aVal = (a.company_name || '').toLowerCase()
+          bVal = (b.company_name || '').toLowerCase()
           break
         case 'employment_status':
           aVal = statusLabels[a.employment_status] || a.employment_status || ''
@@ -2016,6 +2061,15 @@ export default function Employees() {
                 </div>
               </div>
 
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <Building2 className="w-5 h-5 text-gray-400" />
+                <div>
+                  <p className="text-xs text-gray-500">Empresa</p>
+                  <p className="text-sm font-medium text-gray-900">{employeeDetail.company_name || '-'}</p>
+                  {employeeDetail.company_nit && <p className="text-xs text-gray-500">NIT: {employeeDetail.company_nit}</p>}
+                </div>
+              </div>
+
               {employeeDetail.supervisor && (
                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                   <User className="w-5 h-5 text-gray-400" />
@@ -2329,6 +2383,7 @@ export default function Employees() {
             employees={employees}
             contractTemplates={contractTypeOptionsFromTemplates}
             departmentOptions={departmentOptions}
+            companies={companies}
             onSubmit={handleUpdate}
             onCancel={handleCloseEdit}
             loading={updateMutation.isPending}
@@ -2555,6 +2610,7 @@ export default function Employees() {
           employees={employees}
           contractTemplates={contractTypeOptionsFromTemplates}
           departmentOptions={departmentOptions}
+          companies={companies}
           onSubmit={(data) => createMutation.mutate(data)}
           onCancel={() => setShowCreateModal(false)}
           loading={createMutation.isPending}

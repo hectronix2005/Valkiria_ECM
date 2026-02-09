@@ -233,13 +233,20 @@ module Api
             :nationality,
             :address,
             :phone,
-            :personal_email
+            :personal_email,
+            :company_id
           )
 
           # Convert supervisor_id from UUID to internal ID
           if permitted[:supervisor_id].present?
             supervisor = ::Hr::Employee.find_by(uuid: permitted[:supervisor_id])
             permitted[:supervisor_id] = supervisor&.id
+          end
+
+          # Convert company_id from UUID to internal ID
+          if permitted[:company_id].present?
+            company = ::Identity::Company.where(uuid: permitted[:company_id]).first
+            permitted[:company_id] = company&.id
           end
 
           permitted
@@ -283,13 +290,20 @@ module Api
             :nationality,
             :address,
             :phone,
-            :personal_email
+            :personal_email,
+            :company_id
           )
 
           # Convert supervisor_id from UUID to internal ID
           if permitted[:supervisor_id].present?
             supervisor = ::Hr::Employee.find_by(uuid: permitted[:supervisor_id])
             permitted[:supervisor_id] = supervisor&.id
+          end
+
+          # Convert company_id from UUID to internal ID
+          if permitted[:company_id].present?
+            company = ::Identity::Company.where(uuid: permitted[:company_id]).first
+            permitted[:company_id] = company&.id
           end
 
           permitted
@@ -353,7 +367,9 @@ module Api
             employment_status: employee.employment_status,
             hire_date: employee.hire_date&.iso8601,
             available_vacation_days: employee.available_vacation_days&.floor,
-            supervisor_id: employee.supervisor&.uuid
+            supervisor_id: employee.supervisor&.uuid,
+            company_id: employee.company&.uuid,
+            company_name: employee.company&.name
           }
 
           if detailed
@@ -393,6 +409,8 @@ module Api
               address: employee.address,
               phone: employee.phone,
               personal_email: employee.personal_email,
+              # Company
+              company_nit: employee.company&.nit,
               # Account status
               has_account: employee.user_id.present?,
               user_email: employee.user&.email

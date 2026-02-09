@@ -107,11 +107,13 @@ module Hr
     index({ employment_status: 1 })
     index({ department: 1 })
     index({ organization_id: 1, employment_status: 1 })
+    index({ company_id: 1 })
 
     # Associations
     belongs_to :user, class_name: "Identity::User", optional: true  # Optional until account is created
     belongs_to :supervisor, class_name: "Hr::Employee", optional: true
     belongs_to :organization, class_name: "Identity::Organization"
+    belongs_to :company, class_name: "Identity::Company", optional: true
     has_many :subordinates, class_name: "Hr::Employee", inverse_of: :supervisor
     has_many :vacation_requests, class_name: "Hr::VacationRequest", inverse_of: :employee
     has_many :certification_requests, class_name: "Hr::EmploymentCertificationRequest", inverse_of: :employee
