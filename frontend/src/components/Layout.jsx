@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { approvalService, contractApprovalService } from '../services/api'
+import { approvalService, contractApprovalService, notificationService } from '../services/api'
 import {
   Home,
   FileText,
@@ -24,8 +24,24 @@ import {
   Scale,
   Building2,
   FileCheck,
-  Network
+  Network,
+  Check
 } from 'lucide-react'
+
+function formatTimeAgo(dateString) {
+  const now = new Date()
+  const date = new Date(dateString)
+  const seconds = Math.floor((now - date) / 1000)
+
+  if (seconds < 60) return 'ahora'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `hace ${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `hace ${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `hace ${days}d`
+  return date.toLocaleDateString('es')
+}
 
 const navigation = [
   { name: 'Inicio', href: '/', icon: Home },
@@ -69,10 +85,13 @@ const legalNavigation = [
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState([])
   const { user, logout, isAdmin, isHR, isSupervisor, employeeMode, toggleEmployeeMode, hasElevatedRole } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const notifRef = useRef(null)
 
   // Auto-redirect when entering employee mode from admin pages
   const handleToggleEmployeeMode = () => {
@@ -107,6 +126,47 @@ export default function Layout({ children }) {
 
   const pendingHRApprovalsCount = hrApprovalsData?.data?.meta?.total_pending || 0
   const pendingLegalApprovalsCount = legalApprovalsData?.data?.meta?.total_pending || 0
+
+  // Notifications
+  const { data: notificationsData } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => notificationService.list(),
+    refetchInterval: 30000,
+  })
+
+  const notifications = notificationsData?.data?.data || []
+  const unreadCount = notificationsData?.data?.meta?.unread_count || 0
+
+  const markAllReadMutation = useMutation({
+    mutationFn: () => notificationService.markAllRead(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  const markReadMutation = useMutation({
+    mutationFn: (id) => notificationService.markRead(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  // Close notification dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotificationsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleNotificationClick = (notification) => {
+    if (!notification.read) {
+      markReadMutation.mutate(notification.id)
+    }
+    if (notification.link) {
+      navigate(notification.link)
+    }
+    setNotificationsOpen(false)
+  }
 
   const handleLogout = async () => {
     await logout()
@@ -345,10 +405,72 @@ export default function Layout({ children }) {
             {/* Right side */}
             <div className="flex items-center gap-2">
               {/* Notifications */}
-              <button className="relative p-2 rounded-lg hover:bg-gray-100">
-                <Bell className="w-5 h-5 text-gray-500" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-danger-500 rounded-full" />
-              </button>
+              <div className="relative" ref={notifRef}>
+                <button
+                  className="relative p-2 rounded-lg hover:bg-gray-100"
+                  onClick={() => setNotificationsOpen(!notificationsOpen)}
+                >
+                  <Bell className="w-5 h-5 text-gray-500" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-danger-500 text-white text-[10px] font-bold rounded-full px-1">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {notificationsOpen && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                      <h3 className="text-sm font-semibold text-gray-900">Notificaciones</h3>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={() => markAllReadMutation.mutate()}
+                          className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                          <Check className="w-3 h-3" />
+                          Marcar todo como leído
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-sm text-gray-400">
+                          No hay notificaciones
+                        </div>
+                      ) : (
+                        notifications.map((n) => (
+                          <button
+                            key={n.id}
+                            onClick={() => handleNotificationClick(n)}
+                            className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0 ${
+                              !n.read ? 'bg-primary-50/40' : ''
+                            }`}
+                          >
+                            <div className="flex gap-3">
+                              {!n.read && (
+                                <div className="flex-shrink-0 mt-1.5">
+                                  <span className="block w-2 h-2 bg-primary-500 rounded-full" />
+                                </div>
+                              )}
+                              <div className={`flex-1 min-w-0 ${n.read ? 'pl-5' : ''}`}>
+                                <p className="text-sm font-medium text-gray-900 truncate">{n.title}</p>
+                                <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.body}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {n.actor_name && (
+                                    <span className="text-xs text-gray-400">{n.actor_name}</span>
+                                  )}
+                                  <span className="text-xs text-gray-300">{formatTimeAgo(n.created_at)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* User menu */}
               <div className="relative">

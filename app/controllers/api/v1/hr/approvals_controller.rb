@@ -47,10 +47,12 @@ module Api
           case @approvable
           when ::Hr::VacationRequest
             @approvable.approve!(actor: current_employee, reason: params[:reason])
+            NotificationService.vacation_approved(@approvable)
           when ::Hr::EmploymentCertificationRequest
             # Certifications need to go through processing first
             @approvable.start_processing!(actor: current_employee) if @approvable.pending?
             @approvable.complete!(actor: current_employee, document_uuid: params[:document_uuid] || SecureRandom.uuid)
+            NotificationService.certification_completed(@approvable)
           end
 
           render json: {
@@ -66,6 +68,13 @@ module Api
           return render_missing_reason if params[:reason].blank?
 
           @approvable.reject!(actor: current_employee, reason: params[:reason])
+
+          case @approvable
+          when ::Hr::VacationRequest
+            NotificationService.vacation_rejected(@approvable)
+          when ::Hr::EmploymentCertificationRequest
+            NotificationService.certification_rejected(@approvable)
+          end
 
           render json: {
             data: approvable_json(@approvable),

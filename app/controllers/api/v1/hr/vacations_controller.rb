@@ -109,6 +109,7 @@ module Api
           end
 
           @vacation.submit!(actor: current_employee)
+          NotificationService.vacation_submitted(@vacation)
 
           render json: {
             data: vacation_json(@vacation, detailed: true),

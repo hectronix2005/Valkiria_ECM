@@ -60,6 +60,16 @@ Rails.application.routes.draw do
       # Protected resources
       resources :users, only: [:index, :show]
 
+      # Notifications
+      resources :notifications, only: [:index] do
+        collection do
+          post :mark_all_read
+        end
+        member do
+          patch :read
+        end
+      end
+
       # Public templates endpoint (read-only, active templates only)
       resources :templates, only: [:index, :show] do
         member do

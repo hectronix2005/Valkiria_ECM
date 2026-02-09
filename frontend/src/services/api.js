@@ -299,6 +299,13 @@ export const companyService = {
   delete: (id) => api.delete(`/admin/companies/${id}`),
 }
 
+// Notifications
+export const notificationService = {
+  list: () => api.get('/notifications'),
+  markAllRead: () => api.post('/notifications/mark_all_read'),
+  markRead: (id) => api.patch(`/notifications/${id}/read`),
+}
+
 // Admin - Settings
 export const settingsService = {
   get: () => api.get('/admin/settings'),
