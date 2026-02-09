@@ -258,7 +258,8 @@ module Api
             employee: employee_summary(vacation.employee),
             has_document: vacation.document_uuid.present?,
             document_uuid: vacation.document_uuid,
-            pdf_ready: pdf_ready
+            pdf_ready: pdf_ready,
+            can_sign: doc ? doc.signatures.any? { |s| s["user_id"] == current_user.id.to_s && s["signed_at"].blank? } : false
           }
 
           if detailed
@@ -310,7 +311,8 @@ module Api
             employee: employee_summary(certification.employee),
             has_document: certification.document_uuid.present?,
             document_uuid: certification.document_uuid,
-            pdf_ready: pdf_ready
+            pdf_ready: pdf_ready,
+            can_sign: doc ? doc.signatures.any? { |s| s["user_id"] == current_user.id.to_s && s["signed_at"].blank? } : false
           }
 
           if detailed

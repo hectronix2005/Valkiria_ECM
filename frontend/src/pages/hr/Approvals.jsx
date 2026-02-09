@@ -10,7 +10,7 @@ import {
   FileText, Download, Loader2, PenTool, ExternalLink, AlertCircle
 } from 'lucide-react'
 
-function ApprovalCard({ request, type, onApprove, onReject, onView, showActions = true }) {
+function ApprovalCard({ request, type, onApprove, onReject, onView, onSign, signingId, showActions = true }) {
   const isVacation = type === 'vacation'
   const Icon = isVacation ? Calendar : Award
 
@@ -86,6 +86,18 @@ function ApprovalCard({ request, type, onApprove, onReject, onView, showActions 
               </Button>
               {showActions && (
                 <>
+                  {request.can_sign && request.has_document && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onSign(request, type)}
+                      loading={signingId === request.id}
+                      className="text-purple-700 border-purple-300 hover:bg-purple-50"
+                    >
+                      <PenTool className="w-4 h-4" />
+                      Firmar
+                    </Button>
+                  )}
                   <div className="flex-1" />
                   <Button variant="danger" size="sm" onClick={() => onReject(request, type)}>
                     <XCircle className="w-4 h-4" />
@@ -653,6 +665,20 @@ export default function Approvals() {
     },
   })
 
+  const [signingId, setSigningId] = useState(null)
+
+  const signMutation = useMutation({
+    mutationFn: (id) => approvalService.signDocument(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['approvals'])
+      setSigningId(null)
+    },
+    onError: (err) => {
+      setSigningId(null)
+      alert(err.response?.data?.error || 'Error al firmar el documento')
+    }
+  })
+
   const generateDocMutation = useMutation({
     mutationFn: (id) => certificationService.generateDocument(id),
     onSuccess: (response) => {
@@ -710,6 +736,11 @@ export default function Approvals() {
     setSelectedRequest(request)
     setSelectedType(type)
     setShowDetailModal(true)
+  }
+
+  const handleSign = (request) => {
+    setSigningId(request.id)
+    signMutation.mutate(request.id)
   }
 
   const confirmReject = () => {
@@ -842,6 +873,8 @@ export default function Approvals() {
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onView={handleView}
+                onSign={handleSign}
+                signingId={signingId}
                 showActions={activeTab === 'pending'}
               />
             ))}
@@ -865,6 +898,8 @@ export default function Approvals() {
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onView={handleView}
+                onSign={handleSign}
+                signingId={signingId}
                 showActions={activeTab === 'pending'}
               />
             ))}
