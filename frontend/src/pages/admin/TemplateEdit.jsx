@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { renderAsync } from 'docx-preview'
 import { templateService, variableMappingService, signatoryTypeService } from '../../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -40,44 +41,68 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
   const PAGE_HEIGHT = PDF_HEIGHT // Alias for backward compatibility
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
+  const docxContainerRef = useRef(null)
   const [dragging, setDragging] = useState(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [resizing, setResizing] = useState(null)
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
+  const [docxLoaded, setDocxLoaded] = useState(false)
+  const [docxLoading, setDocxLoading] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
-  const [pdfLoading, setPdfLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Load PDF URL for "View PDF" button
+  // Load DOCX and render client-side with docx-preview (preserves original formatting)
   useEffect(() => {
     if (!templateId || !hasFile) {
-      setPdfUrl(null)
+      setDocxLoaded(false)
       return
     }
 
     let isMounted = true
-    let currentUrl = null
-    setPdfLoading(true)
+    setDocxLoading(true)
 
-    templateService.preview(templateId)
+    templateService.download(templateId)
       .then(response => {
+        if (!isMounted || !docxContainerRef.current) return
+        const blob = new Blob([response.data], {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        })
+        // Clear previous render
+        docxContainerRef.current.innerHTML = ''
+        return renderAsync(blob, docxContainerRef.current, null, {
+          className: 'docx-preview-content',
+          inWrapper: false,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: true,
+          ignoreLastRenderedPageBreak: false,
+          experimental: true,
+          trimXmlDeclaration: true,
+          useBase64URL: true,
+        })
+      })
+      .then(() => {
         if (!isMounted) return
-        const blob = new Blob([response.data], { type: 'application/pdf' })
-        currentUrl = URL.createObjectURL(blob)
-        setPdfUrl(currentUrl)
-        setPdfLoading(false)
+        setDocxLoaded(true)
+        setDocxLoading(false)
       })
       .catch(err => {
         if (!isMounted) return
-        console.error('Error loading PDF preview:', err)
-        setPdfLoading(false)
+        console.error('Error rendering DOCX preview:', err)
+        setDocxLoading(false)
+        // Fallback: try loading PDF preview
+        templateService.preview(templateId)
+          .then(response => {
+            if (!isMounted) return
+            const pdfBlob = new Blob([response.data], { type: 'application/pdf' })
+            setPdfUrl(URL.createObjectURL(pdfBlob))
+          })
+          .catch(() => {})
       })
 
     return () => {
       isMounted = false
-      if (currentUrl) {
-        URL.revokeObjectURL(currentUrl)
-      }
     }
   }, [templateId, hasFile])
 
@@ -200,23 +225,11 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
     <div className="relative">
       {/* Page Controls */}
       <div className="flex items-center justify-end mb-2 gap-3">
-        {/* View PDF button */}
-        {hasFile && pdfUrl && (
-          <a
-            href={pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
-          >
-            <Eye className="w-3 h-3" />
-            Ver PDF
-          </a>
+        {docxLoading && (
+          <span className="text-xs text-gray-400 animate-pulse">Cargando documento...</span>
         )}
-        {pdfLoading && (
-          <span className="text-xs text-gray-400 animate-pulse">Cargando PDF...</span>
-        )}
-        {!pdfLoading && hasFile && !pdfUrl && (
-          <span className="text-xs text-red-400">Error al cargar PDF</span>
+        {docxLoaded && (
+          <span className="text-xs text-green-500">Formato original</span>
         )}
         {/* Page indicator and navigation */}
         <div className="flex items-center gap-2">
@@ -266,8 +279,18 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
           >
-          {/* PDF Background - show actual PDF if available */}
-          {pdfUrl && hasFile && (
+          {/* DOCX Background - rendered client-side with docx-preview */}
+          <div
+            ref={docxContainerRef}
+            className="absolute inset-0 pointer-events-none overflow-hidden"
+            style={{
+              width: PDF_WIDTH,
+              height: PAGE_HEIGHT * numPages,
+            }}
+          />
+
+          {/* PDF fallback background - only if DOCX rendering failed */}
+          {!docxLoaded && pdfUrl && hasFile && (
             <iframe
               src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
               className="absolute inset-0 pointer-events-none"
@@ -280,11 +303,11 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
             />
           )}
 
-          {/* Render page placeholders with correct A4 proportions */}
+          {/* Render page placeholders with correct proportions */}
           {[...Array(numPages)].map((_, pageIndex) => (
             <div
               key={pageIndex}
-              className={`border border-gray-300 ${pdfUrl ? 'bg-transparent' : 'bg-white'}`}
+              className={`border border-gray-300 ${(docxLoaded || pdfUrl) ? 'bg-transparent' : 'bg-white'}`}
               style={{
                 width: PDF_WIDTH,
                 height: PAGE_HEIGHT,
@@ -292,17 +315,17 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
                 top: pageIndex * PAGE_HEIGHT,
                 left: 0,
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                zIndex: -1,
               }}
             >
               {/* Page number indicator */}
-              <div className="absolute top-2 right-2 bg-gray-100/80 text-gray-500 text-xs px-2 py-1 rounded">
+              <div className="absolute top-2 right-2 bg-gray-100/80 text-gray-500 text-xs px-2 py-1 rounded z-10">
                 Página {pageIndex + 1}
               </div>
-              {/* Visual grid lines to help with positioning - only show if no PDF */}
-              {!pdfUrl && (
+              {/* Visual grid lines to help with positioning - only show if no document rendered */}
+              {!docxLoaded && !pdfUrl && (
                 <>
                   <div className="absolute inset-4 border border-dashed border-gray-200 pointer-events-none opacity-50" />
-                  {/* Center guides */}
                   <div className="absolute left-1/2 top-4 bottom-4 w-px bg-gray-100 pointer-events-none" />
                   <div className="absolute top-1/2 left-4 right-4 h-px bg-gray-100 pointer-events-none" />
                 </>
@@ -473,7 +496,7 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
             })}
 
             {/* Empty state */}
-            {signatories.length === 0 && hasFile && !pdfLoading && (
+            {signatories.length === 0 && hasFile && !docxLoading && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 text-center shadow-lg">
                   <PenTool className="w-8 h-8 mx-auto mb-2 text-gray-400" />
@@ -527,8 +550,39 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
 
       {/* Instructions */}
       <p className="text-xs text-gray-400 text-center mt-2">
-        Coordenadas PDF: {PDF_WIDTH} x {PDF_HEIGHT} pts por página | Usa scroll para documentos largos
+        Coordenadas: {PDF_WIDTH} x {PDF_HEIGHT} pts por página | Usa scroll para documentos largos
       </p>
+
+      {/* Styles for docx-preview rendering */}
+      <style>{`
+        .docx-preview-content {
+          width: ${PDF_WIDTH}px !important;
+          min-height: ${PAGE_HEIGHT * numPages}px !important;
+          overflow: hidden !important;
+          background: white;
+        }
+        .docx-preview-content section.docx {
+          width: ${PDF_WIDTH}px !important;
+          min-height: ${PAGE_HEIGHT}px !important;
+          padding: 40px 50px !important;
+          margin: 0 !important;
+          box-sizing: border-box !important;
+          box-shadow: none !important;
+          overflow: hidden !important;
+          page-break-after: always;
+        }
+        .docx-preview-content section.docx:last-child {
+          page-break-after: auto;
+        }
+        .docx-preview-content table {
+          width: 100% !important;
+          max-width: ${PDF_WIDTH - 100}px !important;
+        }
+        .docx-preview-content img {
+          max-width: 100% !important;
+          height: auto !important;
+        }
+      `}</style>
     </div>
   )
 }
