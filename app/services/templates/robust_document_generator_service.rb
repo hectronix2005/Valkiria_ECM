@@ -431,13 +431,19 @@ module Templates
         return result if result
       end
 
-      # Priority 3: Pandoc + wkhtmltopdf (available on Heroku, decent quality)
+      # Priority 3: Preview-based PDF with variable replacement (preserves original formatting)
+      if template&.preview_file_id
+        result = convert_using_preview_with_overlay(docx_path)
+        return result if result
+      end
+
+      # Priority 4: Pandoc + wkhtmltopdf (available on Heroku, loses formatting)
       if pandoc_available?
         result = convert_with_pandoc_wkhtmltopdf(docx_path)
         return result if result
       end
 
-      # Priority 4: Local PDF sync workflow (last resort)
+      # Priority 5: Local PDF sync workflow (last resort)
       Rails.logger.info "All PDF converters unavailable - using local PDF sync workflow"
       Rails.logger.info "Document will be created with 'pending' status. Run 'rake db:sync:generate_pending_pdfs' locally."
       nil
@@ -674,62 +680,121 @@ module Templates
       preview_content = template.preview_content
       return nil unless preview_content
 
-      Rails.logger.info "Attempting PDF text replacement using HexaPDF..."
+      Rails.logger.info "Attempting PDF variable replacement using stored preview..."
 
       begin
-        # Try to replace variables directly in the PDF using HexaPDF's text search
         doc = HexaPDF::Document.new(io: StringIO.new(preview_content))
         replacements_made = 0
 
+        # Build a replacement map: placeholder string => value
+        replacement_map = {}
         variable_values.each do |var_name, value|
-          # Try different placeholder formats
-          placeholders = [
-            "{{#{var_name}}}",
-            "{{ #{var_name} }}",
-            "{{#{var_name.upcase}}}",
-            "{{#{var_name.downcase}}}"
-          ]
+          replacement_map["{{#{var_name}}}"] = value.to_s
+          replacement_map["{{ #{var_name} }}"] = value.to_s
+        end
 
-          doc.pages.each do |page|
-            # Get the page's content stream
-            contents = page.contents
-            next unless contents
+        # Process each page's content streams
+        doc.pages.each_with_index do |page, page_idx|
+          # Process the main content stream(s)
+          page_replacements = replace_in_page_streams(page, replacement_map)
+          replacements_made += page_replacements
 
-            # Decode the content stream to get raw data
-            data = contents.stream rescue nil
-            next unless data
+          # Also process Form XObjects (embedded content) on this page
+          resources = page[:Resources]
+          next unless resources
 
-            data_str = data.to_s.force_encoding("UTF-8") rescue data.to_s
+          xobjects = resources[:XObject]
+          next unless xobjects
 
-            placeholders.each do |placeholder|
-              if data_str.include?(placeholder)
-                data_str.gsub!(placeholder, value.to_s)
-                replacements_made += 1
-                Rails.logger.info "  Replaced '#{placeholder}' with '#{value}'"
-              end
-            end
+          xobjects.each do |_name, xobj|
+            xobj = doc.deref(xobj)
+            next unless xobj.is_a?(HexaPDF::Dictionary) && xobj[:Subtype] == :Form
 
-            # Update the content stream if changes were made
-            if replacements_made > 0
-              contents.stream = data_str
-            end
+            xobj_replacements = replace_in_stream_object(xobj, replacement_map)
+            replacements_made += xobj_replacements
           end
         end
 
         if replacements_made > 0
-          Rails.logger.info "HexaPDF: Made #{replacements_made} replacements successfully"
+          Rails.logger.info "Preview PDF: Made #{replacements_made} variable replacements successfully"
           output = StringIO.new
           doc.write(output)
           return output.string
         else
-          Rails.logger.info "HexaPDF: No direct replacements possible, using data summary page"
+          Rails.logger.info "Preview PDF: No direct replacements found in streams, using data summary fallback"
         end
       rescue StandardError => e
-        Rails.logger.warn "HexaPDF replacement failed: #{e.message}, falling back to data summary"
+        Rails.logger.warn "Preview PDF replacement failed: #{e.class}: #{e.message}"
+        Rails.logger.warn e.backtrace.first(3).join("\n")
       end
 
       # Fallback: Use original preview with data summary page
       convert_using_stored_preview
+    end
+
+    def replace_in_page_streams(page, replacement_map)
+      replacements = 0
+      contents = page[:Contents]
+      return 0 unless contents
+
+      # Contents can be a single stream or an array of streams
+      streams = contents.is_a?(Array) ? contents.map { |ref| page.document.deref(ref) } : [page.document.deref(contents)]
+
+      streams.each do |stream_obj|
+        next unless stream_obj.respond_to?(:stream)
+
+        replacements += replace_in_stream_object(stream_obj, replacement_map)
+      end
+
+      replacements
+    end
+
+    def replace_in_stream_object(stream_obj, replacement_map)
+      replacements = 0
+
+      begin
+        # Get decoded stream data
+        data = stream_obj.stream
+        return 0 unless data
+
+        data_str = data.to_s.dup.force_encoding("BINARY")
+
+        replacement_map.each do |placeholder, value|
+          # Try direct replacement in the binary stream
+          placeholder_bytes = placeholder.encode("BINARY") rescue placeholder
+          value_bytes = value.encode("BINARY") rescue value
+
+          while data_str.include?(placeholder_bytes)
+            data_str.gsub!(placeholder_bytes, value_bytes)
+            replacements += 1
+            Rails.logger.info "  Replaced '#{placeholder}' => '#{value}'"
+          end
+
+          # Also try UTF-16BE encoding (some PDFs use this)
+          begin
+            placeholder_utf16 = placeholder.encode("UTF-16BE").force_encoding("BINARY")
+            value_utf16 = value.encode("UTF-16BE").force_encoding("BINARY")
+            while data_str.include?(placeholder_utf16)
+              data_str.gsub!(placeholder_utf16, value_utf16)
+              replacements += 1
+              Rails.logger.info "  Replaced '#{placeholder}' (UTF-16BE) => '#{value}'"
+            end
+          rescue Encoding::UndefinedConversionError
+            # Skip if encoding conversion fails
+          end
+        end
+
+        if replacements > 0
+          stream_obj.stream = data_str
+          # Clear any cached filtered data
+          stream_obj.delete(:Filter) if stream_obj[:Filter]
+          stream_obj.delete(:DecodeParms) if stream_obj[:DecodeParms]
+        end
+      rescue StandardError => e
+        Rails.logger.warn "Stream replacement error: #{e.message}"
+      end
+
+      replacements
     end
 
     def convert_using_stored_preview
