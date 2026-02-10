@@ -91,15 +91,20 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
     },
     onError: (err) => {
       const data = err.response?.data
+      const status = err.response?.status
+      console.error('Vacation create error:', { status, data, message: err.message })
       // Check if it's a missing fields error
       if (data?.missing_fields && Array.isArray(data.missing_fields)) {
         setMissingFields(data.missing_fields)
         setSignError(data.message || 'Faltan datos requeridos')
-      } else if (Array.isArray(data?.errors)) {
-        setSignError(data.errors.join(', '))
+      } else if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        setSignError(data.error ? `${data.error}: ${data.errors.join('. ')}` : data.errors.join('. '))
+        setMissingFields(null)
+      } else if (data?.error) {
+        setSignError(data.error)
         setMissingFields(null)
       } else {
-        setSignError(data?.error || 'Error al crear la solicitud')
+        setSignError(`Error al crear la solicitud (${status || 'sin respuesta'}): ${err.message}`)
         setMissingFields(null)
       }
     }

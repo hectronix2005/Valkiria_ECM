@@ -48,6 +48,7 @@ module Api
           if template
             missing_data = validate_vacation_template_data(template)
             if missing_data[:variables].any?
+              Rails.logger.warn("Vacation create: missing template data for employee #{current_employee.uuid}: #{missing_data[:variables].map { |v| v[:field] }.join(', ')}")
               return render json: {
                 error: "Faltan datos requeridos para generar la solicitud de vacaciones",
                 missing_fields: missing_data[:variables].map { |v|
@@ -73,8 +74,21 @@ module Api
               document: @vacation.document_uuid ? document_info : nil
             }, status: :created
           else
-            render json: { errors: @vacation.errors.full_messages }, status: :unprocessable_content
+            Rails.logger.warn("Vacation create failed for employee #{current_employee.uuid}: #{@vacation.errors.full_messages.join(', ')}")
+            Rails.logger.warn("Vacation params: type=#{@vacation.vacation_type} start=#{@vacation.start_date} end=#{@vacation.end_date} days=#{@vacation.days_requested}")
+            render json: {
+              error: "No se pudo crear la solicitud de vacaciones",
+              errors: @vacation.errors.full_messages,
+              details: @vacation.errors.messages
+            }, status: :unprocessable_content
           end
+        rescue StandardError => e
+          Rails.logger.error("Vacation create unexpected error for user #{current_user&.id}: #{e.class} - #{e.message}")
+          Rails.logger.error(e.backtrace.first(10).join("\n"))
+          render json: {
+            error: "Error inesperado al crear la solicitud: #{e.message}",
+            error_type: e.class.name
+          }, status: :internal_server_error
         end
 
         # PATCH /api/v1/hr/vacations/:id
@@ -423,13 +437,17 @@ module Api
             user: current_user
           }
 
-          generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
-          generated_doc = generator.generate!
-
-          @vacation.update!(document_uuid: generated_doc.uuid)
+          # Timeout to avoid Heroku H12 (30s limit) - leave buffer for response
+          Timeout.timeout(20) do
+            generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
+            generated_doc = generator.generate!
+            @vacation.update!(document_uuid: generated_doc.uuid)
+          end
+        rescue Timeout::Error
+          Rails.logger.warn("Vacation document generation timed out for #{@vacation.request_number} - vacation created without document")
         rescue StandardError => e
-          # Log but don't fail the submit if document generation fails
-          Rails.logger.error("Error auto-generating vacation document: #{e.message}")
+          # Log but don't fail the create if document generation fails
+          Rails.logger.error("Error auto-generating vacation document: #{e.class} - #{e.message}")
           Rails.logger.error(e.backtrace.first(5).join("\n"))
         end
 
