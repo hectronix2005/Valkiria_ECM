@@ -168,6 +168,36 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
     }
   }
 
+  // Poll for document readiness when PDF is pending (generation may finish after response)
+  useEffect(() => {
+    if (step !== 2 || !createdVacation?.id || createdVacation?.pdf_ready) return
+
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const res = await vacationService.get(createdVacation.id)
+        const updated = res.data?.data
+        const doc = res.data?.document
+        if (!cancelled && updated?.pdf_ready) {
+          setCreatedVacation(updated)
+          setDocumentInfo(doc)
+          // Load the PDF
+          const pdfRes = await vacationService.downloadDocument(createdVacation.id)
+          const blob = new Blob([pdfRes.data], { type: 'application/pdf' })
+          if (!cancelled) setPdfUrl(URL.createObjectURL(blob))
+        }
+      } catch (e) {
+        console.error('Error polling document status:', e)
+      }
+    }
+
+    const interval = setInterval(poll, 3000)
+    // Also poll immediately
+    poll()
+
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [step, createdVacation?.id, createdVacation?.pdf_ready])
+
   // Calcular Domingo de Pascua (Algoritmo de Butcher)
   const getEasterSunday = (year) => {
     const a = year % 19
@@ -597,9 +627,9 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
             </div>
           ) : createdVacation?.pdf_ready === false ? (
             <div className="border rounded-lg p-8 text-center bg-amber-50 border-amber-200">
-              <AlertCircle className="w-8 h-8 mx-auto text-amber-500 mb-2" />
-              <p className="text-amber-700 font-medium">El documento está pendiente de generación</p>
-              <p className="text-amber-600 text-sm mt-1">El PDF se generará próximamente. Puedes continuar con el proceso.</p>
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-500 mb-2" />
+              <p className="text-amber-700 font-medium">Generando documento...</p>
+              <p className="text-amber-600 text-sm mt-1">El PDF se está generando. Se cargará automáticamente cuando esté listo.</p>
             </div>
           ) : (
             <div className="border rounded-lg p-8 text-center bg-gray-50">
