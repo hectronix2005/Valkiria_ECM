@@ -73,23 +73,26 @@ module Api
             end
           end
 
-          if @vacation.save
-            # Auto-generate document immediately after creation
-            generate_vacation_document_if_available
+          save_with_retry(@vacation)
 
-            render json: {
-              data: vacation_json(@vacation, detailed: true),
-              document: @vacation.document_uuid ? document_info : nil
-            }, status: :created
-          else
-            Rails.logger.warn("Vacation create failed for employee #{current_employee.uuid}: #{@vacation.errors.full_messages.join(', ')}")
-            Rails.logger.warn("Vacation params: type=#{@vacation.vacation_type} start=#{@vacation.start_date} end=#{@vacation.end_date} days=#{@vacation.days_requested}")
-            render json: {
-              error: "No se pudo crear la solicitud de vacaciones",
-              errors: @vacation.errors.full_messages,
-              details: @vacation.errors.messages
-            }, status: :unprocessable_content
-          end
+          # Auto-generate document immediately after creation
+          generate_vacation_document_if_available
+
+          render json: {
+            data: vacation_json(@vacation, detailed: true),
+            document: @vacation.document_uuid ? document_info : nil
+          }, status: :created
+        rescue Mongo::Error::OperationFailure => e
+          # Should not happen after retry, but handle gracefully
+          Rails.logger.error("Vacation create duplicate key after retries: #{e.message}")
+          render json: { error: "Error al generar número de solicitud. Intenta de nuevo." }, status: :conflict
+        rescue ActiveRecord::RecordInvalid, Mongoid::Errors::Validations => e
+          Rails.logger.warn("Vacation create failed for employee #{current_employee.uuid}: #{@vacation.errors.full_messages.join(', ')}")
+          render json: {
+            error: "No se pudo crear la solicitud de vacaciones",
+            errors: @vacation.errors.full_messages,
+            details: @vacation.errors.messages
+          }, status: :unprocessable_content
         rescue StandardError => e
           Rails.logger.error("Vacation create unexpected error for user #{current_user&.id}: #{e.class} - #{e.message}")
           Rails.logger.error(e.backtrace.first(10).join("\n"))
@@ -392,6 +395,21 @@ module Api
               hire_date: Date.current,
               vacation_balance_days: 15.0
             )
+        end
+
+        # Save with retry on duplicate request_number (race condition with unique index)
+        def save_with_retry(vacation, max_retries: 3)
+          retries = 0
+          begin
+            vacation.save!
+          rescue Mongo::Error::OperationFailure => e
+            raise unless e.message.include?("E11000") && e.message.include?("request_number")
+            raise if (retries += 1) > max_retries
+
+            Rails.logger.warn("Duplicate request_number detected, retrying (#{retries}/#{max_retries})")
+            vacation.request_number = nil # Clear to regenerate
+            retry
+          end
         end
 
         def find_vacation_template
