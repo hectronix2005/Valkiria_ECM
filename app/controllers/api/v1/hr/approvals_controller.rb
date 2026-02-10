@@ -14,27 +14,31 @@ module Api
         def index
           if params[:status] == "history"
             @approvals = fetch_history_approvals
-            render json: {
-              data: {
-                vacation_requests: @approvals[:vacations].map { |v| vacation_json(v) },
-                certification_requests: @approvals[:certifications].map { |c| certification_json(c) }
-              },
-              meta: {
-                total: @approvals[:vacations].count + @approvals[:certifications].count
-              }
-            }
           else
             @approvals = fetch_pending_approvals
-            render json: {
-              data: {
-                vacation_requests: @approvals[:vacations].map { |v| vacation_json(v) },
-                certification_requests: @approvals[:certifications].map { |c| certification_json(c) }
-              },
-              meta: {
-                total_pending: @approvals[:vacations].count + @approvals[:certifications].count
-              }
-            }
           end
+
+          # Preload documents to avoid N+1 queries
+          all_records = @approvals[:vacations].to_a + @approvals[:certifications].to_a
+          doc_uuids = all_records.map(&:document_uuid).compact
+          @preloaded_docs = if doc_uuids.any?
+                              ::Templates::GeneratedDocument.where(:uuid.in => doc_uuids).index_by(&:uuid)
+                            else
+                              {}
+                            end
+
+          json_data = {
+            vacation_requests: @approvals[:vacations].map { |v| vacation_json(v) },
+            certification_requests: @approvals[:certifications].map { |c| certification_json(c) }
+          }
+
+          meta = if params[:status] == "history"
+                   { total: @approvals[:vacations].count + @approvals[:certifications].count }
+                 else
+                   { total_pending: @approvals[:vacations].count + @approvals[:certifications].count }
+                 end
+
+          render json: { data: json_data, meta: meta }
         end
 
         # GET /api/v1/hr/approvals/:id
@@ -239,8 +243,11 @@ module Api
         end
 
         def vacation_json(vacation, detailed: false)
-          # Check document status
-          doc = vacation.document_uuid.present? ? ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first : nil
+          # Check document status (use preloaded docs to avoid N+1)
+          doc = if vacation.document_uuid.present?
+                  @preloaded_docs&.dig(vacation.document_uuid) ||
+                    ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
+                end
           pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
 
           json = {
@@ -294,8 +301,11 @@ module Api
         end
 
         def certification_json(certification, detailed: false)
-          # Check document status
-          doc = certification.document_uuid.present? ? ::Templates::GeneratedDocument.where(uuid: certification.document_uuid).first : nil
+          # Check document status (use preloaded docs to avoid N+1)
+          doc = if certification.document_uuid.present?
+                  @preloaded_docs&.dig(certification.document_uuid) ||
+                    ::Templates::GeneratedDocument.where(uuid: certification.document_uuid).first
+                end
           pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
 
           json = {

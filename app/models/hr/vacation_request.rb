@@ -324,7 +324,7 @@ module Hr
     def document_fully_signed?
       return true unless document_uuid.present?
 
-      doc = ::Templates::GeneratedDocument.find_by(uuid: document_uuid)
+      doc = ::Templates::GeneratedDocument.where(uuid: document_uuid).first
       return true unless doc # No document means no signatures required
 
       doc.all_required_signed?
@@ -435,9 +435,18 @@ module Hr
       return if request_number.present?
 
       year = Date.current.year
-      sequence = VacationRequest.where(organization_id: organization_id)
-        .where(:created_at.gte => Date.new(year, 1, 1))
-        .count + 1
+      # Use max existing number + 1 instead of count to avoid race conditions
+      # with the unique index on request_number as a safety net
+      last_request = VacationRequest.where(organization_id: organization_id)
+        .where(:request_number => /\AVAC-#{year}-/)
+        .order(request_number: :desc)
+        .first
+
+      sequence = if last_request&.request_number
+                   last_request.request_number.split("-").last.to_i + 1
+                 else
+                   1
+                 end
 
       self.request_number = "VAC-#{year}-#{sequence.to_s.rjust(5, "0")}"
     end

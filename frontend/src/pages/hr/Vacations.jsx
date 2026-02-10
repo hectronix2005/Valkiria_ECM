@@ -1141,12 +1141,18 @@ export default function Vacations() {
     onSuccess: () => {
       queryClient.invalidateQueries(['vacations'])
     },
+    onError: (err) => {
+      alert(err.response?.data?.error || 'Error al enviar la solicitud')
+    },
   })
 
   const cancelMutation = useMutation({
     mutationFn: (id) => vacationService.cancel(id),
     onSuccess: () => {
       queryClient.invalidateQueries(['vacations'])
+    },
+    onError: (err) => {
+      alert(err.response?.data?.error || 'Error al cancelar la solicitud')
     },
   })
 

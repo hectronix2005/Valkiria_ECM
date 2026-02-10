@@ -261,10 +261,19 @@ module Hr
       return if request_number.present?
 
       year = Date.current.year
-      sequence = EmploymentCertificationRequest
+      # Use max existing number + 1 instead of count to avoid race conditions
+      # with the unique index on request_number as a safety net
+      last_request = EmploymentCertificationRequest
         .where(organization_id: organization_id)
-        .where(:created_at.gte => Date.new(year, 1, 1))
-        .count + 1
+        .where(:request_number => /\ACERT-#{year}-/)
+        .order(request_number: :desc)
+        .first
+
+      sequence = if last_request&.request_number
+                   last_request.request_number.split("-").last.to_i + 1
+                 else
+                   1
+                 end
 
       self.request_number = "CERT-#{year}-#{sequence.to_s.rjust(5, "0")}"
     end

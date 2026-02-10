@@ -22,6 +22,14 @@ module Api
           @vacations = apply_filters(@vacations)
           @vacations = paginate(@vacations)
 
+          # Preload documents to avoid N+1 queries
+          doc_uuids = @vacations.map(&:document_uuid).compact
+          @preloaded_docs = if doc_uuids.any?
+                              ::Templates::GeneratedDocument.where(:uuid.in => doc_uuids).index_by(&:uuid)
+                            else
+                              {}
+                            end
+
           render json: {
             data: @vacations.map { |v| vacation_json(v) },
             meta: pagination_meta(@vacations).merge(vacation_balance: vacation_balance_json)
@@ -307,7 +315,8 @@ module Api
           needs_signature = false
           pdf_ready = false
           if vacation.document_uuid.present?
-            doc = ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
+            doc = @preloaded_docs&.dig(vacation.document_uuid) ||
+                  ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
             needs_signature = doc && !employee_has_signed?(doc)
             pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
           end
