@@ -436,15 +436,20 @@ module Api
 
           html_file = Tempfile.new(["preview", ".html"])
           html_file.close
+          media_dir = Dir.mktmpdir("pandoc_media")
 
           begin
-            result = `#{pandoc_path} -f docx -t html5 --standalone "#{docx_path}" -o "#{html_file.path}" 2>&1`
+            result = `#{pandoc_path} -f docx -t html5 --standalone --extract-media="#{media_dir}" "#{docx_path}" -o "#{html_file.path}" 2>&1`
             unless $?.success?
               Rails.logger.warn "Pandoc conversion failed: #{result}"
               return nil
             end
 
             html_content = File.read(html_file.path)
+
+            # Fix image paths for wkhtmltopdf
+            html_content.gsub!(%r{src="#{Regexp.escape(media_dir)}/}, "src=\"file://#{media_dir}/")
+            html_content.gsub!(/src="media\//, "src=\"file://#{media_dir}/media/")
 
             styled_html = if html_content.include?("</head>")
                             html_content.sub("</head>", "#{preview_styles}</head>")
@@ -455,8 +460,9 @@ module Api
             pdf_content = WickedPdf.new.pdf_from_string(
               styled_html,
               page_size: "Letter",
-              margin: { top: 20, bottom: 20, left: 20, right: 20 },
-              encoding: "UTF-8"
+              margin: { top: 15, bottom: 15, left: 20, right: 20 },
+              encoding: "UTF-8",
+              enable_local_file_access: true
             )
 
             Rails.logger.info "Pandoc+wkhtmltopdf preview conversion successful (#{pdf_content.bytesize} bytes)"
@@ -466,6 +472,7 @@ module Api
             nil
           ensure
             html_file.unlink
+            FileUtils.rm_rf(media_dir)
           end
         end
 
@@ -494,12 +501,12 @@ module Api
         def preview_styles
           <<~CSS
             <style>
-              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; line-height: 1.4; color: #333; }
-              h1, h2, h3 { color: #222; margin-top: 0.8em; margin-bottom: 0.4em; }
-              p { margin: 0.4em 0; text-align: justify; }
-              table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
-              th, td { border: 1px solid #999; padding: 6px; text-align: left; }
-              th { background-color: #f0f0f0; font-weight: bold; }
+              body { max-width: 100%; line-height: 1.5; color: #000; }
+              p { margin: 0.3em 0; }
+              table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+              td, th { border: 1px solid #999; padding: 5px; }
+              th { background-color: #f5f5f5; }
+              img { max-width: 100%; height: auto; }
             </style>
           CSS
         end

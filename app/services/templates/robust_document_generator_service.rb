@@ -516,12 +516,16 @@ module Templates
     def convert_with_pandoc_wkhtmltopdf(docx_path)
       Rails.logger.info "Converting DOCX to PDF using Pandoc + wkhtmltopdf..."
 
+      media_dir = Dir.mktmpdir("pandoc_media")
+
       begin
-        # Step 1: Convert DOCX to HTML using Pandoc (using shell command directly)
         html_output = Tempfile.new(["pandoc_output", ".html"])
         html_output.close
 
-        pandoc_cmd = "pandoc -f docx -t html5 --standalone \"#{docx_path}\" -o \"#{html_output.path}\" 2>&1"
+        # Use --extract-media to preserve embedded images, --standalone for full HTML
+        pandoc_cmd = "#{@pandoc_path || 'pandoc'} -f docx -t html5 --standalone " \
+                     "--extract-media=\"#{media_dir}\" " \
+                     "\"#{docx_path}\" -o \"#{html_output.path}\" 2>&1"
         Rails.logger.info "Running: #{pandoc_cmd}"
         result = `#{pandoc_cmd}`
 
@@ -535,15 +539,20 @@ module Templates
         html_output.unlink
         Rails.logger.info "Pandoc DOCX->HTML conversion successful (#{html_content.bytesize} bytes)"
 
-        # Inject additional styles into the pandoc-generated HTML
+        # Fix image paths to use absolute file:// URLs for wkhtmltopdf
+        html_content.gsub!(%r{src="#{Regexp.escape(media_dir)}/}, "src=\"file://#{media_dir}/")
+        html_content.gsub!(/src="media\//, "src=\"file://#{media_dir}/media/")
+
+        # Inject minimal fallback styles that preserve Pandoc's DOCX-derived formatting
         styled_html = inject_pdf_styles(html_content)
 
-        # Step 2: Convert HTML to PDF using wkhtmltopdf
+        # Convert HTML to PDF using wkhtmltopdf with better options
         pdf_content = WickedPdf.new.pdf_from_string(
           styled_html,
           page_size: "Letter",
-          margin: { top: 20, bottom: 20, left: 20, right: 20 },
-          encoding: "UTF-8"
+          margin: { top: 15, bottom: 15, left: 20, right: 20 },
+          encoding: "UTF-8",
+          enable_local_file_access: true
         )
 
         Rails.logger.info "wkhtmltopdf HTML->PDF conversion successful (#{pdf_content.bytesize} bytes)"
@@ -552,51 +561,46 @@ module Templates
         Rails.logger.error "Pandoc + wkhtmltopdf conversion failed: #{e.message}"
         Rails.logger.error e.backtrace.first(5).join("\n")
         nil
+      ensure
+        FileUtils.rm_rf(media_dir)
       end
     end
 
     def inject_pdf_styles(html_content)
-      # Inject additional CSS styles into pandoc-generated HTML
+      # Low-specificity fallback styles that DON'T override Pandoc's DOCX-derived formatting.
+      # Pandoc preserves original Word styles as inline styles on elements;
+      # these only apply when no inline style exists.
       additional_styles = <<~CSS
         <style>
+          /* Minimal defaults - don't override Pandoc's preserved DOCX styles */
           body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 11pt;
-            line-height: 1.4;
-            color: #333;
             max-width: 100%;
+            line-height: 1.5;
+            color: #000;
           }
-          h1, h2, h3, h4, h5, h6 {
-            color: #222;
-            margin-top: 0.8em;
-            margin-bottom: 0.4em;
-          }
-          p {
-            margin: 0.4em 0;
-            text-align: justify;
-          }
+          /* Preserve Pandoc's text-indent and margin styles from DOCX */
+          p { margin: 0.3em 0; }
+          /* Only style tables that don't have Pandoc-applied styles */
           table {
             border-collapse: collapse;
             width: 100%;
-            margin: 0.8em 0;
+            margin: 0.5em 0;
           }
-          th, td {
+          td, th {
             border: 1px solid #999;
-            padding: 6px;
-            text-align: left;
+            padding: 5px;
           }
-          th {
-            background-color: #f0f0f0;
-            font-weight: bold;
-          }
+          th { background-color: #f5f5f5; }
+          /* Preserve image sizing from DOCX */
+          img { max-width: 100%; height: auto; }
+          /* Pandoc wraps DOCX text alignment in div styles - preserve them */
+          div[style] p { margin: 0.2em 0; }
         </style>
       CSS
 
-      # Insert styles before </head>
       if html_content.include?("</head>")
         html_content.sub("</head>", "#{additional_styles}</head>")
       else
-        # If no head tag, wrap the content
         <<~HTML
           <!DOCTYPE html>
           <html>
