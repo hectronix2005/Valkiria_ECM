@@ -263,36 +263,17 @@ module Api
             return render json: { error: "No se pudo obtener el archivo" }, status: :internal_server_error
           end
 
-          # Convert Word to PDF using LibreOffice (local development)
+          # Convert Word to PDF using multiple fallback methods
           temp_dir = Dir.mktmpdir
           begin
-            # Write Word file
             docx_path = File.join(temp_dir, "template.docx")
             File.binwrite(docx_path, file_content)
 
-            # Convert to PDF using LibreOffice
-            soffice_paths = [
-              `which soffice`.strip,
-              "/opt/homebrew/bin/soffice",           # macOS Homebrew
-              "/usr/bin/soffice",                    # Linux standard
-            ]
+            pdf_content = convert_docx_to_pdf(docx_path)
 
-            soffice_path = soffice_paths.find { |p| p.present? && File.exist?(p) }
-
-            unless soffice_path
-              # No LibreOffice and no stored preview - return error
-              return render json: { error: "Preview PDF no disponible. Re-sube el archivo desde un entorno con LibreOffice." }, status: :service_unavailable
+            unless pdf_content
+              return render json: { error: "No se pudo generar el preview PDF" }, status: :service_unavailable
             end
-
-            system(soffice_path, "--headless", "--convert-to", "pdf", "--outdir", temp_dir, docx_path)
-
-            pdf_path = File.join(temp_dir, "template.pdf")
-
-            unless File.exist?(pdf_path)
-              return render json: { error: "Error al convertir el documento a PDF" }, status: :internal_server_error
-            end
-
-            pdf_content = File.binread(pdf_path)
 
             # Store this preview for future use
             @template.store_pdf_preview!(pdf_content)
@@ -432,6 +413,95 @@ module Api
             show_label: signatory.show_label.nil? ? true : signatory.show_label,
             show_signer_name: signatory.show_signer_name || false
           }
+        end
+
+        # Convert DOCX to PDF using multiple fallback methods
+        def convert_docx_to_pdf(docx_path)
+          # Priority 1: Pandoc + wkhtmltopdf (most reliable on Heroku)
+          result = convert_with_pandoc(docx_path)
+          return result if result
+
+          # Priority 2: LibreOffice (local development)
+          result = convert_with_libreoffice_local(docx_path)
+          return result if result
+
+          Rails.logger.error "All PDF conversion methods failed for template preview"
+          nil
+        end
+
+        def convert_with_pandoc(docx_path)
+          pandoc_path = `which pandoc 2>/dev/null`.strip.presence
+          pandoc_path ||= "/app/vendor/pandoc/bin/pandoc" if File.exist?("/app/vendor/pandoc/bin/pandoc")
+          return nil unless pandoc_path
+
+          html_file = Tempfile.new(["preview", ".html"])
+          html_file.close
+
+          begin
+            result = `#{pandoc_path} -f docx -t html5 --standalone "#{docx_path}" -o "#{html_file.path}" 2>&1`
+            unless $?.success?
+              Rails.logger.warn "Pandoc conversion failed: #{result}"
+              return nil
+            end
+
+            html_content = File.read(html_file.path)
+
+            styled_html = if html_content.include?("</head>")
+                            html_content.sub("</head>", "#{preview_styles}</head>")
+                          else
+                            "<html><head>#{preview_styles}</head><body>#{html_content}</body></html>"
+                          end
+
+            pdf_content = WickedPdf.new.pdf_from_string(
+              styled_html,
+              page_size: "Letter",
+              margin: { top: 20, bottom: 20, left: 20, right: 20 },
+              encoding: "UTF-8"
+            )
+
+            Rails.logger.info "Pandoc+wkhtmltopdf preview conversion successful (#{pdf_content.bytesize} bytes)"
+            pdf_content
+          rescue StandardError => e
+            Rails.logger.error "Pandoc+wkhtmltopdf preview failed: #{e.message}"
+            nil
+          ensure
+            html_file.unlink
+          end
+        end
+
+        def convert_with_libreoffice_local(docx_path)
+          soffice_path = [
+            "/opt/homebrew/bin/soffice",
+            "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+            "/usr/local/bin/soffice"
+          ].find { |p| File.exist?(p) }
+
+          return nil unless soffice_path
+
+          output_dir = File.dirname(docx_path)
+
+          begin
+            system(soffice_path, "--headless", "--convert-to", "pdf", "--outdir", output_dir, docx_path)
+            pdf_path = docx_path.sub(/\.docx$/i, ".pdf")
+            return File.binread(pdf_path) if File.exist?(pdf_path)
+          rescue StandardError => e
+            Rails.logger.error "LibreOffice local preview failed: #{e.message}"
+          end
+
+          nil
+        end
+
+        def preview_styles
+          <<~CSS
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; line-height: 1.4; color: #333; }
+              h1, h2, h3 { color: #222; margin-top: 0.8em; margin-bottom: 0.4em; }
+              p { margin: 0.4em 0; text-align: justify; }
+              table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
+              th, td { border: 1px solid #999; padding: 6px; text-align: left; }
+              th { background-color: #f0f0f0; font-weight: bold; }
+            </style>
+          CSS
         end
       end
     end
