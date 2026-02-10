@@ -466,8 +466,8 @@ module Templates
 
         http = Net::HTTP.new(uri.host, uri.port)
         http.use_ssl = uri.scheme == "https"
-        http.read_timeout = 60
-        http.open_timeout = 30
+        http.read_timeout = 10
+        http.open_timeout = 5
 
         request = Net::HTTP::Post.new(uri.request_uri)
         request["Content-Type"] = "multipart/form-data; boundary=#{boundary}"

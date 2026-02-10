@@ -388,11 +388,20 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
 }
 
 // Componente para mostrar el detalle de una solicitud de certificación con documento
-function CertificationDetailWithDocument({ request, onClose, onApprove, onReject, onGenerateDocument, isGenerating }) {
+function CertificationDetailWithDocument({ request, onClose, onApprove, onReject, onGenerateDocument, isGenerating, generateError }) {
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
+  const [autoGenTriggered, setAutoGenTriggered] = useState(false)
   const queryClient = useQueryClient()
+
+  // Auto-generar documento si no existe
+  useEffect(() => {
+    if (!request.has_document && !autoGenTriggered && onGenerateDocument && !isGenerating) {
+      setAutoGenTriggered(true)
+      onGenerateDocument(request.id)
+    }
+  }, [request.id, request.has_document])
 
   // Cargar PDF
   useEffect(() => {
@@ -595,22 +604,43 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
             <FileText className="w-5 h-5 text-primary-600" />
             Documento de Certificacion
           </h3>
-          <div className="border rounded-lg p-6 text-center bg-blue-50 border-blue-200">
-            <FileText className="w-8 h-8 mx-auto text-blue-500 mb-2" />
-            <p className="text-blue-700 font-medium">Documento no generado</p>
-            <p className="text-blue-600 text-sm mt-1 mb-4">
-              Genera el documento de certificacion para revisarlo antes de aprobar
-            </p>
-            {onGenerateDocument && (
-              <Button
-                onClick={() => onGenerateDocument(request.id)}
-                loading={isGenerating}
-              >
-                <FileText className="w-4 h-4" />
-                Generar Documento
-              </Button>
-            )}
-          </div>
+          {isGenerating ? (
+            <div className="border rounded-lg p-8 text-center bg-gray-50">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary-500 mb-2" />
+              <p className="text-gray-700 font-medium">Generando documento...</p>
+              <p className="text-gray-500 text-sm mt-1">Esto puede tomar unos segundos</p>
+            </div>
+          ) : generateError ? (
+            <div className="border rounded-lg p-6 text-center bg-red-50 border-red-200">
+              <AlertCircle className="w-8 h-8 mx-auto text-red-500 mb-2" />
+              <p className="text-red-700 font-medium">Error al generar documento</p>
+              <p className="text-red-600 text-sm mt-1 mb-4">{generateError}</p>
+              {onGenerateDocument && (
+                <Button
+                  onClick={() => onGenerateDocument(request.id)}
+                >
+                  <FileText className="w-4 h-4" />
+                  Reintentar
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="border rounded-lg p-6 text-center bg-blue-50 border-blue-200">
+              <FileText className="w-8 h-8 mx-auto text-blue-500 mb-2" />
+              <p className="text-blue-700 font-medium">Documento no generado</p>
+              <p className="text-blue-600 text-sm mt-1 mb-4">
+                Genera el documento de certificacion para revisarlo antes de aprobar
+              </p>
+              {onGenerateDocument && (
+                <Button
+                  onClick={() => onGenerateDocument(request.id)}
+                >
+                  <FileText className="w-4 h-4" />
+                  Generar Documento
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -717,8 +747,8 @@ export default function Approvals() {
         }))
       }
     },
-    onError: (err) => {
-      alert(err.response?.data?.error || 'Error al generar documento')
+    onError: () => {
+      // Error shown in CertificationDetailWithDocument via generateError prop
     }
   })
 
@@ -1027,6 +1057,7 @@ export default function Approvals() {
             onReject={(req) => { setShowDetailModal(false); handleReject(req, 'certification') }}
             onGenerateDocument={(id) => generateDocMutation.mutate(id)}
             isGenerating={generateDocMutation.isPending}
+            generateError={generateDocMutation.isError ? (generateDocMutation.error?.response?.data?.error || 'Error al generar documento') : null}
           />
         ) : null}
       </Modal>
