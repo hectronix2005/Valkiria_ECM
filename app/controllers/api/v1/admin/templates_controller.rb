@@ -451,6 +451,9 @@ module Api
             html_content.gsub!(%r{src="#{Regexp.escape(media_dir)}/}, "src=\"file://#{media_dir}/")
             html_content.gsub!(/src="media\//, "src=\"file://#{media_dir}/media/")
 
+            # Strip Pandoc's default CSS (Georgia font, 20px, 36em max-width)
+            html_content.gsub!(%r{<style>\s*html\s*\{.*?</style>}m, "")
+
             styled_html = if html_content.include?("</head>")
                             html_content.sub("</head>", "#{preview_styles}</head>")
                           else
@@ -501,8 +504,10 @@ module Api
         def preview_styles
           <<~CSS
             <style>
-              body { max-width: 100%; line-height: 1.5; color: #000; }
-              p { margin: 0.3em 0; }
+              html { font-size: 12pt; color: #000; }
+              body { margin: 0; padding: 0; max-width: 100%; font-family: 'Arial', 'Helvetica Neue', sans-serif; line-height: 1.4; }
+              p { margin: 0.4em 0; }
+              strong { font-weight: bold; }
               table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
               td, th { border: 1px solid #999; padding: 5px; }
               th { background-color: #f5f5f5; }

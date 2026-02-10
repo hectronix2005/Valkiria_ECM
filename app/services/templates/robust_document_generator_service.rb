@@ -567,20 +567,28 @@ module Templates
     end
 
     def inject_pdf_styles(html_content)
-      # Low-specificity fallback styles that DON'T override Pandoc's DOCX-derived formatting.
-      # Pandoc preserves original Word styles as inline styles on elements;
-      # these only apply when no inline style exists.
-      additional_styles = <<~CSS
+      # Pandoc's --standalone mode injects its own default CSS (Georgia font, 20px size,
+      # 36em max-width, 50px padding) that completely overrides the DOCX's original formatting.
+      # Strip Pandoc's default <style> block and replace with document-appropriate styles.
+      cleaned_html = html_content.gsub(%r{<style>\s*html\s*\{.*?</style>}m, "")
+
+      document_styles = <<~CSS
         <style>
-          /* Minimal defaults - don't override Pandoc's preserved DOCX styles */
-          body {
-            max-width: 100%;
-            line-height: 1.5;
+          html {
+            font-size: 12pt;
             color: #000;
           }
-          /* Preserve Pandoc's text-indent and margin styles from DOCX */
-          p { margin: 0.3em 0; }
-          /* Only style tables that don't have Pandoc-applied styles */
+          body {
+            margin: 0;
+            padding: 0;
+            max-width: 100%;
+            font-family: 'Arial', 'Helvetica Neue', sans-serif;
+            line-height: 1.4;
+          }
+          p {
+            margin: 0.4em 0;
+          }
+          strong { font-weight: bold; }
           table {
             border-collapse: collapse;
             width: 100%;
@@ -591,25 +599,22 @@ module Templates
             padding: 5px;
           }
           th { background-color: #f5f5f5; }
-          /* Preserve image sizing from DOCX */
           img { max-width: 100%; height: auto; }
-          /* Pandoc wraps DOCX text alignment in div styles - preserve them */
-          div[style] p { margin: 0.2em 0; }
         </style>
       CSS
 
-      if html_content.include?("</head>")
-        html_content.sub("</head>", "#{additional_styles}</head>")
+      if cleaned_html.include?("</head>")
+        cleaned_html.sub("</head>", "#{document_styles}</head>")
       else
         <<~HTML
           <!DOCTYPE html>
           <html>
           <head>
             <meta charset="UTF-8">
-            #{additional_styles}
+            #{document_styles}
           </head>
           <body>
-            #{html_content}
+            #{cleaned_html}
           </body>
           </html>
         HTML
