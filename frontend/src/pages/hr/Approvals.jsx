@@ -132,7 +132,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
     return () => {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     }
-  }, [request.id])
+  }, [request.id, request.document_uuid, request.pdf_ready])
 
   const loadPdf = async () => {
     setPdfLoading(true)
@@ -388,7 +388,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
 }
 
 // Componente para mostrar el detalle de una solicitud de certificación con documento
-function CertificationDetailWithDocument({ request, onClose, onApprove, onReject }) {
+function CertificationDetailWithDocument({ request, onClose, onApprove, onReject, onGenerateDocument, isGenerating }) {
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
@@ -402,7 +402,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
     return () => {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     }
-  }, [request.id])
+  }, [request.id, request.document_uuid, request.pdf_ready])
 
   const loadPdf = async () => {
     setPdfLoading(true)
@@ -483,7 +483,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
       </div>
 
       {/* Document Preview Section */}
-      {request.has_document && (
+      {request.has_document ? (
         <div className="border-t pt-4">
           <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary-600" />
@@ -589,6 +589,29 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
             </div>
           )}
         </div>
+      ) : (
+        <div className="border-t pt-4">
+          <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary-600" />
+            Documento de Certificacion
+          </h3>
+          <div className="border rounded-lg p-6 text-center bg-blue-50 border-blue-200">
+            <FileText className="w-8 h-8 mx-auto text-blue-500 mb-2" />
+            <p className="text-blue-700 font-medium">Documento no generado</p>
+            <p className="text-blue-600 text-sm mt-1 mb-4">
+              Genera el documento de certificacion para revisarlo antes de aprobar
+            </p>
+            {onGenerateDocument && (
+              <Button
+                onClick={() => onGenerateDocument(request.id)}
+                loading={isGenerating}
+              >
+                <FileText className="w-4 h-4" />
+                Generar Documento
+              </Button>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Actions */}
@@ -683,11 +706,13 @@ export default function Approvals() {
     mutationFn: (id) => certificationService.generateDocument(id),
     onSuccess: (response) => {
       queryClient.invalidateQueries(['approvals'])
-      alert('Documento generado exitosamente')
+      queryClient.invalidateQueries(['approval-detail'])
       if (response.data?.data?.certification) {
         setSelectedRequest(prev => ({
           ...prev,
           document_uuid: response.data.data.certification.document_uuid,
+          has_document: true,
+          pdf_ready: true,
           status: response.data.data.certification.status
         }))
       }
@@ -1000,6 +1025,8 @@ export default function Approvals() {
             onClose={() => setShowDetailModal(false)}
             onApprove={(req) => { setShowDetailModal(false); handleApprove(req, 'certification') }}
             onReject={(req) => { setShowDetailModal(false); handleReject(req, 'certification') }}
+            onGenerateDocument={(id) => generateDocMutation.mutate(id)}
+            isGenerating={generateDocMutation.isPending}
           />
         ) : null}
       </Modal>
