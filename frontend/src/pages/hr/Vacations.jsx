@@ -33,7 +33,7 @@ const statusFilters = [
 ]
 
 // Componente de creación con template integrado
-function VacationRequestWizard({ onClose, onSuccess, balance }) {
+function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] }) {
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState({
     vacation_type: 'vacation',
@@ -275,6 +275,36 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
     }
   }, [formData.start_date, formData.end_date])
 
+  // Detectar fechas solapadas con solicitudes existentes
+  const overlapInfo = (() => {
+    if (!formData.start_date || !formData.end_date || !bookedRanges.length) return null
+    const newStart = new Date(formData.start_date + 'T00:00:00')
+    const newEnd = new Date(formData.end_date + 'T00:00:00')
+    if (newEnd < newStart) return null
+
+    for (const range of bookedRanges) {
+      const bStart = new Date(range.start_date + 'T00:00:00')
+      const bEnd = new Date(range.end_date + 'T00:00:00')
+      if (newStart <= bEnd && newEnd >= bStart) {
+        // Calcular días exactos que se solapan
+        const overlapStart = newStart > bStart ? newStart : bStart
+        const overlapEnd = newEnd < bEnd ? newEnd : bEnd
+        const conflictDays = []
+        const d = new Date(overlapStart)
+        while (d <= overlapEnd) {
+          if (d.getDay() !== 0 && d.getDay() !== 6) {
+            conflictDays.push(d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }))
+          }
+          d.setDate(d.getDate() + 1)
+        }
+        if (conflictDays.length > 0) {
+          return { requestNumber: range.request_number, days: conflictDays }
+        }
+      }
+    }
+    return null
+  })()
+
   // Cleanup PDF URL
   useEffect(() => {
     return () => {
@@ -284,6 +314,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
 
   const handleCreateRequest = (e) => {
     e.preventDefault()
+    if (overlapInfo) return // Block submit if overlap
     createMutation.mutate(formData)
   }
 
@@ -414,6 +445,25 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
             </div>
           )}
 
+          {overlapInfo && (
+            <div className="p-4 bg-red-50 border border-red-300 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium text-red-800">
+                    Fechas en conflicto con {overlapInfo.requestNumber}
+                  </p>
+                  <p className="text-sm text-red-700 mt-1">
+                    Ya tienes una solicitud que incluye: <strong>{overlapInfo.days.join(', ')}</strong>
+                  </p>
+                  <p className="text-sm text-red-600 mt-2">
+                    Selecciona fechas que no se solapen con solicitudes existentes.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {signError && !missingFields && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
               <AlertCircle className="w-4 h-4" />
@@ -478,7 +528,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance }) {
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancelar
             </Button>
-            <Button type="submit" loading={createMutation.isPending}>
+            <Button type="submit" loading={createMutation.isPending} disabled={!!overlapInfo}>
               Continuar
             </Button>
           </div>
@@ -1245,6 +1295,7 @@ export default function Vacations() {
           onClose={() => setShowNewModal(false)}
           onSuccess={() => queryClient.invalidateQueries(['vacations'])}
           balance={balance}
+          bookedRanges={balance?.booked_ranges || []}
         />
       </Modal>
 

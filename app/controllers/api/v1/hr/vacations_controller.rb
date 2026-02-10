@@ -361,8 +361,16 @@ module Api
             scheduled: emp.scheduled_vacation_days,
             enjoyed: emp.enjoyed_vacation_days,
             total_used: emp.total_used_vacation_days,
-            available: emp.available_vacation_days
+            available: emp.available_vacation_days,
+            booked_ranges: booked_date_ranges
           }
+        end
+
+        def booked_date_ranges
+          current_employee.vacation_requests
+            .where(:status.nin => %w[cancelled rejected])
+            .pluck(:start_date, :end_date, :request_number)
+            .map { |s, e, rn| { start_date: s&.iso8601, end_date: e&.iso8601, request_number: rn } }
         end
 
         def current_employee
