@@ -366,37 +366,143 @@ module Templates
       require "tempfile"
       require "fileutils"
 
-      # Write DOCX to temp file
       docx_temp = Tempfile.new(["template", ".docx"])
       docx_temp.binmode
       docx_temp.write(docx_content)
       docx_temp.close
 
-      temp_dir = Dir.mktmpdir
-
       begin
-        # Find LibreOffice
-        soffice_path = `which soffice`.strip
-        soffice_path = "/opt/homebrew/bin/soffice" if soffice_path.empty? && File.exist?("/opt/homebrew/bin/soffice")
-        soffice_path = "/usr/bin/soffice" if soffice_path.empty? && File.exist?("/usr/bin/soffice")
+        # Priority 1: LibreOffice (best quality, works locally)
+        result = convert_dimensions_with_libreoffice(docx_temp.path)
+        return result if result
 
-        unless File.exist?(soffice_path.to_s)
-          Rails.logger.warn "LibreOffice not found for PDF conversion"
-          return nil
-        end
+        # Priority 2: Pandoc + wkhtmltopdf (works on Heroku)
+        result = convert_dimensions_with_pandoc(docx_temp.path)
+        return result if result
 
-        # Convert to PDF
-        system(soffice_path, "--headless", "--convert-to", "pdf", "--outdir", temp_dir, docx_temp.path)
-
-        pdf_path = File.join(temp_dir, File.basename(docx_temp.path).sub(".docx", ".pdf"))
-
-        return nil unless File.exist?(pdf_path)
-
-        File.binread(pdf_path)
+        Rails.logger.warn "No PDF conversion method available for dimensions extraction"
+        nil
       ensure
         docx_temp.unlink
-        FileUtils.rm_rf(temp_dir)
       end
+    end
+
+    def convert_dimensions_with_libreoffice(docx_path)
+      soffice_path = find_libreoffice_path
+      return nil unless soffice_path
+
+      temp_dir = Dir.mktmpdir
+      user_profile = Dir.mktmpdir("lo_profile")
+
+      begin
+        env_vars = {
+          "HOME" => "/tmp",
+          "SAL_DISABLE_SYNCHRONOUS_PRINTER_DETECTION" => "1",
+          "SAL_DISABLE_COMPONENTITHREADING" => "1",
+          "SAL_USE_VCLPLUGIN" => "svp",
+          "DISPLAY" => ""
+        }
+
+        # Add Heroku-specific library paths if on Heroku
+        if File.exist?("/app/.apt/usr/lib/libreoffice")
+          lib_path = "/app/.apt/usr/lib/libreoffice/program:/app/.apt/usr/lib/x86_64-linux-gnu"
+          env_vars["LD_LIBRARY_PATH"] = "#{lib_path}:#{ENV['LD_LIBRARY_PATH']}"
+          env_vars["URE_BOOTSTRAP"] = "file:///app/.apt/usr/lib/libreoffice/program/fundamentalrc"
+          env_vars["FONTCONFIG_PATH"] = "/etc/fonts"
+        end
+
+        user_install = "-env:UserInstallation=file://#{user_profile}"
+        success = system(env_vars, soffice_path, "--headless", "--nologo",
+                         "--nofirststartwizard", "--norestore", user_install,
+                         "--convert-to", "pdf", "--outdir", temp_dir, docx_path)
+
+        pdf_files = Dir.glob(File.join(temp_dir, "*.pdf"))
+        if success && pdf_files.any?
+          Rails.logger.info "LibreOffice conversion successful for dimensions"
+          return File.binread(pdf_files.first)
+        end
+
+        Rails.logger.warn "LibreOffice conversion failed or produced no output"
+        nil
+      rescue StandardError => e
+        Rails.logger.warn "LibreOffice conversion error: #{e.message}"
+        nil
+      ensure
+        FileUtils.rm_rf(temp_dir)
+        FileUtils.rm_rf(user_profile)
+      end
+    end
+
+    def convert_dimensions_with_pandoc(docx_path)
+      pandoc_path = `which pandoc 2>/dev/null`.strip.presence
+      return nil unless pandoc_path
+
+      html_file = Tempfile.new(["dimensions", ".html"])
+      html_file.close
+      media_dir = Dir.mktmpdir("pandoc_media")
+
+      begin
+        system(pandoc_path, "-f", "docx", "-t", "html5", "--standalone",
+               "--extract-media=#{media_dir}", docx_path, "-o", html_file.path)
+
+        html_content = File.read(html_file.path)
+        return nil if html_content.empty?
+
+        # Fix image paths for wkhtmltopdf
+        html_content.gsub!(%r{src="#{Regexp.escape(media_dir)}/}, "src=\"file://#{media_dir}/")
+        html_content.gsub!(/src="media\//, "src=\"file://#{media_dir}/media/")
+
+        # Strip Pandoc's default CSS and apply document-appropriate styles
+        html_content.gsub!(%r{<style>\s*html\s*\{.*?</style>}m, "")
+
+        doc_styles = <<~CSS
+          <style>
+            html { font-size: 12pt; color: #000; }
+            body { margin: 0; padding: 0; max-width: 100%; font-family: 'Arial', 'Helvetica Neue', sans-serif; line-height: 1.4; }
+            p { margin: 0.4em 0; }
+            strong { font-weight: bold; }
+            table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+            td, th { border: 1px solid #999; padding: 5px; }
+            th { background-color: #f5f5f5; }
+            img { max-width: 100%; height: auto; }
+          </style>
+        CSS
+
+        styled_html = if html_content.include?("</head>")
+                        html_content.sub("</head>", "#{doc_styles}</head>")
+                      else
+                        "<html><head>#{doc_styles}</head><body>#{html_content}</body></html>"
+                      end
+
+        pdf_content = WickedPdf.new.pdf_from_string(
+          styled_html,
+          page_size: "Letter",
+          margin: { top: 15, bottom: 15, left: 20, right: 20 },
+          encoding: "UTF-8",
+          enable_local_file_access: true
+        )
+
+        Rails.logger.info "Pandoc+wkhtmltopdf conversion successful for dimensions (#{pdf_content.bytesize} bytes)"
+        pdf_content
+      rescue StandardError => e
+        Rails.logger.warn "Pandoc conversion error for dimensions: #{e.message}"
+        nil
+      ensure
+        html_file.unlink
+        FileUtils.rm_rf(media_dir)
+      end
+    end
+
+    def find_libreoffice_path
+      paths = [
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        "/opt/homebrew/bin/soffice",
+        "/usr/local/bin/soffice",
+        "/usr/bin/soffice",
+        "/app/.apt/usr/bin/soffice"
+      ]
+      found = paths.find { |p| File.exist?(p) }
+      found || `which soffice 2>/dev/null`.strip.presence
     end
 
     # Auto-assign template variables to system mappings based on name equivalence
