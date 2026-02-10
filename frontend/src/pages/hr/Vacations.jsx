@@ -8,6 +8,7 @@ import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
+import DatePicker from '../../components/ui/DatePicker'
 import {
   Calendar, Plus, Send, X, Eye, Filter, CalendarCheck, CalendarClock,
   CalendarDays, FileDown, FileText, PenTool, Users, CheckCircle, Clock,
@@ -61,6 +62,22 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
   })
 
   const template = templateData
+
+  // Expandir rangos de fechas reservadas a días individuales (Date objects)
+  const bookedDateObjects = (() => {
+    const dates = []
+    for (const range of bookedRanges) {
+      if (!range.start_date || !range.end_date) continue
+      const s = new Date(range.start_date + 'T00:00:00')
+      const e = new Date(range.end_date + 'T00:00:00')
+      const d = new Date(s)
+      while (d <= e) {
+        dates.push(new Date(d))
+        d.setDate(d.getDate() + 1)
+      }
+    }
+    return dates
+  })()
 
   // Crear solicitud (genera documento automáticamente)
   const createMutation = useMutation({
@@ -410,20 +427,20 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
           />
 
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <DatePicker
               label="Fecha Inicio"
-              type="date"
               value={formData.start_date}
               min={new Date().toISOString().split('T')[0]}
-              onChange={(e) => { setFormData({ ...formData, start_date: e.target.value }); setSignError(''); setMissingFields(null); }}
+              bookedDates={bookedDateObjects}
+              onChange={(val) => { setFormData(prev => ({ ...prev, start_date: val })); setSignError(''); setMissingFields(null); }}
               required
             />
-            <Input
+            <DatePicker
               label="Fecha Fin"
-              type="date"
               value={formData.end_date}
               min={formData.start_date || new Date().toISOString().split('T')[0]}
-              onChange={(e) => { setFormData({ ...formData, end_date: e.target.value }); setSignError(''); setMissingFields(null); }}
+              bookedDates={bookedDateObjects}
+              onChange={(val) => { setFormData(prev => ({ ...prev, end_date: val })); setSignError(''); setMissingFields(null); }}
               required
             />
           </div>
