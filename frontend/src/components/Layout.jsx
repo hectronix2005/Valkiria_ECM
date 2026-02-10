@@ -58,6 +58,7 @@ const hrAdminNavigation = [
   { name: 'Aprobaciones', href: '/hr/approvals', icon: CheckSquare, badge: true },
   { name: 'Empleados', href: '/hr/employees', icon: Users },
   { name: 'Documentacion', href: '/hr/documents', icon: FileCheck },
+  { name: 'Plantillas HR', href: '/admin/templates/hr', icon: FileText },
   { name: 'Dashboard HR', href: '/hr/dashboard', icon: BarChart3 },
 ]
 
