@@ -61,7 +61,7 @@ group :development, :test do
   gem "shoulda-matchers", "~> 6.4"
 
   # Code Quality
-  gem "rubocop", "~> 1.69", require: false
+  gem "rubocop", "~> 1.82", require: false
   gem "rubocop-performance", "~> 1.23", require: false
   gem "rubocop-rails", "~> 2.27", require: false
   gem "rubocop-rspec", "~> 3.3", require: false
