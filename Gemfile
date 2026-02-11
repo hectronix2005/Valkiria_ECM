@@ -58,7 +58,7 @@ group :development, :test do
   gem "faker", "~> 3.5"
   gem "mongoid-rspec", "~> 4.2"
   gem "rspec-rails", "~> 7.1"
-  gem "shoulda-matchers", "~> 6.4"
+  gem "shoulda-matchers", "~> 7.0"
 
   # Code Quality
   gem "rubocop", "~> 1.69", require: false
