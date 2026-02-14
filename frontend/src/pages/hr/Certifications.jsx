@@ -513,7 +513,7 @@ export default function Certifications() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
-  const { isHR, isAdmin } = useAuth()
+  const { isHR, hasAdminAccess: isAdmin } = useAuth()
 
   // Auto-open modal if navigated with openNew state (from Dashboard quick action)
   useEffect(() => {

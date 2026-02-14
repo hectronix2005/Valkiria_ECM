@@ -31,6 +31,13 @@ module Api
         current_user&.has_role?(:admin)
       end
 
+      # Admin-level access: admin OR legal (respects employee mode)
+      def admin_access?
+        return false if employee_mode?
+
+        current_user&.admin_access?
+      end
+
       # Check if user has HR role (respects employee mode)
       def hr_or_admin?
         return false if employee_mode?
@@ -92,7 +99,9 @@ module Api
 
       private
 
-      def user_not_authorized
+      def user_not_authorized(exception = nil)
+        @_error_already_logged = true
+        log_error(exception, severity: "warning") if exception
         render json: { error: "You are not authorized to perform this action" }, status: :forbidden
       end
     end

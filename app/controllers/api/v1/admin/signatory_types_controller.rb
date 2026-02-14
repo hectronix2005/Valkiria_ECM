@@ -130,7 +130,7 @@ module Api
         private
 
         def ensure_admin_or_hr
-          return if current_user.admin? || current_user.has_role?("hr")
+          return if current_user.admin_access? || current_user.has_role?("hr")
 
           render json: {
             error: "Acceso denegado. Se requieren privilegios de administrador o HR."

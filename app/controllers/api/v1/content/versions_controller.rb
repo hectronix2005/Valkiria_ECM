@@ -99,10 +99,14 @@ module Api
         end
 
         def handle_concurrency_error(exception)
+          @_error_already_logged = true
+          log_error(exception, severity: "warning")
           render_error(exception.message, status: :conflict)
         end
 
         def handle_locked_error(exception)
+          @_error_already_logged = true
+          log_error(exception, severity: "warning")
           render_error(exception.message, status: :locked)
         end
       end

@@ -54,6 +54,10 @@ class ApplicationPolicy
       user&.admin?
     end
 
+    def admin_access?
+      user&.admin_access?
+    end
+
     def super_admin?
       user&.super_admin?
     end
@@ -63,6 +67,10 @@ class ApplicationPolicy
 
   def admin?
     user&.admin?
+  end
+
+  def admin_access?
+    user&.admin_access?
   end
 
   def super_admin?

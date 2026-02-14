@@ -80,6 +80,20 @@ Rails.application.routes.draw do
       namespace :admin do
         resource :settings, only: [:show, :update]
 
+        # Permissions management (strict admin only)
+        resources :permissions, only: [:index, :update]
+
+        # Error logs
+        resources :error_logs, only: [:index, :show] do
+          member do
+            post :resolve
+          end
+          collection do
+            post :resolve_all
+            get :stats
+          end
+        end
+
         # Users management
         resources :users do
           member do

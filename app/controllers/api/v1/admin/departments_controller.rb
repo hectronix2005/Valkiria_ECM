@@ -155,7 +155,7 @@ module Api
         private
 
         def require_admin_or_hr
-          unless current_user.admin? || current_user.has_role?("hr") || current_user.has_role?("hr_manager")
+          unless current_user.admin_access? || current_user.has_role?("hr") || current_user.has_role?("hr_manager")
             render json: { error: "No autorizado" }, status: :forbidden
           end
         end

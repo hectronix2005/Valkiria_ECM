@@ -275,7 +275,7 @@ function MappingFormModal({ mapping, isOpen, onClose, onSuccess }) {
 
 // Variables Panel Component
 function VariablesPanel({ isOpen, onClose }) {
-  const { isAdmin } = useAuth()
+  const { hasAdminAccess: isAdmin } = useAuth()
   const queryClient = useQueryClient()
   const [showMappingModal, setShowMappingModal] = useState(false)
   const [editingMapping, setEditingMapping] = useState(null)
@@ -476,7 +476,7 @@ function VariablesPanel({ isOpen, onClose }) {
 }
 
 export default function HRDocuments() {
-  const { isAdmin, isHR } = useAuth()
+  const { hasAdminAccess: isAdmin, isHR } = useAuth()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 

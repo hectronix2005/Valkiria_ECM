@@ -936,7 +936,7 @@ const STATUS_CONFIG = {
 }
 
 // Formulario de contrato (paso 2: después de seleccionar template)
-function ContractForm({ template, thirdParties, thirdPartyTypes, onSubmit, onCancel, onBack, isLoading, onEditThirdParty, onCreateThirdParty, creatingThirdParty }) {
+function ContractForm({ template, thirdParties, thirdPartyTypes, onSubmit, onCancel, onBack, isLoading, thirdPartyVersion, onEditThirdParty, onCreateThirdParty, creatingThirdParty }) {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -989,7 +989,7 @@ function ContractForm({ template, thirdParties, thirdPartyTypes, onSubmit, onCan
     const timer = setTimeout(validateData, 500)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [template?.id, formData.third_party_id, formData.amount, formData.start_date, formData.end_date, formData.payment_terms || '', formData.payment_frequency || ''])
+  }, [template?.id, formData.third_party_id, formData.amount, formData.start_date, formData.end_date, formData.payment_terms || '', formData.payment_frequency || '', thirdPartyVersion])
 
   // Generate suggested title from contract type and third party
   const getSuggestedTitle = () => {
@@ -1504,6 +1504,11 @@ function ContractRow({ contract, onView, onEdit, onSubmit, onDownload, onViewDoc
         </div>
       </td>
 
+      {/* Fecha Solicitud */}
+      <td className="px-4 py-3">
+        <span className="text-sm text-gray-600">{formatDate(contract.created_at)}</span>
+      </td>
+
       {/* Tercero */}
       <td className="px-4 py-3">
         {contract.third_party ? (
@@ -1709,6 +1714,7 @@ function TableSkeleton() {
       {[1, 2, 3, 4, 5].map((i) => (
         <tr key={i} className="border-b border-gray-100 animate-pulse">
           <td className="px-4 py-3"><div className="h-10 bg-gray-200 rounded w-48" /></td>
+          <td className="px-4 py-3"><div className="h-5 bg-gray-200 rounded w-24" /></td>
           <td className="px-4 py-3"><div className="h-5 bg-gray-200 rounded w-32" /></td>
           <td className="px-4 py-3"><div className="h-5 bg-gray-200 rounded w-24" /></td>
           <td className="px-4 py-3"><div className="h-5 bg-gray-200 rounded w-28" /></td>
@@ -1736,6 +1742,7 @@ export default function Contracts() {
   const [detailContract, setDetailContract] = useState(null)
   const [editingThirdParty, setEditingThirdParty] = useState(null)
   const [missingFields, setMissingFields] = useState([])
+  const [thirdPartyVersion, setThirdPartyVersion] = useState(0)
   // Document viewer states
   const [documentContract, setDocumentContract] = useState(null)
   const [documentUrl, setDocumentUrl] = useState(null)
@@ -1747,7 +1754,7 @@ export default function Contracts() {
 
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { isAdmin } = useAuth()
+  const { hasAdminAccess: isAdmin } = useAuth()
 
   const { data, isLoading } = useQuery({
     queryKey: ['contracts', search, typeFilter, statusFilter, showArchived],
@@ -1865,6 +1872,10 @@ export default function Contracts() {
       queryClient.invalidateQueries(['third-parties-active'])
       setEditingThirdParty(null)
       setMissingFields([])
+      setThirdPartyVersion(v => v + 1)
+    },
+    onError: (error) => {
+      alert(error.response?.data?.errors?.join(', ') || error.response?.data?.error || 'Error al actualizar tercero')
     },
   })
 
@@ -2174,6 +2185,9 @@ export default function Contracts() {
                   Contrato
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Fecha Solicitud
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Tercero
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -2201,7 +2215,7 @@ export default function Contracts() {
             ) : contracts.length === 0 ? (
               <tbody>
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No hay contratos</h3>
                     <p className="text-gray-500 mb-4">
@@ -2274,8 +2288,14 @@ export default function Contracts() {
             onCancel={handleCloseCreateModal}
             onBack={() => setCreateStep(1)}
             isLoading={createMutation.isPending}
-            onEditThirdParty={(tp, missing) => {
-              setEditingThirdParty(tp)
+            thirdPartyVersion={thirdPartyVersion}
+            onEditThirdParty={async (tp, missing) => {
+              try {
+                const response = await thirdPartyService.get(tp.id)
+                setEditingThirdParty(response.data?.data || tp)
+              } catch {
+                setEditingThirdParty(tp)
+              }
               setMissingFields(missing)
             }}
             onCreateThirdParty={(data, onSuccess) => {
@@ -2681,12 +2701,27 @@ function ThirdPartyQuickEdit({ thirdParty, missingFields, onSubmit, onCancel, is
         { value: 'savings', label: 'Ahorros' },
         { value: 'checking', label: 'Corriente' },
       ]},
+      'legal_rep_id_city': { label: 'Ciudad de Expedición Cédula Rep. Legal', type: 'text', field: 'legal_rep_id_city' },
+      'legal_rep_id_type': { label: 'Tipo de Documento del Rep. Legal', type: 'select', field: 'legal_rep_id_type', options: [
+        { value: '', label: 'Seleccionar...' },
+        { value: 'CC', label: 'Cédula de Ciudadanía' },
+        { value: 'CE', label: 'Cédula de Extranjería' },
+        { value: 'PA', label: 'Pasaporte' },
+        { value: 'TI', label: 'Tarjeta de Identidad' },
+      ]},
+      'legal_rep_phone': { label: 'Teléfono del Representante Legal', type: 'text', field: 'legal_rep_phone' },
     }
     return fieldMap[fieldPath] || null
   }
 
-  // Get unique fields to show
-  const fieldsToShow = [...new Set(missingFields.map(m => m.field))].map(field => getFieldConfig(field)).filter(Boolean)
+  // Get unique fields to show - with fallback for unmapped fields
+  const fieldsToShow = [...new Set(missingFields.map(m => m.field))].map(field => {
+    return getFieldConfig(field) || {
+      label: missingFields.find(mf => mf.field === field)?.label || field.replace(/_/g, ' '),
+      type: 'text',
+      field: field
+    }
+  })
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">

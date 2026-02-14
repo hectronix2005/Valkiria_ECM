@@ -21,6 +21,8 @@ const SignatoryTypes = lazy(() => import('./pages/admin/SignatoryTypes'))
 const Settings = lazy(() => import('./pages/admin/Settings'))
 const Departments = lazy(() => import('./pages/admin/Departments'))
 const AdminUsers = lazy(() => import('./pages/admin/Users'))
+const ErrorLogs = lazy(() => import('./pages/admin/ErrorLogs'))
+const Permissions = lazy(() => import('./pages/admin/Permissions'))
 const Documents = lazy(() => import('./pages/Documents'))
 const Folders = lazy(() => import('./pages/Folders'))
 const ThirdParties = lazy(() => import('./pages/legal/ThirdParties'))
@@ -40,8 +42,8 @@ function PageLoader() {
 }
 
 // Protected Route wrapper
-function ProtectedRoute({ children, requireHR = false, requireApprover = false, requireAdmin = false }) {
-  const { isAuthenticated, loading, isHR, isSupervisor, isAdmin } = useAuth()
+function ProtectedRoute({ children, requireHR = false, requireApprover = false, requireAdmin = false, requireStrictAdmin = false }) {
+  const { isAuthenticated, loading, isHR, isSupervisor, isAdmin, hasAdminAccess } = useAuth()
 
   if (loading) {
     return (
@@ -55,7 +57,11 @@ function ProtectedRoute({ children, requireHR = false, requireApprover = false, 
     return <Navigate to="/login" replace />
   }
 
-  if (requireAdmin && !isAdmin && !isHR) {
+  if (requireStrictAdmin && !isAdmin) {
+    return <Navigate to="/" replace />
+  }
+
+  if (requireAdmin && !hasAdminAccess && !isHR) {
     return <Navigate to="/" replace />
   }
 
@@ -308,6 +314,26 @@ export default function App() {
         element={
           <ProtectedRoute requireAdmin>
             <SignatoryTypes />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Permissions (strict admin only) */}
+      <Route
+        path="/admin/permissions"
+        element={
+          <ProtectedRoute requireStrictAdmin>
+            <Permissions />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Error Logs (strict admin only) */}
+      <Route
+        path="/admin/error-logs"
+        element={
+          <ProtectedRoute requireStrictAdmin>
+            <ErrorLogs />
           </ProtectedRoute>
         }
       />

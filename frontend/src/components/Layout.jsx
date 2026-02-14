@@ -25,7 +25,9 @@ import {
   Building2,
   FileCheck,
   Network,
-  Check
+  Check,
+  AlertTriangle,
+  Lock
 } from 'lucide-react'
 
 function formatTimeAgo(dateString) {
@@ -76,6 +78,8 @@ const adminNavigation = [
   { name: 'Áreas', href: '/admin/departments', icon: Building2 },
   { name: 'Compañías', href: '/admin/companies', icon: Building2 },
   { name: 'Templates', href: '/admin/templates', icon: FileText },
+  { name: 'Permisos', href: '/admin/permissions', icon: Lock },
+  { name: 'Error Logs', href: '/admin/error-logs', icon: AlertTriangle },
 ]
 
 const legalNavigation = [
@@ -88,7 +92,7 @@ export default function Layout({ children }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState([])
-  const { user, logout, isAdmin, isHR, isSupervisor, employeeMode, toggleEmployeeMode, hasElevatedRole } = useAuth()
+  const { user, logout, isAdmin, isHR, isSupervisor, hasAdminAccess, employeeMode, toggleEmployeeMode, hasElevatedRole } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -121,7 +125,7 @@ export default function Layout({ children }) {
   const { data: legalApprovalsData } = useQuery({
     queryKey: ['legal-approvals-count'],
     queryFn: () => contractApprovalService.list(),
-    enabled: isAdmin || user?.roles?.includes('legal'),
+    enabled: hasAdminAccess,
     refetchInterval: 60000,
   })
 
@@ -354,7 +358,7 @@ export default function Layout({ children }) {
           {/* Only show elevated sections when NOT in employee mode */}
           {!employeeMode && (
             <>
-              {isAdmin && (
+              {hasAdminAccess && (
                 <CollapsibleSection
                   id="legal"
                   title="Gestión Legal"
@@ -363,11 +367,11 @@ export default function Layout({ children }) {
                 />
               )}
 
-              {isAdmin && (
+              {hasAdminAccess && (
                 <CollapsibleSection
                   id="system"
                   title="Sistema"
-                  items={adminNavigation}
+                  items={isAdmin ? adminNavigation : adminNavigation.filter(item => item.href !== '/admin/error-logs' && item.href !== '/admin/permissions')}
                   icon={Settings}
                 />
               )}

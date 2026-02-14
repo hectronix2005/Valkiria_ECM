@@ -138,6 +138,9 @@ module Templates
         "bank_name" => "Banco",
         "bank_account_number" => "Número de cuenta",
         "bank_account_type" => "Tipo de cuenta",
+        "legal_rep_id_city" => "Ciudad de expedición cédula rep. legal",
+        "legal_rep_id_type" => "Tipo de documento del rep. legal",
+        "legal_rep_phone" => "Teléfono del representante legal",
         # Contract
         "contract_number" => "Número de contrato",
         "title" => "Título",

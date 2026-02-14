@@ -2,10 +2,10 @@
 
 class SettingsPolicy < ApplicationPolicy
   def show?
-    admin? || has_permission?("settings.read")
+    admin_access? || has_permission?("settings.read")
   end
 
   def update?
-    admin? || has_permission?("settings.manage")
+    admin_access? || has_permission?("settings.manage")
   end
 end

@@ -19,7 +19,7 @@ module Legal
     end
 
     def destroy?
-      admin?
+      admin_access?
     end
 
     def toggle_active?

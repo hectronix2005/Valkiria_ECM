@@ -25,8 +25,8 @@ module Legal
     end
 
     def destroy?
-      # Admin can delete any contract (for testing/cleanup purposes)
-      return true if admin?
+      # Admin/legal can delete any contract (for testing/cleanup purposes)
+      return true if admin_access?
       # Others can only delete drafts they own
       return false unless record.draft?
       legal_staff? && owner?
@@ -70,12 +70,12 @@ module Legal
 
     def archive?
       return false unless %w[active expired terminated cancelled].include?(record.status)
-      admin?
+      admin_access?
     end
 
     def unarchive?
       return false unless record.archived?
-      admin?
+      admin_access?
     end
 
     def generate_document?

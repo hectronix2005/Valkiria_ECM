@@ -4,7 +4,9 @@ class ApplicationController < ActionController::API
   include Pundit::Authorization
 
   before_action :set_request_context
+  after_action :log_error_response
 
+  rescue_from StandardError, with: :handle_internal_error
   rescue_from Pundit::NotAuthorizedError, with: :handle_unauthorized
   rescue_from Mongoid::Errors::DocumentNotFound, with: :handle_not_found
   rescue_from ActionController::ParameterMissing, with: :handle_bad_request
@@ -38,7 +40,28 @@ class ApplicationController < ActionController::API
 
   private
 
+  # Automatically log ALL non-2xx responses — catches every controller error
+  # without needing to modify each controller individually
+  def log_error_response
+    return if response.successful? # 2xx — nothing to log
+    return if response.status == 304 # Not Modified
+    return if @_error_already_logged # Avoid double-logging rescue_from exceptions
+
+    ErrorLoggingService.log_response(
+      status: response.status,
+      body: response.body,
+      request: request,
+      user: try(:current_user),
+      controller_name: self.class.name,
+      action_name: action_name
+    )
+  rescue StandardError => e
+    Rails.logger.error("[ApplicationController] log_error_response failed: #{e.message}")
+  end
+
   def handle_unauthorized(exception)
+    @_error_already_logged = true
+    log_error(exception, severity: "warning")
     render_error(
       "You are not authorized to perform this action",
       status: :forbidden,
@@ -47,6 +70,8 @@ class ApplicationController < ActionController::API
   end
 
   def handle_not_found(exception)
+    @_error_already_logged = true
+    log_error(exception, severity: "warning")
     render_error(
       "Resource not found",
       status: :not_found,
@@ -55,10 +80,37 @@ class ApplicationController < ActionController::API
   end
 
   def handle_bad_request(exception)
+    @_error_already_logged = true
+    log_error(exception, severity: "warning")
     render_error(
       "Bad request",
       status: :bad_request,
       errors: [exception.message]
+    )
+  end
+
+  def handle_internal_error(exception)
+    @_error_already_logged = true
+    log_error(exception, severity: "error")
+    Rails.logger.error("#{exception.class}: #{exception.message}\n#{exception.backtrace&.first(10)&.join("\n")}")
+    render_error(
+      "Internal server error",
+      status: :internal_server_error,
+      errors: [exception.message]
+    )
+  end
+
+  def log_error(exception, severity: "error")
+    ErrorLoggingService.capture_with_context(
+      exception,
+      request: request,
+      user: try(:current_user),
+      extra: {
+        source: "controller",
+        severity: severity,
+        controller_name: self.class.name,
+        action_name: action_name
+      }
     )
   end
 end

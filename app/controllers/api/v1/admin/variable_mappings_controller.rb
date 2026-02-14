@@ -88,7 +88,7 @@ module Api
         # DELETE /api/v1/admin/variable_mappings/:id
         def destroy
           # Only admins can delete system mappings
-          if @mapping.system? && !current_user.admin?
+          if @mapping.system? && !current_user.admin_access?
             return render json: {
               error: "Solo administradores pueden eliminar mapeos del sistema"
             }, status: :forbidden
@@ -458,7 +458,7 @@ module Api
         end
 
         def ensure_admin_or_hr
-          return if current_user.admin? || current_user.has_role?("hr")
+          return if current_user.admin_access? || current_user.has_role?("hr")
 
           render json: {
             error: "Acceso denegado. Se requieren privilegios de administrador o HR."

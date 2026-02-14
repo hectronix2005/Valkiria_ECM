@@ -15,20 +15,20 @@ module Content
     end
 
     def update?
-      return true if admin?
+      return true if admin_access?
 
       has_permission?("documents.update") && same_organization?
     end
 
     def destroy?
-      return true if admin?
+      return true if admin_access?
 
       has_permission?("documents.delete") && same_organization?
     end
 
     class Scope < ApplicationPolicy::Scope
       def resolve
-        if admin?
+        if admin_access?
           scope.all
         elsif user&.organization_id
           scope.by_organization(user.organization_id)
@@ -41,7 +41,7 @@ module Content
     private
 
     def same_organization?
-      return true if admin?
+      return true if admin_access?
       return true unless record.organization_id
 
       record.organization_id == user&.organization_id

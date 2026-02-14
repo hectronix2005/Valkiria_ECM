@@ -175,7 +175,7 @@ function ContractCard({ contract }) {
 }
 
 export default function Dashboard() {
-  const { user, isHR, isSupervisor, isAdmin, hasPermission } = useAuth()
+  const { user, isHR, isSupervisor, hasAdminAccess: isAdmin, hasPermission } = useAuth()
   const navigate = useNavigate()
   const [previewDocument, setPreviewDocument] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)

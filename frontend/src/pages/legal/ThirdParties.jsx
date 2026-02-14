@@ -569,16 +569,40 @@ function ThirdPartyForm({ thirdParty, thirdPartyTypes, onSubmit, onCancel, isLoa
               value={formData.legal_rep_name || ''}
               onChange={(e) => handleChange('legal_rep_name', e.target.value)}
             />
+            <Select
+              label="Tipo de Documento"
+              value={formData.legal_rep_id_type || ''}
+              onChange={(e) => handleChange('legal_rep_id_type', e.target.value)}
+              options={[
+                { value: '', label: 'Seleccionar...' },
+                { value: 'CC', label: 'Cédula de Ciudadanía' },
+                { value: 'CE', label: 'Cédula de Extranjería' },
+                { value: 'PA', label: 'Pasaporte' },
+                { value: 'TI', label: 'Tarjeta de Identidad' },
+              ]}
+            />
             <Input
               label="Documento"
               value={formData.legal_rep_id_number || ''}
               onChange={(e) => handleChange('legal_rep_id_number', e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <Input
+              label="Ciudad de Expedición"
+              value={formData.legal_rep_id_city || ''}
+              onChange={(e) => handleChange('legal_rep_id_city', e.target.value)}
             />
             <Input
               label="Email"
               type="email"
               value={formData.legal_rep_email || ''}
               onChange={(e) => handleChange('legal_rep_email', e.target.value)}
+            />
+            <Input
+              label="Teléfono"
+              value={formData.legal_rep_phone || ''}
+              onChange={(e) => handleChange('legal_rep_phone', e.target.value)}
             />
           </div>
         </div>

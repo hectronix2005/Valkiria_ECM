@@ -1417,7 +1417,7 @@ function EmployeeTable({ employees, onView, sortColumn, sortDirection, onSort })
 }
 
 export default function Employees() {
-  const { isHR, isAdmin } = useAuth()
+  const { isHR, hasAdminAccess: isAdmin } = useAuth()
   const canEdit = isHR || isAdmin
 
   const [searchQuery, setSearchQuery] = useState('')

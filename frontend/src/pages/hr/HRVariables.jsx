@@ -875,7 +875,7 @@ function MappingRow({ mapping, onEdit, onToggle, onDelete, isAdmin, siblingNames
 }
 
 export default function VariableMappings() {
-  const { isAdmin } = useAuth()
+  const { hasAdminAccess: isAdmin } = useAuth()
   const queryClient = useQueryClient()
   const [showModal, setShowModal] = useState(false)
   const [showPendingModal, setShowPendingModal] = useState(false)

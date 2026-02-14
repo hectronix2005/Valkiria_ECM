@@ -335,4 +335,19 @@ export const userService = {
   getStats: () => api.get('/admin/users/stats'),
 }
 
+// Admin - Permissions
+export const permissionService = {
+  list: () => api.get('/admin/permissions'),
+  updateRole: (roleId, permissionIds) => api.patch(`/admin/permissions/${roleId}`, { permission_ids: permissionIds }),
+}
+
+// Admin - Error Logs
+export const errorLogService = {
+  list: (params) => api.get('/admin/error_logs', { params }),
+  get: (id) => api.get(`/admin/error_logs/${id}`),
+  resolve: (id) => api.post(`/admin/error_logs/${id}/resolve`),
+  resolveAll: (params) => api.post('/admin/error_logs/resolve_all', params),
+  stats: () => api.get('/admin/error_logs/stats'),
+}
+
 export default api

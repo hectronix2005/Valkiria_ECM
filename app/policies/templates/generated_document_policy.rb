@@ -19,7 +19,7 @@ module Templates
     end
 
     def destroy?
-      admin? # Only admins can delete generated documents
+      admin_access?
     end
 
     def sign?
@@ -29,7 +29,7 @@ module Templates
 
     class Scope < ApplicationPolicy::Scope
       def resolve
-        if user.admin? || hr_staff?
+        if user.admin_access? || hr_staff?
           # HR and Admin can see all documents in the organization
           scope.where(organization_id: user.organization_id)
         else
@@ -77,7 +77,7 @@ module Templates
     end
 
     def admin?
-      user.admin?
+      user.admin_access?
     end
   end
 end

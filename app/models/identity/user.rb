@@ -100,24 +100,29 @@ module Identity
       admin? # For now, admin is super_admin
     end
 
+    # Admin-level access: admin OR legal role (same permissions, except error logs)
+    def admin_access?
+      admin? || has_role?(:legal)
+    end
+
     def has_role?(role_name)
       roles.exists?(name: role_name)
     end
 
     def has_permission?(permission_name)
-      return true if admin?
+      return true if admin_access?
 
       roles.any? { |role| role.has_permission?(permission_name) }
     end
 
     def can?(action, resource)
-      return true if admin?
+      return true if admin_access?
 
       roles.any? { |role| role.can?(action, resource) }
     end
 
     def permission_names
-      return ["*"] if admin? # Admin has all permissions
+      return ["*"] if admin_access?
 
       roles.flat_map(&:permission_names).uniq
     end

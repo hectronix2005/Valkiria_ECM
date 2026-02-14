@@ -199,7 +199,7 @@ module Api
         end
 
         def require_admin
-          unless current_user.admin?
+          unless current_user.admin_access?
             render json: { error: "No autorizado. Se requiere rol de administrador." }, status: :forbidden
           end
         end
