@@ -187,6 +187,13 @@ module Templates
       signatory = signatory_uuid.present? ? template&.signatories&.where(uuid: signatory_uuid)&.first : nil
       return unless signatory
 
+      # DOCX files (macOS dev): skip PDF manipulation, signature is already stored in model metadata
+      # Frontend shows signature status via the signatures panel. PDF embedding happens on production.
+      if file_name&.end_with?(".docx")
+        Rails.logger.info "Skipping PDF signature embedding for DOCX file (signature saved as metadata)"
+        return
+      end
+
       pdf_content = file_content
       return unless pdf_content
 
@@ -401,7 +408,7 @@ module Templates
     end
 
     def file_name_base
-      file_name&.gsub(/\.pdf$/i, "") || "document"
+      file_name&.gsub(/\.(pdf|docx)$/i, "") || "document"
     end
 
     def pending_signatures_count

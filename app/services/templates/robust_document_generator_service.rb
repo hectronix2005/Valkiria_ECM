@@ -216,11 +216,14 @@ module Templates
         end
 
         # Try to convert to PDF
-        pdf_content = convert_to_pdf(output_file.path)
+        conversion_result = convert_to_pdf(output_file.path)
 
-        if pdf_content
+        if conversion_result.is_a?(Hash) && conversion_result[:format] == :docx
+          # macOS development: store DOCX directly as the document file
+          create_generated_document_docx(conversion_result[:content])
+        elsif conversion_result
           # PDF conversion successful - create complete document
-          create_generated_document(pdf_content, docx_content: nil)
+          create_generated_document(conversion_result, docx_content: nil)
         else
           # PDF conversion failed - store DOCX for local sync
           Rails.logger.warn "PDF conversion failed. Storing DOCX for local sync workflow."
@@ -425,6 +428,13 @@ module Templates
     end
 
     def convert_to_pdf(docx_path)
+      # In macOS development, skip all external converters — serve DOCX directly
+      # Frontend renders it with docx-preview for 100% original formatting
+      if Rails.env.development? && RbConfig::CONFIG["host_os"] =~ /darwin/i
+        Rails.logger.info "macOS development: skipping PDF conversion, serving DOCX directly"
+        return { content: File.binread(docx_path), format: :docx }
+      end
+
       # Priority 1: Gotenberg API (best fidelity — uses LibreOffice via HTTP, preserves DOCX formatting)
       if gotenberg_available?
         result = convert_with_gotenberg(docx_path)
@@ -688,10 +698,10 @@ module Templates
     end
 
     def libreoffice_available?
-      # Check common LibreOffice paths on macOS, Linux, and Heroku
+      # Check common LibreOffice paths
       paths_to_check = [
         "/app/.apt/usr/bin/soffice",  # Heroku apt buildpack path
-        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",  # macOS
         "/usr/local/bin/soffice",
         "/usr/bin/soffice",
         "/usr/bin/libreoffice"
@@ -710,14 +720,16 @@ module Templates
       user_profile = Dir.mktmpdir("lo_profile")
 
       begin
-        # Use -env:UserInstallation to avoid profile issues
+        # Use -env:UserInstallation to avoid profile issues and separate from any running GUI instance
         user_install = "-env:UserInstallation=file://#{user_profile}"
 
-        # Only set Heroku-specific environment variables on Linux (Heroku)
-        env_string = ""
+        args = ["--headless", "--invisible", "--nologo", "--nofirststartwizard", "--norestore",
+                user_install, "--convert-to", "pdf", "--outdir", output_dir, docx_path]
+
+        env = {}
         if RbConfig::CONFIG["host_os"] =~ /linux/i
           lib_path = "/app/.apt/usr/lib/libreoffice/program:/app/.apt/usr/lib/x86_64-linux-gnu"
-          env_vars = {
+          env = {
             "LD_LIBRARY_PATH" => "#{lib_path}:#{ENV['LD_LIBRARY_PATH']}",
             "HOME" => "/tmp",
             "FONTCONFIG_PATH" => "/etc/fonts",
@@ -727,12 +739,34 @@ module Templates
             "DISPLAY" => "",
             "URE_BOOTSTRAP" => "file:///app/.apt/usr/lib/libreoffice/program/fundamentalrc"
           }
-          env_string = env_vars.map { |k, v| "#{k}=#{v}" }.join(" ") + " "
         end
 
-        cmd = "#{env_string}\"#{@libreoffice_path}\" --headless --nologo --nofirststartwizard --norestore #{user_install} --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
-        Rails.logger.info "Running LibreOffice: #{cmd}"
-        result = `#{cmd}`
+        Rails.logger.info "Running LibreOffice headless: #{@libreoffice_path} #{args.join(' ')}"
+
+        # Use Process.spawn to run silently without opening macOS GUI/dock
+        out_r, out_w = IO.pipe
+        pid = Process.spawn(env, @libreoffice_path, *args,
+                            out: out_w, err: out_w, pgroup: true)
+        out_w.close
+
+        # Wait with timeout to prevent hanging
+        result = nil
+        begin
+          Timeout.timeout(60) do
+            Process.wait(pid)
+            result = out_r.read
+          end
+        rescue Timeout::Error
+          Process.kill("TERM", -Process.getpgid(pid)) rescue nil
+          sleep(1)
+          Process.kill("KILL", -Process.getpgid(pid)) rescue nil
+          Process.wait(pid) rescue nil
+          Rails.logger.error "LibreOffice conversion timed out after 60s"
+          return nil
+        ensure
+          out_r.close
+        end
+
         Rails.logger.info "LibreOffice conversion result: #{result}"
 
         pdf_files = Dir.glob(File.join(output_dir, "*.pdf"))
@@ -1103,6 +1137,32 @@ module Templates
         organization: context[:organization],
         requested_by: context[:user],
         draft_file_id: pdf_file.id,
+        file_name: file_name,
+        variable_values: variable_values,
+        source: context[:request],
+        employee: context[:employee],
+        pdf_generation_status: "completed"
+      )
+
+      generated_doc.initialize_signatures!
+      generated_doc
+    end
+
+    def create_generated_document_docx(docx_content)
+      file_name = "#{template.name.parameterize}-#{Time.current.strftime('%Y%m%d%H%M%S')}.docx"
+
+      docx_file = Mongoid::GridFs.put(
+        StringIO.new(docx_content),
+        filename: file_name,
+        content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      )
+
+      generated_doc = GeneratedDocument.create!(
+        name: file_name,
+        template: template,
+        organization: context[:organization],
+        requested_by: context[:user],
+        draft_file_id: docx_file.id,
         file_name: file_name,
         variable_values: variable_values,
         source: context[:request],

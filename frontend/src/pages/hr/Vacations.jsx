@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { vacationService, publicTemplateService } from '../../services/api'
@@ -9,6 +9,7 @@ import Modal from '../../components/ui/Modal'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
 import DatePicker from '../../components/ui/DatePicker'
+import { renderAsync } from 'docx-preview'
 import {
   Calendar, Plus, Send, X, Eye, Filter, CalendarCheck, CalendarClock,
   CalendarDays, FileDown, FileText, PenTool, Users, CheckCircle, Clock,
@@ -46,6 +47,9 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
   const [createdVacation, setCreatedVacation] = useState(null)
   const [documentInfo, setDocumentInfo] = useState(null)
   const [pdfUrl, setPdfUrl] = useState(null)
+  const [docxBlob, setDocxBlob] = useState(null) // DOCX blob for docx-preview rendering
+  const docxContainerRef = useRef(null)
+  const [docxSectionMetrics, setDocxSectionMetrics] = useState(null) // { offsetLeft, offsetTop, scale }
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
   const [missingFields, setMissingFields] = useState(null)
@@ -89,19 +93,27 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
       setDocumentInfo(doc)
       setSignError('')
 
-      // Cargar PDF para preview (solo si está listo)
+      // Cargar documento para preview (solo si está listo)
       if (vacation?.id && vacation?.pdf_ready) {
         try {
-          const pdfResponse = await vacationService.downloadDocument(vacation.id)
-          const blob = new Blob([pdfResponse.data], { type: 'application/pdf' })
-          setPdfUrl(URL.createObjectURL(blob))
+          const docResponse = await vacationService.downloadDocument(vacation.id)
+          const blob = docResponse.data // Already a Blob (responseType: 'blob')
+          const ct = blob.type || ''
+          if (ct.includes('wordprocessingml') || ct.includes('officedocument')) {
+            setDocxBlob(blob)
+            setPdfUrl(null)
+          } else {
+            setPdfUrl(URL.createObjectURL(blob))
+            setDocxBlob(null)
+          }
         } catch (e) {
-          console.error('Error loading PDF:', e)
+          console.error('Error loading document:', e)
           setPdfUrl(null)
+          setDocxBlob(null)
         }
       } else {
-        // PDF no disponible (pendiente de generación o sin documento)
         setPdfUrl(null)
+        setDocxBlob(null)
       }
 
       setStep(2)
@@ -155,15 +167,22 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
   })
 
   const reloadPdf = async () => {
-    // Only reload if PDF is available (not pending)
+    // Only reload if document is available (not pending)
     if (createdVacation?.id && createdVacation?.pdf_ready) {
       try {
-        const pdfResponse = await vacationService.downloadDocument(createdVacation.id)
-        const blob = new Blob([pdfResponse.data], { type: 'application/pdf' })
+        const docResponse = await vacationService.downloadDocument(createdVacation.id)
+        const blob = docResponse.data
+        const ct = blob.type || ''
         if (pdfUrl) URL.revokeObjectURL(pdfUrl)
-        setPdfUrl(URL.createObjectURL(blob))
+        if (ct.includes('wordprocessingml') || ct.includes('officedocument')) {
+          setDocxBlob(blob)
+          setPdfUrl(null)
+        } else {
+          setPdfUrl(URL.createObjectURL(blob))
+          setDocxBlob(null)
+        }
       } catch (e) {
-        console.error('Error reloading PDF:', e)
+        console.error('Error reloading document:', e)
       }
     }
   }
@@ -181,10 +200,19 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
         if (!cancelled && updated?.pdf_ready) {
           setCreatedVacation(updated)
           setDocumentInfo(doc)
-          // Load the PDF
-          const pdfRes = await vacationService.downloadDocument(createdVacation.id)
-          const blob = new Blob([pdfRes.data], { type: 'application/pdf' })
-          if (!cancelled) setPdfUrl(URL.createObjectURL(blob))
+          // Load the document
+          const docRes = await vacationService.downloadDocument(createdVacation.id)
+          const blob = docRes.data
+          const ct = blob.type || ''
+          if (!cancelled) {
+            if (ct.includes('wordprocessingml') || ct.includes('officedocument')) {
+              setDocxBlob(blob)
+              setPdfUrl(null)
+            } else {
+              setPdfUrl(URL.createObjectURL(blob))
+              setDocxBlob(null)
+            }
+          }
         }
       } catch (e) {
         console.error('Error polling document status:', e)
@@ -197,6 +225,36 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
 
     return () => { cancelled = true; clearInterval(interval) }
   }, [step, createdVacation?.id, createdVacation?.pdf_ready])
+
+  // Render DOCX with docx-preview when blob is available
+  useEffect(() => {
+    if (!docxBlob || !docxContainerRef.current) return
+    docxContainerRef.current.innerHTML = ''
+    setDocxSectionMetrics(null)
+    renderAsync(docxBlob, docxContainerRef.current, null, {
+      inWrapper: true,
+      ignoreWidth: false,
+      ignoreHeight: false,
+      ignoreFonts: false,
+      breakPages: true,
+      ignoreLastRenderedPageBreak: false,
+      experimental: true,
+      trimXmlDeclaration: true,
+      useBase64URL: true,
+    }).then(() => {
+      // Measure the rendered section to map TemplateEdit coordinates (612px system)
+      const section = docxContainerRef.current?.querySelector('section.docx')
+      if (section) {
+        const container = docxContainerRef.current
+        const sectionRect = section.getBoundingClientRect()
+        const containerRect = container.getBoundingClientRect()
+        const offsetLeft = sectionRect.left - containerRect.left + container.scrollLeft
+        const offsetTop = sectionRect.top - containerRect.top + container.scrollTop
+        const scale = sectionRect.width / 612 // TemplateEdit uses 612px coordinate system
+        setDocxSectionMetrics({ offsetLeft, offsetTop, scale })
+      }
+    }).catch(e => console.error('Error rendering DOCX:', e))
+  }, [docxBlob])
 
   // Calcular Domingo de Pascua (Algoritmo de Butcher)
   const getEasterSunday = (year) => {
@@ -380,9 +438,9 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
   }
 
   const handleFinish = () => {
-    queryClient.invalidateQueries(['vacations'])
     onSuccess?.()
     onClose()
+    window.location.reload()
   }
 
   const openPdfInNewTab = () => {
@@ -609,7 +667,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
             </div>
           </div>
 
-          {/* Documento PDF */}
+          {/* Documento Preview (PDF o DOCX) */}
           {pdfUrl ? (
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-gray-100 px-4 py-2 flex items-center justify-between">
@@ -625,11 +683,42 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
                 title="Vista previa del documento"
               />
             </div>
+          ) : docxBlob ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-4 py-2">
+                <span className="text-sm font-medium text-gray-700">Documento de Solicitud</span>
+              </div>
+              <div className="relative max-h-[500px] overflow-auto bg-white">
+                <div ref={docxContainerRef} style={{ position: 'relative' }} />
+                {/* Signature overlays — coordinates mapped from TemplateEdit 612px system to rendered section */}
+                {docxSectionMetrics && documentInfo?.signatures?.filter(s => s.signed && s.signature_image && s.position_box).map((sig, idx) => {
+                  const box = sig.position_box
+                  const m = docxSectionMetrics
+                  return (
+                    <div key={idx} style={{
+                      position: 'absolute',
+                      left: m.offsetLeft + box.x * m.scale,
+                      top: m.offsetTop + box.y * m.scale,
+                      width: box.width * m.scale,
+                      height: box.height * m.scale,
+                      zIndex: 10,
+                      pointerEvents: 'none',
+                    }}>
+                      <img
+                        src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                        alt={`Firma de ${sig.signed_by}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           ) : createdVacation?.pdf_ready === false ? (
             <div className="border rounded-lg p-8 text-center bg-amber-50 border-amber-200">
               <Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-500 mb-2" />
               <p className="text-amber-700 font-medium">Generando documento...</p>
-              <p className="text-amber-600 text-sm mt-1">El PDF se está generando. Se cargará automáticamente cuando esté listo.</p>
+              <p className="text-amber-600 text-sm mt-1">El documento se está generando. Se cargará automáticamente cuando esté listo.</p>
             </div>
           ) : (
             <div className="border rounded-lg p-8 text-center bg-gray-50">
@@ -646,36 +735,47 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
             </h4>
             <div className="space-y-3">
               {documentInfo?.signatures?.map((sig, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
-                    }`}>
-                      {sig.signed ? <CheckCircle className="w-5 h-5" /> : idx + 1}
+                <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {sig.signed ? <CheckCircle className="w-5 h-5" /> : idx + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{sig.label}</p>
+                        {sig.signed && (
+                          <p className="text-xs text-green-600">
+                            Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{sig.label}</p>
-                      {sig.signed && (
-                        <p className="text-xs text-green-600">
-                          Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
-                        </p>
-                      )}
-                    </div>
+                    {sig.signatory_type_code === 'employee' && !sig.signed && (
+                      <Button
+                        size="sm"
+                        onClick={handleSign}
+                        loading={signMutation.isPending}
+                      >
+                        <PenTool className="w-4 h-4" />
+                        Firmar
+                      </Button>
+                    )}
+                    {sig.signatory_type_code !== 'employee' && !sig.signed && (
+                      <span className="text-xs text-gray-500 px-2 py-1 bg-gray-200 rounded">
+                        Pendiente
+                      </span>
+                    )}
                   </div>
-                  {sig.signatory_type_code === 'employee' && !sig.signed && (
-                    <Button
-                      size="sm"
-                      onClick={handleSign}
-                      loading={signMutation.isPending}
-                    >
-                      <PenTool className="w-4 h-4" />
-                      Firmar
-                    </Button>
-                  )}
-                  {sig.signatory_type_code !== 'employee' && !sig.signed && (
-                    <span className="text-xs text-gray-500 px-2 py-1 bg-gray-200 rounded">
-                      Pendiente
-                    </span>
+                  {sig.signed && sig.signature_image && (
+                    <div className="mt-2 ml-11 p-2 bg-white border border-gray-200 rounded inline-block">
+                      <img
+                        src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                        alt={`Firma de ${sig.signed_by}`}
+                        className="h-12 w-auto"
+                      />
+                    </div>
                   )}
                 </div>
               ))}
@@ -891,6 +991,9 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
 // Componente para ver el detalle de una solicitud con documento
 function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
   const [pdfUrl, setPdfUrl] = useState(null)
+  const [docxBlob, setDocxBlob] = useState(null)
+  const docxDetailRef = useRef(null)
+  const [docxDetailMetrics, setDocxDetailMetrics] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [detailData, setDetailData] = useState(null)
   const [documentInfo, setDocumentInfo] = useState(null)
@@ -959,14 +1062,50 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
     setPdfLoading(true)
     try {
       const response = await vacationService.downloadDocument(vacation.id)
-      const blob = new Blob([response.data], { type: 'application/pdf' })
-      setPdfUrl(URL.createObjectURL(blob))
+      const blob = response.data
+      const ct = blob.type || ''
+      if (ct.includes('wordprocessingml') || ct.includes('officedocument')) {
+        setDocxBlob(blob)
+        setPdfUrl(null)
+      } else {
+        setPdfUrl(URL.createObjectURL(blob))
+        setDocxBlob(null)
+      }
     } catch (err) {
-      console.error('Error loading PDF:', err)
+      console.error('Error loading document:', err)
     } finally {
       setPdfLoading(false)
     }
   }
+
+  // Render DOCX with docx-preview
+  useEffect(() => {
+    if (!docxBlob || !docxDetailRef.current) return
+    docxDetailRef.current.innerHTML = ''
+    setDocxDetailMetrics(null)
+    renderAsync(docxBlob, docxDetailRef.current, null, {
+      inWrapper: true,
+      ignoreWidth: false,
+      ignoreHeight: false,
+      ignoreFonts: false,
+      breakPages: true,
+      ignoreLastRenderedPageBreak: false,
+      experimental: true,
+      trimXmlDeclaration: true,
+      useBase64URL: true,
+    }).then(() => {
+      const section = docxDetailRef.current?.querySelector('section.docx')
+      if (section) {
+        const container = docxDetailRef.current
+        const sectionRect = section.getBoundingClientRect()
+        const containerRect = container.getBoundingClientRect()
+        const offsetLeft = sectionRect.left - containerRect.left + container.scrollLeft
+        const offsetTop = sectionRect.top - containerRect.top + container.scrollTop
+        const scale = sectionRect.width / 612
+        setDocxDetailMetrics({ offsetLeft, offsetTop, scale })
+      }
+    }).catch(e => console.error('Error rendering DOCX:', e))
+  }, [docxBlob])
 
   const openPdfInNewTab = () => {
     if (pdfUrl) {
@@ -1024,7 +1163,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
             Documento de Solicitud
           </h3>
 
-          {/* PDF Preview */}
+          {/* Document Preview (PDF or DOCX) */}
           {pdfLoading ? (
             <div className="border rounded-lg p-8 text-center bg-gray-50">
               <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
@@ -1045,11 +1184,41 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                 title="Vista previa del documento"
               />
             </div>
+          ) : docxBlob ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-4 py-2">
+                <span className="text-sm font-medium text-gray-700">Vista Previa del Documento</span>
+              </div>
+              <div className="relative max-h-[400px] overflow-auto bg-white">
+                <div ref={docxDetailRef} style={{ position: 'relative' }} />
+                {docxDetailMetrics && documentInfo?.signatures?.filter(s => s.signed && s.signature_image && s.position_box).map((sig, idx) => {
+                  const box = sig.position_box
+                  const m = docxDetailMetrics
+                  return (
+                    <div key={idx} style={{
+                      position: 'absolute',
+                      left: m.offsetLeft + box.x * m.scale,
+                      top: m.offsetTop + box.y * m.scale,
+                      width: box.width * m.scale,
+                      height: box.height * m.scale,
+                      zIndex: 10,
+                      pointerEvents: 'none',
+                    }}>
+                      <img
+                        src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                        alt={`Firma de ${sig.signed_by}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           ) : vacation.pdf_ready === false ? (
             <div className="border rounded-lg p-6 text-center bg-amber-50 border-amber-200">
               <AlertCircle className="w-8 h-8 mx-auto text-amber-500 mb-2" />
               <p className="text-amber-700 font-medium">Documento pendiente de generación</p>
-              <p className="text-amber-600 text-sm mt-1">El PDF se generará próximamente</p>
+              <p className="text-amber-600 text-sm mt-1">El documento se generará próximamente</p>
             </div>
           ) : (
             <div className="border rounded-lg p-6 text-center bg-gray-50">
@@ -1067,41 +1236,52 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
               </h4>
               <div className="space-y-3">
                 {documentInfo.signatures.map((sig, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
-                      }`}>
-                        {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{sig.label}</p>
-                        <p className="text-xs text-gray-500">
-                          {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
-                          {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
-                          {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
-                        </p>
-                        {sig.signed && (
-                          <p className="text-xs text-green-600 mt-0.5">
-                            Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                  <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                          sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                        }`}>
+                          {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{sig.label}</p>
+                          <p className="text-xs text-gray-500">
+                            {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
+                            {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
+                            {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
                           </p>
-                        )}
+                          {sig.signed && (
+                            <p className="text-xs text-green-600 mt-0.5">
+                              Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                            </p>
+                          )}
+                        </div>
                       </div>
+                      {sig.signatory_type_code === 'employee' && !sig.signed && (
+                        <Button
+                          size="sm"
+                          onClick={handleSign}
+                          loading={signMutation.isPending}
+                        >
+                          <PenTool className="w-4 h-4" />
+                          Firmar
+                        </Button>
+                      )}
+                      {sig.signatory_type_code !== 'employee' && !sig.signed && (
+                        <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                          Pendiente
+                        </span>
+                      )}
                     </div>
-                    {sig.signatory_type_code === 'employee' && !sig.signed && (
-                      <Button
-                        size="sm"
-                        onClick={handleSign}
-                        loading={signMutation.isPending}
-                      >
-                        <PenTool className="w-4 h-4" />
-                        Firmar
-                      </Button>
-                    )}
-                    {sig.signatory_type_code !== 'employee' && !sig.signed && (
-                      <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
-                        Pendiente
-                      </span>
+                    {sig.signed && sig.signature_image && (
+                      <div className="mt-2 ml-11 p-2 bg-white border border-gray-200 rounded inline-block">
+                        <img
+                          src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                          alt={`Firma de ${sig.signed_by}`}
+                          className="h-12 w-auto"
+                        />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -1170,7 +1350,7 @@ export default function Vacations() {
   const cancelMutation = useMutation({
     mutationFn: (id) => vacationService.cancel(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['vacations'])
+      window.location.reload()
     },
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al cancelar la solicitud')
@@ -1180,7 +1360,7 @@ export default function Vacations() {
   const deleteMutation = useMutation({
     mutationFn: (id) => vacationService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['vacations'])
+      window.location.reload()
     },
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al eliminar la solicitud')

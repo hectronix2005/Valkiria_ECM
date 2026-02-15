@@ -274,16 +274,24 @@ module Api
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
 
-          # Get PDF content from GridFS
-          pdf_content = generated_doc.file_content
-          unless pdf_content
-            return render json: { error: "Archivo PDF no encontrado" }, status: :not_found
+          # Get document content from GridFS
+          file_content = generated_doc.file_content
+          unless file_content
+            return render json: { error: "Archivo no encontrado" }, status: :not_found
           end
 
-          send_data pdf_content,
-                    type: "application/pdf",
-                    filename: "solicitud_vacaciones_#{@vacation.request_number}.pdf",
-                    disposition: "inline"
+          # Detect format from file_name extension
+          if generated_doc.file_name&.end_with?(".docx")
+            send_data file_content,
+                      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                      filename: "solicitud_vacaciones_#{@vacation.request_number}.docx",
+                      disposition: "inline"
+          else
+            send_data file_content,
+                      type: "application/pdf",
+                      filename: "solicitud_vacaciones_#{@vacation.request_number}.pdf",
+                      disposition: "inline"
+          end
         end
 
         private
@@ -509,13 +517,30 @@ module Api
             has_pdf: doc.draft_file_id.present? || doc.final_file_id.present?,
             employee_signed: employee_has_signed?(doc),
             signatures: doc.signatures.map do |sig|
-              {
+              sig_data = {
                 signatory_type_code: sig["signatory_type_code"],
                 label: sig["label"],
                 signed: sig["signed_at"].present?,
                 signed_at: sig["signed_at"],
                 signed_by: sig["signed_by_name"]
               }
+              # Include signature image and position for signed entries
+              if sig["signed_at"].present? && sig["signature_id"].present?
+                user_sig = ::Identity::UserSignature.where(uuid: sig["signature_id"]).first
+                sig_data[:signature_image] = user_sig&.to_image_data
+              end
+              # Include position data from template signatory
+              if sig["signatory_id"].present?
+                tmpl_sig = doc.template&.signatories&.where(uuid: sig["signatory_id"])&.first
+                if tmpl_sig
+                  sig_data[:position_box] = {
+                    x: tmpl_sig.x_position, y: tmpl_sig.y_position,
+                    width: tmpl_sig.width, height: tmpl_sig.height,
+                    page: tmpl_sig.page_number
+                  }
+                end
+              end
+              sig_data
             end
           }
         end
