@@ -50,6 +50,7 @@ module System
     index({ resolved: 1 })
     index({ user_id: 1 })
     index({ request_id: 1 })
+    index({ error_class: 1, created_at: -1 })
 
     # Validations
     validates :message, presence: true
@@ -73,6 +74,14 @@ module System
         resolved_at: Time.current,
         resolved_by: user.respond_to?(:email) ? user.email : user.to_s
       )
+    end
+
+    def auto_resolved?
+      metadata&.dig("diagnosis", "auto_resolved") == true
+    end
+
+    def diagnosis
+      metadata&.dig("diagnosis") || {}
     end
 
     def self.cleanup_old!(days = 90)

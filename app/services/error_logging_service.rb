@@ -3,7 +3,7 @@
 class ErrorLoggingService
   # Log a Ruby exception (500s, unhandled errors)
   def self.capture(exception, context = {})
-    System::ErrorLog.create(
+    log = System::ErrorLog.create(
       error_class: exception.class.name,
       message: exception.message.truncate(5000),
       backtrace: Array(exception.backtrace).first(50),
@@ -23,13 +23,15 @@ class ErrorLoggingService
       request_id: context[:request_id] || Current.request_id,
       metadata: context[:metadata] || {}
     )
+    run_diagnosis(log) if log.persisted?
+    log
   rescue StandardError => e
     Rails.logger.error("[ErrorLoggingService] Failed to log error: #{e.message}")
   end
 
   # Log a non-exception event (validation failure, business logic error, process failure)
   def self.log_event(message, context = {})
-    System::ErrorLog.create(
+    log = System::ErrorLog.create(
       error_class: context[:error_class] || context[:event_type]&.titleize || "ProcessFailure",
       message: message.to_s.truncate(5000),
       backtrace: [],
@@ -50,6 +52,8 @@ class ErrorLoggingService
       request_id: context[:request_id] || Current.request_id,
       metadata: context[:metadata] || {}
     )
+    run_diagnosis(log) if log.persisted?
+    log
   rescue StandardError => e
     Rails.logger.error("[ErrorLoggingService] Failed to log event: #{e.message}")
   end
@@ -140,7 +144,7 @@ class ErrorLoggingService
 
   # Convenience: capture frontend error reported by browser
   def self.capture_frontend_error(message:, error_class: "FrontendError", backtrace: [], url: nil, user_agent: nil, metadata: {})
-    System::ErrorLog.create(
+    log = System::ErrorLog.create(
       error_class: error_class.to_s.truncate(500),
       message: message.to_s.truncate(5000),
       backtrace: Array(backtrace).first(50),
@@ -153,6 +157,8 @@ class ErrorLoggingService
       request_id: Current.request_id,
       metadata: metadata
     )
+    run_diagnosis(log) if log.persisted?
+    log
   rescue StandardError => e
     Rails.logger.error("[ErrorLoggingService] Failed to log frontend error: #{e.message}")
   end
@@ -202,13 +208,21 @@ class ErrorLoggingService
 
   def self.classify_severity(status)
     case status
-    when 400..404 then "info"
+    when 401, 403 then "warning"
+    when 400, 402, 404 then "info"
     when 405..499 then "warning"
     when 500..599 then "error"
     else "info"
     end
   end
   private_class_method :classify_severity
+
+  def self.run_diagnosis(log)
+    ErrorDiagnosticService.diagnose(log)
+  rescue StandardError => e
+    Rails.logger.error("[ErrorLoggingService] Diagnosis failed: #{e.message}")
+  end
+  private_class_method :run_diagnosis
 
   def self.sanitize_params(params)
     sensitive_keys = %w[password password_confirmation token secret api_key current_password new_password]

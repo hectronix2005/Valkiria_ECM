@@ -88,6 +88,14 @@ module Api
           render json: { message: "#{count} errores marcados como resueltos", count: count }
         end
 
+        # GET /api/v1/admin/error_logs/patterns
+        def patterns
+          days = (params[:days] || 7).to_i
+          limit = [(params[:limit] || 50).to_i, 100].min
+
+          render json: { data: ErrorDiagnosticService.patterns(days: days, limit: limit) }
+        end
+
         # GET /api/v1/admin/error_logs/stats
         def stats
           all_logs = ::System::ErrorLog.all
@@ -138,6 +146,7 @@ module Api
         end
 
         def error_log_response(log, full: false)
+          diag = log.diagnosis
           response = {
             id: log.id.to_s,
             uuid: log.uuid,
@@ -153,6 +162,9 @@ module Api
             request_method: log.request_method,
             user_email: log.user_email,
             resolved: log.resolved,
+            resolved_by: log.resolved_by,
+            auto_resolved: diag["auto_resolved"] == true,
+            priority: diag["priority"],
             created_at: log.created_at&.iso8601
           }
 

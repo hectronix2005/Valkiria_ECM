@@ -791,78 +791,99 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
   )
 }
 
-function VacationCard({ vacation, onSubmit, onCancel, onDelete, onView, onDownload, onSign }) {
-  const typeLabels = {
-    vacation: 'Vacaciones',
-    personal: 'Día Personal',
-    sick: 'Enfermedad',
-    bereavement: 'Duelo',
-    unpaid: 'Sin Goce',
-  }
+const typeLabels = {
+  vacation: 'Vacaciones',
+  personal: 'Día Personal',
+  sick: 'Enfermedad',
+  bereavement: 'Duelo',
+  unpaid: 'Sin Goce',
+}
 
+function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDownload, onSign }) {
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-primary-50 rounded-lg">
-              <Calendar className="w-5 h-5 text-primary-600" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-900">
-                {typeLabels[vacation.vacation_type] || vacation.vacation_type}
-              </p>
-              <p className="text-sm text-gray-500">
-                {vacation.request_number}
-              </p>
-              <p className="text-sm text-gray-600 mt-1">
-                {new Date(vacation.start_date).toLocaleDateString('es-ES')} - {new Date(vacation.end_date).toLocaleDateString('es-ES')}
-              </p>
-              <p className="text-sm font-medium text-primary-600 mt-1">
-                {vacation.days_requested} días
-              </p>
-            </div>
-          </div>
-          <Badge status={vacation.status} />
-        </div>
+    <Card>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Solicitud</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Tipo</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Período</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500">Días</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Fecha Solicitud</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500">Estado</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {vacations.map((vacation) => (
+              <tr key={vacation.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-4 py-3">
+                  <span className="font-medium text-gray-900">{vacation.request_number}</span>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  {typeLabels[vacation.vacation_type] || vacation.vacation_type}
+                </td>
+                <td className="px-4 py-3 text-gray-600">
+                  {new Date(vacation.start_date).toLocaleDateString('es-ES')} - {new Date(vacation.end_date).toLocaleDateString('es-ES')}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="font-semibold text-primary-600">{vacation.days_requested}</span>
+                </td>
+                <td className="px-4 py-3 text-gray-500">
+                  {vacation.created_at
+                    ? new Date(vacation.created_at).toLocaleString('es-ES', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                      })
+                    : '—'}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <Badge status={vacation.status} />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => onView(vacation)} title="Ver detalles">
+                      <Eye className="w-4 h-4" />
+                    </Button>
 
-        <div className="flex justify-end gap-1 mt-4 pt-4 border-t border-gray-100">
-          <Button variant="ghost" size="sm" onClick={() => onView(vacation)} title="Ver detalles">
-            <Eye className="w-4 h-4" />
-          </Button>
+                    {vacation.pdf_ready && (
+                      <Button variant="ghost" size="sm" onClick={() => onDownload(vacation.id)} title="Descargar documento">
+                        <FileDown className="w-4 h-4" />
+                      </Button>
+                    )}
 
-          {vacation.pdf_ready && (
-            <Button variant="ghost" size="sm" onClick={() => onDownload(vacation.id)} title="Descargar documento">
-              <FileDown className="w-4 h-4" />
-            </Button>
-          )}
+                    {vacation.status === 'draft' && vacation.needs_employee_signature && (
+                      <Button variant="secondary" size="sm" onClick={() => onSign(vacation)} title="Firmar documento">
+                        <PenTool className="w-4 h-4" />
+                        Firmar
+                      </Button>
+                    )}
 
-          {vacation.status === 'draft' && vacation.needs_employee_signature && (
-            <Button variant="secondary" size="sm" onClick={() => onSign(vacation)} title="Firmar documento">
-              <PenTool className="w-4 h-4" />
-              Firmar
-            </Button>
-          )}
+                    {vacation.status === 'draft' && !vacation.needs_employee_signature && (
+                      <Button variant="primary" size="sm" onClick={() => onSubmit(vacation.id)} title="Enviar solicitud">
+                        <Send className="w-4 h-4" />
+                      </Button>
+                    )}
 
-          {vacation.status === 'draft' && !vacation.needs_employee_signature && (
-            <Button variant="primary" size="sm" onClick={() => onSubmit(vacation.id)} title="Enviar solicitud">
-              <Send className="w-4 h-4" />
-            </Button>
-          )}
+                    {['draft', 'pending'].includes(vacation.status) && (
+                      <Button variant="ghost" size="sm" onClick={() => onCancel(vacation.id)} title="Cancelar solicitud">
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
 
-          {['draft', 'pending'].includes(vacation.status) && (
-            <Button variant="ghost" size="sm" onClick={() => onCancel(vacation.id)} title="Cancelar solicitud">
-              <X className="w-4 h-4" />
-            </Button>
-          )}
-
-          {vacation.can_delete && (
-            <Button variant="danger" size="sm" onClick={() => onDelete(vacation.id)} title="Eliminar solicitud">
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          )}
-        </div>
-      </CardContent>
+                    {vacation.can_delete && (
+                      <Button variant="danger" size="sm" onClick={() => onDelete(vacation.id)} title="Eliminar solicitud">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   )
 }
@@ -1295,30 +1316,25 @@ export default function Vacations() {
 
       {/* Vacation List */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-4">
-                <div className="h-24 bg-gray-100 rounded" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       ) : vacations.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {vacations.map((vacation) => (
-            <VacationCard
-              key={vacation.id}
-              vacation={vacation}
-              onSubmit={(id) => submitMutation.mutate(id)}
-              onCancel={(id) => cancelMutation.mutate(id)}
-              onDelete={handleDelete}
-              onView={handleView}
-              onDownload={handleDownload}
-              onSign={handleSign}
-            />
-          ))}
-        </div>
+        <VacationTable
+          vacations={vacations}
+          onSubmit={(id) => submitMutation.mutate(id)}
+          onCancel={(id) => cancelMutation.mutate(id)}
+          onDelete={handleDelete}
+          onView={handleView}
+          onDownload={handleDownload}
+          onSign={handleSign}
+        />
       ) : (
         <Card>
           <CardContent className="py-12 text-center">

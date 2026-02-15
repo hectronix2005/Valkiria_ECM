@@ -94,6 +94,7 @@ Rails.application.routes.draw do
           collection do
             post :resolve_all
             get :stats
+            get :patterns
           end
         end
 

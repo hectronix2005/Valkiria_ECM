@@ -425,31 +425,35 @@ module Templates
     end
 
     def convert_to_pdf(docx_path)
-      # Priority 1: LibreOffice (local, best quality)
-      if libreoffice_available?
-        result = convert_with_libreoffice(docx_path)
-        return result if result
-      end
-
-      # Priority 2: Gotenberg API (LibreOffice via HTTP, preserves formatting)
+      # Priority 1: Gotenberg API (best fidelity — uses LibreOffice via HTTP, preserves DOCX formatting)
       if gotenberg_available?
         result = convert_with_gotenberg(docx_path)
         return result if result
       end
 
-      # Priority 3: Pandoc + wkhtmltopdf (available on Heroku, variables replaced but simpler formatting)
+      # Priority 2: LibreOffice local (good fidelity, requires binary)
+      if libreoffice_available?
+        result = convert_with_libreoffice(docx_path)
+        return result if result
+      end
+
+      # Priority 3: Pandoc + wkhtmltopdf (DOCX→HTML→PDF, simpler formatting)
       if pandoc_available?
         result = convert_with_pandoc_wkhtmltopdf(docx_path)
         return result if result
       end
 
-      # Priority 4: Preview-based PDF with variable replacement (preserves original formatting)
+      # Priority 4: Pure Ruby Prawn converter (basic formatting, last programmatic option)
+      result = convert_with_prawn(docx_path)
+      return result if result
+
+      # Priority 5: Preview-based PDF with variable replacement
       if template&.preview_file_id
         result = convert_using_preview_with_overlay(docx_path)
         return result if result
       end
 
-      # Priority 5: Local PDF sync workflow (last resort)
+      # Priority 6: Local PDF sync workflow (last resort)
       Rails.logger.info "All PDF converters unavailable - using local PDF sync workflow"
       Rails.logger.info "Document will be created with 'pending' status. Run 'rake db:sync:generate_pending_pdfs' locally."
       ErrorLoggingService.log_service_event(
@@ -461,6 +465,29 @@ module Templates
       nil
     end
 
+    def convert_with_prawn(docx_path)
+      Rails.logger.info "Converting DOCX to PDF using pure Ruby (Prawn)..."
+      converter = DocxToPdfConverter.new(docx_path)
+      pdf_content = converter.convert
+
+      if pdf_content && pdf_content.bytesize > 0
+        Rails.logger.info "Prawn conversion successful (#{pdf_content.bytesize} bytes)"
+        pdf_content
+      else
+        Rails.logger.warn "Prawn conversion produced empty output"
+        nil
+      end
+    rescue StandardError => e
+      Rails.logger.error "Prawn conversion failed: #{e.message}"
+      Rails.logger.error e.backtrace.first(5).join("\n")
+      ErrorLoggingService.capture_service_error(e,
+        service: "Templates::RobustDocumentGeneratorService",
+        severity: "warning",
+        metadata: { template_id: template&.id&.to_s, converter: "prawn" }
+      )
+      nil
+    end
+
     def gotenberg_available?
       ENV["GOTENBERG_URL"].present?
     end
@@ -468,54 +495,59 @@ module Templates
     def convert_with_gotenberg(docx_path)
       Rails.logger.info "Converting DOCX to PDF using Gotenberg API..."
 
-      begin
-        require "net/http"
-        require "uri"
+      require "net/http"
+      require "uri"
 
-        gotenberg_url = ENV["GOTENBERG_URL"].chomp("/")
-        uri = URI.parse("#{gotenberg_url}/forms/libreoffice/convert")
+      gotenberg_url = ENV["GOTENBERG_URL"].chomp("/")
+      uri = URI.parse("#{gotenberg_url}/forms/libreoffice/convert")
 
-        # Prepare multipart form data
-        boundary = "----GotenbergBoundary#{SecureRandom.hex(8)}"
-        file_content = File.binread(docx_path)
-        file_name = File.basename(docx_path)
+      file_content = File.binread(docx_path)
+      file_name = File.basename(docx_path)
 
-        body = build_multipart_body(boundary, file_name, file_content)
+      max_attempts = 2
+      max_attempts.times do |attempt|
+        begin
+          boundary = "----GotenbergBoundary#{SecureRandom.hex(8)}"
+          body = build_multipart_body(boundary, file_name, file_content)
 
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = uri.scheme == "https"
-        http.read_timeout = 10
-        http.open_timeout = 5
+          http = Net::HTTP.new(uri.host, uri.port)
+          http.use_ssl = uri.scheme == "https"
+          http.open_timeout = 30  # Render free tier cold start can take ~30s
+          http.read_timeout = 90  # Large documents need time to convert
 
-        request = Net::HTTP::Post.new(uri.request_uri)
-        request["Content-Type"] = "multipart/form-data; boundary=#{boundary}"
-        request.body = body
+          request = Net::HTTP::Post.new(uri.request_uri)
+          request["Content-Type"] = "multipart/form-data; boundary=#{boundary}"
+          request.body = body
 
-        response = http.request(request)
+          Rails.logger.info "Gotenberg attempt #{attempt + 1}/#{max_attempts}..."
+          response = http.request(request)
 
-        if response.code == "200"
-          Rails.logger.info "Gotenberg conversion successful (#{response.body.bytesize} bytes)"
-          response.body
-        else
-          Rails.logger.error "Gotenberg conversion failed: #{response.code} - #{response.body}"
-          ErrorLoggingService.log_service_event(
-            "Gotenberg conversion failed: HTTP #{response.code}",
-            service: "Templates::RobustDocumentGeneratorService",
-            severity: "warning",
-            metadata: { template_id: template&.id&.to_s, response_code: response.code }
-          )
-          nil
+          if response.code == "200"
+            Rails.logger.info "Gotenberg conversion successful (#{response.body.bytesize} bytes) on attempt #{attempt + 1}"
+            return response.body
+          else
+            Rails.logger.error "Gotenberg attempt #{attempt + 1} failed: HTTP #{response.code} - #{response.body.to_s.truncate(200)}"
+          end
+        rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED, Errno::ECONNRESET => e
+          Rails.logger.warn "Gotenberg attempt #{attempt + 1} timeout/connection error: #{e.class}: #{e.message}"
+          if attempt < max_attempts - 1
+            Rails.logger.info "Waiting 3s before retry (cold start should be awake now)..."
+            sleep(3)
+          end
+        rescue StandardError => e
+          Rails.logger.error "Gotenberg attempt #{attempt + 1} error: #{e.class}: #{e.message}"
+          Rails.logger.error e.backtrace.first(3).join("\n")
+          break # Non-retryable error
         end
-      rescue StandardError => e
-        Rails.logger.error "Gotenberg conversion error: #{e.message}"
-        Rails.logger.error e.backtrace.first(3).join("\n")
-        ErrorLoggingService.capture_service_error(e,
-          service: "Templates::RobustDocumentGeneratorService",
-          severity: "warning",
-          metadata: { template_id: template&.id&.to_s, converter: "gotenberg" }
-        )
-        nil
       end
+
+      ErrorLoggingService.log_service_event(
+        "Gotenberg conversion failed after #{max_attempts} attempts",
+        service: "Templates::RobustDocumentGeneratorService",
+        severity: "warning",
+        metadata: { template_id: template&.id&.to_s, converter: "gotenberg" }
+      )
+      nil
     end
 
     def build_multipart_body(boundary, file_name, file_content)
@@ -678,27 +710,27 @@ module Templates
       user_profile = Dir.mktmpdir("lo_profile")
 
       begin
-        # Set environment for Heroku apt buildpack
-        lib_path = "/app/.apt/usr/lib/libreoffice/program:/app/.apt/usr/lib/x86_64-linux-gnu"
-
-        # Additional environment variables to fix LibreOffice issues on Heroku
-        env_vars = {
-          "LD_LIBRARY_PATH" => "#{lib_path}:#{ENV['LD_LIBRARY_PATH']}",
-          "HOME" => "/tmp",
-          "FONTCONFIG_PATH" => "/etc/fonts",
-          "SAL_DISABLE_SYNCHRONOUS_PRINTER_DETECTION" => "1",
-          "SAL_DISABLE_COMPONENTITHREADING" => "1",
-          "SAL_USE_VCLPLUGIN" => "svp",
-          "DISPLAY" => "",
-          "URE_BOOTSTRAP" => "file:///app/.apt/usr/lib/libreoffice/program/fundamentalrc"
-        }
-
-        env_string = env_vars.map { |k, v| "#{k}=#{v}" }.join(" ")
-
         # Use -env:UserInstallation to avoid profile issues
         user_install = "-env:UserInstallation=file://#{user_profile}"
 
-        cmd = "#{env_string} \"#{@libreoffice_path}\" --headless --nologo --nofirststartwizard --norestore #{user_install} --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
+        # Only set Heroku-specific environment variables on Linux (Heroku)
+        env_string = ""
+        if RbConfig::CONFIG["host_os"] =~ /linux/i
+          lib_path = "/app/.apt/usr/lib/libreoffice/program:/app/.apt/usr/lib/x86_64-linux-gnu"
+          env_vars = {
+            "LD_LIBRARY_PATH" => "#{lib_path}:#{ENV['LD_LIBRARY_PATH']}",
+            "HOME" => "/tmp",
+            "FONTCONFIG_PATH" => "/etc/fonts",
+            "SAL_DISABLE_SYNCHRONOUS_PRINTER_DETECTION" => "1",
+            "SAL_DISABLE_COMPONENTITHREADING" => "1",
+            "SAL_USE_VCLPLUGIN" => "svp",
+            "DISPLAY" => "",
+            "URE_BOOTSTRAP" => "file:///app/.apt/usr/lib/libreoffice/program/fundamentalrc"
+          }
+          env_string = env_vars.map { |k, v| "#{k}=#{v}" }.join(" ") + " "
+        end
+
+        cmd = "#{env_string}\"#{@libreoffice_path}\" --headless --nologo --nofirststartwizard --norestore #{user_install} --convert-to pdf --outdir \"#{output_dir}\" \"#{docx_path}\" 2>&1"
         Rails.logger.info "Running LibreOffice: #{cmd}"
         result = `#{cmd}`
         Rails.logger.info "LibreOffice conversion result: #{result}"

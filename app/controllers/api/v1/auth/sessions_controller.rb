@@ -13,13 +13,19 @@ module Api
         end
 
         def create
-          user = Identity::User.where(email: login_params[:email]&.downcase).first
+          email = login_params[:email]&.downcase
+          user = Identity::User.where(email: email).first
 
           if user.nil?
+            log_auth_failure(email, "user_not_found", "El email no existe en el sistema")
             render_error("Invalid email or password", status: :unauthorized)
+          elsif user.respond_to?(:access_locked?) && user.access_locked?
+            log_auth_failure(email, "account_locked", "Cuenta bloqueada por #{user.failed_attempts} intentos fallidos", user)
+            render_error("Account is temporarily locked. Try again later.", status: :unauthorized)
           elsif !user.valid_password?(login_params[:password])
             handle_failed_login(user)
           elsif !user.active?
+            log_auth_failure(email, "account_deactivated", "Cuenta desactivada", user)
             render_error("Account is deactivated", status: :unauthorized)
           else
             handle_successful_login(user)
@@ -58,7 +64,35 @@ module Api
 
         def handle_failed_login(user)
           user&.increment_failed_attempts if user.respond_to?(:increment_failed_attempts)
+          log_auth_failure(user.email, "wrong_password", "Contrasena incorrecta (intento #{user.failed_attempts}#{user.class.respond_to?(:maximum_attempts) ? "/#{user.class.maximum_attempts}" : ""})", user)
           render_error("Invalid email or password", status: :unauthorized)
+        end
+
+        def log_auth_failure(email, reason, detail, user = nil)
+          @_error_already_logged = true
+          ErrorLoggingService.log_event_with_context(
+            "Login fallido: #{detail}",
+            request: request,
+            user: nil,
+            extra: {
+              event_type: "auth_failure",
+              severity: "warning",
+              source: "controller",
+              controller_name: self.class.name,
+              action_name: action_name,
+              user_email: email,
+              metadata: {
+                reason: reason,
+                detail: detail,
+                user_exists: user.present?,
+                user_active: user&.active?,
+                failed_attempts: user&.respond_to?(:failed_attempts) ? user.failed_attempts : nil,
+                account_locked: user&.respond_to?(:access_locked?) ? user.access_locked? : nil,
+                must_change_password: user&.respond_to?(:must_change_password) ? user.must_change_password : nil,
+                roles: user&.respond_to?(:role_names) ? user.role_names : nil
+              }.compact
+            }
+          )
         end
 
         def generate_jwt_token(user)

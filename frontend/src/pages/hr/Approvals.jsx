@@ -10,109 +10,171 @@ import {
   FileText, Download, Loader2, PenTool, ExternalLink, AlertCircle
 } from 'lucide-react'
 
-function ApprovalCard({ request, type, onApprove, onReject, onView, onSign, signingId, showActions = true }) {
-  const isVacation = type === 'vacation'
-  const Icon = isVacation ? Calendar : Award
-
+function VacationApprovalsTable({ requests, onApprove, onReject, onView, onSign, signingId, showActions = true }) {
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-4">
-        <div className="flex items-start gap-4">
-          <div className={`p-3 rounded-xl ${isVacation ? 'bg-blue-50' : 'bg-purple-50'}`}>
-            <Icon className={`w-6 h-6 ${isVacation ? 'text-blue-600' : 'text-purple-600'}`} />
-          </div>
-
-          <div className="flex-1">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-semibold text-gray-900">
-                  {request.employee?.name || 'Empleado'}
-                </p>
-                <p className="text-sm text-gray-500">
-                  {request.employee?.department} • {request.employee?.job_title}
-                </p>
-              </div>
-              <Badge status={request.status} />
-            </div>
-
-            <div className="mt-3 space-y-1">
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Solicitud:</span> {request.request_number}
-              </p>
-              {isVacation ? (
-                <>
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium">Tipo:</span> {request.vacation_type}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium">Fechas:</span>{' '}
-                    {new Date(request.start_date).toLocaleDateString('es-ES')} -{' '}
-                    {new Date(request.end_date).toLocaleDateString('es-ES')}
-                  </p>
-                  <div className="flex items-center gap-4 mt-1">
-                    <p className="text-sm font-medium text-primary-600">
-                      {Math.floor(request.days_requested)} dias solicitados
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      <span className="font-medium text-green-600">{Math.floor(request.employee?.available_vacation_days || 0)}</span> dias disponibles
-                    </p>
+    <Card>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Empleado</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Solicitud</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Tipo</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Periodo</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500">Dias</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Fecha Solicitud</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500">Estado</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {requests.map((request) => (
+              <tr key={request.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-4 py-3">
+                  <div>
+                    <p className="font-medium text-gray-900">{request.employee?.name || 'Empleado'}</p>
+                    <p className="text-xs text-gray-500">{request.employee?.department}</p>
                   </div>
-                  {request.has_document && (
-                    <div className="flex items-center gap-1 mt-1 text-sm text-blue-600">
-                      <FileText className="w-4 h-4" />
-                      <span>Documento adjunto</span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium">Tipo:</span> Certificacion {request.certification_type}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium">Proposito:</span> {request.purpose}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Tiempo estimado: {request.estimated_days} dias
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100">
-              <Button variant="ghost" size="sm" onClick={() => onView(request, type)}>
-                <Eye className="w-4 h-4" />
-                Detalle
-              </Button>
-              {showActions && (
-                <>
-                  {request.can_sign && request.has_document && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => onSign(request, type)}
-                      loading={signingId === request.id}
-                      className="text-purple-700 border-purple-300 hover:bg-purple-50"
-                    >
-                      <PenTool className="w-4 h-4" />
-                      Firmar
+                </td>
+                <td className="px-4 py-3">
+                  <span className="font-medium text-gray-900">{request.request_number}</span>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  {request.vacation_type}
+                </td>
+                <td className="px-4 py-3 text-gray-600">
+                  {new Date(request.start_date).toLocaleDateString('es-ES')} - {new Date(request.end_date).toLocaleDateString('es-ES')}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="font-semibold text-primary-600">{Math.floor(request.days_requested)}</span>
+                  <span className="text-xs text-gray-400 ml-1">/ <span className="text-green-600">{Math.floor(request.employee?.available_vacation_days || 0)}</span></span>
+                </td>
+                <td className="px-4 py-3 text-gray-500">
+                  {request.submitted_at
+                    ? new Date(request.submitted_at).toLocaleString('es-ES', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                      })
+                    : '—'}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <Badge status={request.status} />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => onView(request, 'vacation')} title="Ver detalle">
+                      <Eye className="w-4 h-4" />
                     </Button>
-                  )}
-                  <div className="flex-1" />
-                  <Button variant="danger" size="sm" onClick={() => onReject(request, type)}>
-                    <XCircle className="w-4 h-4" />
-                    Rechazar
-                  </Button>
-                  <Button variant="success" size="sm" onClick={() => onApprove(request, type)}>
-                    <CheckCircle className="w-4 h-4" />
-                    Aprobar
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </CardContent>
+                    {showActions && (
+                      <>
+                        {request.can_sign && request.has_document && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => onSign(request)}
+                            loading={signingId === request.id}
+                            title="Firmar"
+                          >
+                            <PenTool className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button variant="danger" size="sm" onClick={() => onReject(request, 'vacation')} title="Rechazar">
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                        <Button variant="success" size="sm" onClick={() => onApprove(request, 'vacation')} title="Aprobar">
+                          <CheckCircle className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
+function CertificationApprovalsTable({ requests, onApprove, onReject, onView, onSign, signingId, showActions = true }) {
+  return (
+    <Card>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Empleado</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Solicitud</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Tipo</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Proposito</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Fecha Solicitud</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500">Estado</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {requests.map((request) => (
+              <tr key={request.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-4 py-3">
+                  <div>
+                    <p className="font-medium text-gray-900">{request.employee?.name || 'Empleado'}</p>
+                    <p className="text-xs text-gray-500">{request.employee?.department}</p>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="font-medium text-gray-900">{request.request_number}</span>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  {request.certification_type}
+                </td>
+                <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={request.purpose}>
+                  {request.purpose}
+                </td>
+                <td className="px-4 py-3 text-gray-500">
+                  {request.submitted_at
+                    ? new Date(request.submitted_at).toLocaleString('es-ES', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                      })
+                    : '—'}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <Badge status={request.status} />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => onView(request, 'certification')} title="Ver detalle">
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    {showActions && (
+                      <>
+                        {request.can_sign && request.has_document && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => onSign(request)}
+                            loading={signingId === request.id}
+                            title="Firmar"
+                          >
+                            <PenTool className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button variant="danger" size="sm" onClick={() => onReject(request, 'certification')} title="Rechazar">
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                        <Button variant="success" size="sm" onClick={() => onApprove(request, 'certification')} title="Aprobar">
+                          <CheckCircle className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   )
 }
@@ -901,15 +963,15 @@ export default function Approvals() {
 
       {/* Loading State */}
       {isLoading && (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-4">
-                <div className="h-24 bg-gray-100 rounded" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Vacation Requests */}
@@ -919,21 +981,15 @@ export default function Approvals() {
             <Calendar className="w-5 h-5 text-blue-600" />
             Solicitudes de Vacaciones
           </h2>
-          <div className="space-y-4">
-            {currentApprovals.vacation_requests.map((request) => (
-              <ApprovalCard
-                key={request.id}
-                request={request}
-                type="vacation"
-                onApprove={handleApprove}
-                onReject={handleReject}
-                onView={handleView}
-                onSign={handleSign}
-                signingId={signingId}
-                showActions={activeTab === 'pending'}
-              />
-            ))}
-          </div>
+          <VacationApprovalsTable
+            requests={currentApprovals.vacation_requests}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onView={handleView}
+            onSign={handleSign}
+            signingId={signingId}
+            showActions={activeTab === 'pending'}
+          />
         </div>
       )}
 
@@ -944,21 +1000,15 @@ export default function Approvals() {
             <Award className="w-5 h-5 text-purple-600" />
             Solicitudes de Certificacion
           </h2>
-          <div className="space-y-4">
-            {currentApprovals.certification_requests.map((request) => (
-              <ApprovalCard
-                key={request.id}
-                request={request}
-                type="certification"
-                onApprove={handleApprove}
-                onReject={handleReject}
-                onView={handleView}
-                onSign={handleSign}
-                signingId={signingId}
-                showActions={activeTab === 'pending'}
-              />
-            ))}
-          </div>
+          <CertificationApprovalsTable
+            requests={currentApprovals.certification_requests}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onView={handleView}
+            onSign={handleSign}
+            signingId={signingId}
+            showActions={activeTab === 'pending'}
+          />
         </div>
       )}
 

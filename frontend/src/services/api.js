@@ -402,6 +402,7 @@ export const errorLogService = {
   resolve: (id) => api.post(`/admin/error_logs/${id}/resolve`),
   resolveAll: (params) => api.post('/admin/error_logs/resolve_all', params),
   stats: () => api.get('/admin/error_logs/stats'),
+  patterns: (params) => api.get('/admin/error_logs/patterns', { params }),
 }
 
 export default api
