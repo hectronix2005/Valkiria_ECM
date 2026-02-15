@@ -16,6 +16,9 @@ Rails.application.routes.draw do
     namespace :v1 do
       get "health", to: "health#show"
 
+      # Frontend error reporting (public, no auth)
+      post "frontend_errors", to: "frontend_errors#create"
+
       # Authentication
       namespace :auth do
         post "login", to: "sessions#create"

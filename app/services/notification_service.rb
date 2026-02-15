@@ -98,6 +98,11 @@ class NotificationService
       Notification.create!(attrs)
     rescue StandardError => e
       Rails.logger.error("NotificationService error: #{e.message}")
+      ErrorLoggingService.capture_service_error(e,
+        service: "NotificationService",
+        severity: "warning",
+        metadata: { category: attrs[:category], action: attrs[:action] }
+      )
     end
   end
 end

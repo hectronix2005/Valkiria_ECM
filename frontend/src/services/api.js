@@ -21,7 +21,7 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Response interceptor - handle auth errors
+// Response interceptor - handle auth errors and report 5xx errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -30,9 +30,63 @@ api.interceptors.response.use(
       localStorage.removeItem('user')
       window.location.href = '/login'
     }
+    // Auto-report 5xx server errors
+    if (error.response?.status >= 500) {
+      reportFrontendError({
+        message: `Server error ${error.response.status}: ${error.config?.method?.toUpperCase()} ${error.config?.url}`,
+        error_class: `HttpError${error.response.status}`,
+        url: window.location.href,
+        component: 'axios-interceptor',
+        action_context: `${error.config?.method?.toUpperCase()} ${error.config?.url}`,
+      })
+    }
     return Promise.reject(error)
   }
 )
+
+// --- Frontend Error Reporting ---
+const _errorReportState = { count: 0, resetAt: 0, seen: new Set() }
+const FRONTEND_ERROR_LIMIT = 15 // max reports per minute
+const FRONTEND_ERROR_WINDOW = 60000 // ms
+
+export function reportFrontendError({ message, error_class, backtrace, url, component, action_context }) {
+  try {
+    const now = Date.now()
+    // Reset counter every minute
+    if (now > _errorReportState.resetAt) {
+      _errorReportState.count = 0
+      _errorReportState.resetAt = now + FRONTEND_ERROR_WINDOW
+      _errorReportState.seen.clear()
+    }
+    // Rate limit
+    if (_errorReportState.count >= FRONTEND_ERROR_LIMIT) return
+    // Dedup by message
+    const key = `${error_class}:${message}`.slice(0, 200)
+    if (_errorReportState.seen.has(key)) return
+    _errorReportState.seen.add(key)
+    _errorReportState.count++
+
+    const user = (() => { try { return JSON.parse(localStorage.getItem('user')) } catch { return null } })()
+
+    // Use fetch directly to avoid interceptor loops
+    fetch('/api/v1/frontend_errors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: (message || 'Unknown error').slice(0, 5000),
+        error_class: (error_class || 'FrontendError').slice(0, 500),
+        backtrace: Array.isArray(backtrace) ? backtrace.slice(0, 30) : [],
+        url: (url || window.location.href).slice(0, 2000),
+        component: (component || '').slice(0, 200),
+        action_context: (action_context || '').slice(0, 200),
+        user_email: user?.email || '',
+        timestamp: new Date().toISOString(),
+      }),
+    }).catch(() => {}) // silently ignore reporting failures
+  } catch {
+    // never let error reporting break the app
+  }
+}
 
 // Auth
 export const authService = {

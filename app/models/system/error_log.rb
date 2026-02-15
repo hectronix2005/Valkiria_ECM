@@ -54,7 +54,7 @@ module System
     # Validations
     validates :message, presence: true
     validates :severity, inclusion: { in: %w[fatal error warning info] }
-    validates :event_type, inclusion: { in: %w[exception process_failure validation_error auth_failure not_found api_error] }, allow_nil: true
+    validates :event_type, inclusion: { in: %w[exception process_failure validation_error auth_failure not_found api_error frontend_error] }, allow_nil: true
 
     # Scopes
     scope :unresolved, -> { where(resolved: false) }

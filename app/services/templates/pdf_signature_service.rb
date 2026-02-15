@@ -227,6 +227,10 @@ module Templates
       file.data
     rescue StandardError => e
       Rails.logger.error "Error reading draft PDF: #{e.message}"
+      ErrorLoggingService.capture_service_error(e,
+        service: "Templates::PdfSignatureService",
+        metadata: { document_id: @generated_document&.id&.to_s, file_id: file_id&.to_s }
+      )
       nil
     end
 

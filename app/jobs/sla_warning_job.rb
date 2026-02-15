@@ -29,5 +29,12 @@ class SlaWarningJob < ApplicationJob
     )
   rescue Mongoid::Errors::DocumentNotFound
     Rails.logger.warn "[SlaWarningJob] Task not found: #{task_id}"
+    ErrorLoggingService.log_service_event(
+      "Workflow task not found: #{task_id}",
+      service: "SlaWarningJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { task_id: task_id, percentage_remaining: percentage_remaining }
+    )
   end
 end

@@ -206,6 +206,12 @@ module Templates
 
         # Validate processed DOCX is not empty (can happen with ZIP processing issues)
         if docx_content.blank?
+          ErrorLoggingService.log_service_event(
+            "Processed DOCX is empty - possible template processing error",
+            service: "Templates::RobustDocumentGeneratorService",
+            severity: "error",
+            metadata: { template_id: template&.id&.to_s }
+          )
           raise GenerationError, "El DOCX procesado está vacío. Posible error en el procesamiento del template."
         end
 
@@ -446,6 +452,12 @@ module Templates
       # Priority 5: Local PDF sync workflow (last resort)
       Rails.logger.info "All PDF converters unavailable - using local PDF sync workflow"
       Rails.logger.info "Document will be created with 'pending' status. Run 'rake db:sync:generate_pending_pdfs' locally."
+      ErrorLoggingService.log_service_event(
+        "All PDF converters unavailable - falling back to local sync workflow",
+        service: "Templates::RobustDocumentGeneratorService",
+        severity: "warning",
+        metadata: { template_id: template&.id&.to_s }
+      )
       nil
     end
 
@@ -486,11 +498,22 @@ module Templates
           response.body
         else
           Rails.logger.error "Gotenberg conversion failed: #{response.code} - #{response.body}"
+          ErrorLoggingService.log_service_event(
+            "Gotenberg conversion failed: HTTP #{response.code}",
+            service: "Templates::RobustDocumentGeneratorService",
+            severity: "warning",
+            metadata: { template_id: template&.id&.to_s, response_code: response.code }
+          )
           nil
         end
       rescue StandardError => e
         Rails.logger.error "Gotenberg conversion error: #{e.message}"
         Rails.logger.error e.backtrace.first(3).join("\n")
+        ErrorLoggingService.capture_service_error(e,
+          service: "Templates::RobustDocumentGeneratorService",
+          severity: "warning",
+          metadata: { template_id: template&.id&.to_s, converter: "gotenberg" }
+        )
         nil
       end
     end
@@ -531,6 +554,12 @@ module Templates
 
         unless $?.success?
           Rails.logger.error "Pandoc failed: #{result}"
+          ErrorLoggingService.log_service_event(
+            "Pandoc DOCX->HTML conversion failed: #{result.truncate(500)}",
+            service: "Templates::RobustDocumentGeneratorService",
+            severity: "warning",
+            metadata: { template_id: template&.id&.to_s, converter: "pandoc" }
+          )
           html_output.unlink
           return nil
         end
@@ -560,6 +589,11 @@ module Templates
       rescue StandardError => e
         Rails.logger.error "Pandoc + wkhtmltopdf conversion failed: #{e.message}"
         Rails.logger.error e.backtrace.first(5).join("\n")
+        ErrorLoggingService.capture_service_error(e,
+          service: "Templates::RobustDocumentGeneratorService",
+          severity: "warning",
+          metadata: { template_id: template&.id&.to_s, converter: "pandoc_wkhtmltopdf" }
+        )
         nil
       ensure
         FileUtils.rm_rf(media_dir)
@@ -672,6 +706,12 @@ module Templates
         pdf_files = Dir.glob(File.join(output_dir, "*.pdf"))
         if pdf_files.empty?
           Rails.logger.error "LibreOffice conversion failed"
+          ErrorLoggingService.log_service_event(
+            "LibreOffice conversion produced no PDF output",
+            service: "Templates::RobustDocumentGeneratorService",
+            severity: "warning",
+            metadata: { template_id: template&.id&.to_s, converter: "libreoffice", output: result&.truncate(500) }
+          )
           return nil
         end
 
@@ -735,6 +775,11 @@ module Templates
       rescue StandardError => e
         Rails.logger.warn "Preview PDF replacement failed: #{e.class}: #{e.message}"
         Rails.logger.warn e.backtrace.first(3).join("\n")
+        ErrorLoggingService.capture_service_error(e,
+          service: "Templates::RobustDocumentGeneratorService",
+          severity: "warning",
+          metadata: { template_id: template&.id&.to_s, converter: "preview_overlay" }
+        )
       end
 
       # Fallback: Use original preview with data summary page
@@ -897,6 +942,11 @@ module Templates
       end.render
     rescue => e
       Rails.logger.error "Error creating data summary page: #{e.message}"
+      ErrorLoggingService.capture_service_error(e,
+        service: "Templates::RobustDocumentGeneratorService",
+        severity: "warning",
+        metadata: { template_id: template&.id&.to_s, step: "data_summary_page" }
+      )
       nil
     end
 

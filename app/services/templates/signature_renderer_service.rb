@@ -43,6 +43,11 @@ module Templates
       Base64.strict_encode64(image.to_blob)
     rescue StandardError => e
       Rails.logger.error "SignatureRenderer error: #{e.message}"
+      ErrorLoggingService.capture_service_error(e,
+        service: "Templates::SignatureRendererService",
+        severity: "warning",
+        metadata: { signature_id: @signature&.id&.to_s, font_family: @signature&.font_family }
+      )
       generate_fallback_signature
     end
 

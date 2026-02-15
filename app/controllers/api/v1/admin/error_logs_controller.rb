@@ -110,13 +110,15 @@ module Api
                 validation_error: all_logs.unresolved.by_event_type("validation_error").count,
                 auth_failure: all_logs.unresolved.by_event_type("auth_failure").count,
                 not_found: all_logs.unresolved.by_event_type("not_found").count,
-                api_error: all_logs.unresolved.by_event_type("api_error").count
+                api_error: all_logs.unresolved.by_event_type("api_error").count,
+                frontend_error: all_logs.unresolved.by_event_type("frontend_error").count
               },
               by_source: {
                 controller: all_logs.unresolved.by_source("controller").count,
                 service: all_logs.unresolved.by_source("service").count,
                 job: all_logs.unresolved.by_source("job").count,
-                middleware: all_logs.unresolved.by_source("middleware").count
+                middleware: all_logs.unresolved.by_source("middleware").count,
+                frontend: all_logs.unresolved.by_source("frontend").count
               }
             }
           }

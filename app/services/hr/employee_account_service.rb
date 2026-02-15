@@ -40,6 +40,10 @@ module Hr
     rescue StandardError => e
       @errors << "Error al crear cuenta: #{e.message}"
       Rails.logger.error "EmployeeAccountService error: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+      ErrorLoggingService.capture_service_error(e,
+        service: "Hr::EmployeeAccountService",
+        metadata: { employee_id: employee&.id&.to_s, employee_email: employee&.personal_email }
+      )
       nil
     end
 

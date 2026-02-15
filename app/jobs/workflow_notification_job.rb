@@ -61,6 +61,13 @@ class WorkflowNotificationJob < ApplicationJob
     )
   rescue Mongoid::Errors::DocumentNotFound => e
     Rails.logger.error "[WorkflowNotification] Resource not found: #{e.message}"
+    ErrorLoggingService.log_service_event(
+      "Workflow resource not found for transition notification: #{e.message}",
+      service: "WorkflowNotificationJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { instance_id: instance_id, notification_type: "transition" }
+    )
   end
   # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
@@ -84,6 +91,13 @@ class WorkflowNotificationJob < ApplicationJob
     )
   rescue Mongoid::Errors::DocumentNotFound => e
     Rails.logger.error "[WorkflowNotification] Task not found: #{e.message}"
+    ErrorLoggingService.log_service_event(
+      "Workflow task not found for task_created notification: #{e.message}",
+      service: "WorkflowNotificationJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { task_id: task_id, notification_type: "task_created" }
+    )
   end
 
   def handle_task_escalated_notification(task_id, options)
@@ -104,6 +118,13 @@ class WorkflowNotificationJob < ApplicationJob
     )
   rescue Mongoid::Errors::DocumentNotFound => e
     Rails.logger.error "[WorkflowNotification] Task not found: #{e.message}"
+    ErrorLoggingService.log_service_event(
+      "Workflow task not found for escalation notification: #{e.message}",
+      service: "WorkflowNotificationJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { task_id: task_id, notification_type: "task_escalated" }
+    )
   end
 
   def handle_cancellation_notification(instance_id, options)
@@ -123,6 +144,13 @@ class WorkflowNotificationJob < ApplicationJob
     )
   rescue Mongoid::Errors::DocumentNotFound => e
     Rails.logger.error "[WorkflowNotification] Resource not found: #{e.message}"
+    ErrorLoggingService.log_service_event(
+      "Workflow resource not found for cancellation notification: #{e.message}",
+      service: "WorkflowNotificationJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { instance_id: instance_id, notification_type: "cancelled" }
+    )
   end
 
   # rubocop:disable Metrics/MethodLength
@@ -154,6 +182,13 @@ class WorkflowNotificationJob < ApplicationJob
     )
   rescue Mongoid::Errors::DocumentNotFound => e
     Rails.logger.error "[WorkflowNotification] Task not found: #{e.message}"
+    ErrorLoggingService.log_service_event(
+      "Workflow task not found for SLA warning notification: #{e.message}",
+      service: "WorkflowNotificationJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { task_id: task_id, notification_type: "sla_warning" }
+    )
   end
   # rubocop:enable Metrics/MethodLength
 
@@ -183,6 +218,13 @@ class WorkflowNotificationJob < ApplicationJob
     )
   rescue Mongoid::Errors::DocumentNotFound => e
     Rails.logger.error "[WorkflowNotification] Task not found: #{e.message}"
+    ErrorLoggingService.log_service_event(
+      "Workflow task not found for SLA breach notification: #{e.message}",
+      service: "WorkflowNotificationJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { task_id: task_id, notification_type: "sla_breached" }
+    )
   end
 
   # Notification delivery methods

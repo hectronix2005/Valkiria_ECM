@@ -1,7 +1,90 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, Component, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
+import { reportFrontendError } from './services/api'
+
+// Error Boundary - catches React render crashes
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error, errorInfo) {
+    reportFrontendError({
+      message: error?.message || 'React render crash',
+      error_class: error?.name || 'ReactError',
+      backtrace: (error?.stack || '').split('\n').slice(0, 20),
+      url: window.location.href,
+      component: errorInfo?.componentStack?.split('\n')?.[1]?.trim() || 'Unknown',
+      action_context: 'React render',
+    })
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center max-w-md p-8">
+            <div className="text-red-500 text-5xl mb-4">!</div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Algo salio mal</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Ocurrio un error inesperado. Intenta recargar la pagina.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700"
+            >
+              Recargar pagina
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// Global error handlers - catches unhandled JS errors and promise rejections
+function GlobalErrorHandlers() {
+  useEffect(() => {
+    const handleError = (event) => {
+      reportFrontendError({
+        message: event.message || 'Unhandled error',
+        error_class: event.error?.name || 'WindowError',
+        backtrace: (event.error?.stack || '').split('\n').slice(0, 20),
+        url: window.location.href,
+        component: `${event.filename || 'unknown'}:${event.lineno || 0}:${event.colno || 0}`,
+        action_context: 'window.onerror',
+      })
+    }
+
+    const handleRejection = (event) => {
+      const error = event.reason
+      reportFrontendError({
+        message: error?.message || String(error) || 'Unhandled promise rejection',
+        error_class: error?.name || 'UnhandledRejection',
+        backtrace: (error?.stack || '').split('\n').slice(0, 20),
+        url: window.location.href,
+        action_context: 'unhandledrejection',
+      })
+    }
+
+    window.addEventListener('error', handleError)
+    window.addEventListener('unhandledrejection', handleRejection)
+    return () => {
+      window.removeEventListener('error', handleError)
+      window.removeEventListener('unhandledrejection', handleRejection)
+    }
+  }, [])
+
+  return null
+}
 
 // Lazy load all pages for code splitting
 const Login = lazy(() => import('./pages/Login'))
@@ -97,6 +180,8 @@ export default function App() {
   }
 
   return (
+    <ErrorBoundary>
+    <GlobalErrorHandlers />
     <Routes>
       {/* Public routes */}
       <Route
@@ -371,5 +456,6 @@ export default function App() {
       {/* Catch all */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </ErrorBoundary>
   )
 }

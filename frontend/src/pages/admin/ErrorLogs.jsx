@@ -42,6 +42,7 @@ const eventTypeConfig = {
   auth_failure: { color: 'bg-purple-50 text-purple-700 ring-purple-600/10', label: 'Autorizacion', icon: Shield },
   not_found: { color: 'bg-gray-50 text-gray-700 ring-gray-600/10', label: 'No encontrado', icon: FileX },
   api_error: { color: 'bg-blue-50 text-blue-700 ring-blue-600/10', label: 'API Error', icon: Activity },
+  frontend_error: { color: 'bg-pink-50 text-pink-700 ring-pink-600/10', label: 'Frontend', icon: Monitor },
 }
 
 const sourceOptions = [
@@ -50,7 +51,16 @@ const sourceOptions = [
   { value: 'service', label: 'Service' },
   { value: 'job', label: 'Job' },
   { value: 'middleware', label: 'Middleware' },
+  { value: 'frontend', label: 'Frontend' },
 ]
+
+const sourceConfig = {
+  controller: { color: 'bg-blue-100 text-blue-700', label: 'Controller' },
+  service: { color: 'bg-green-100 text-green-700', label: 'Service' },
+  job: { color: 'bg-amber-100 text-amber-700', label: 'Job' },
+  middleware: { color: 'bg-gray-100 text-gray-700', label: 'Middleware' },
+  frontend: { color: 'bg-pink-100 text-pink-700', label: 'Frontend' },
+}
 
 const severityOptions = [
   { value: '', label: 'Todas las severidades' },
@@ -68,6 +78,7 @@ const eventTypeOptions = [
   { value: 'auth_failure', label: 'Fallos de autorizacion' },
   { value: 'not_found', label: 'No encontrado' },
   { value: 'api_error', label: 'Errores API' },
+  { value: 'frontend_error', label: 'Frontend' },
 ]
 
 const statusOptions = [
@@ -91,6 +102,15 @@ function EventTypeBadge({ eventType }) {
   const config = eventTypeConfig[eventType] || eventTypeConfig.api_error
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ring-1 ring-inset ${config.color}`}>
+      {config.label}
+    </span>
+  )
+}
+
+function SourceBadge({ source }) {
+  const config = sourceConfig[source] || { color: 'bg-gray-100 text-gray-600', label: source || 'unknown' }
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${config.color}`}>
       {config.label}
     </span>
   )
@@ -354,6 +374,7 @@ export default function ErrorLogs() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severidad</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fuente</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">HTTP</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mensaje</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Path</th>
@@ -376,6 +397,9 @@ export default function ErrorLogs() {
                       </td>
                       <td className="px-4 py-3">
                         <EventTypeBadge eventType={log.event_type} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <SourceBadge source={log.source} />
                       </td>
                       <td className="px-4 py-3">
                         <HttpStatusBadge status={log.http_status} />
@@ -452,6 +476,7 @@ export default function ErrorLogs() {
               <div className="flex items-center gap-3">
                 <SeverityBadge severity={detail.severity} />
                 <EventTypeBadge eventType={detail.event_type} />
+                <SourceBadge source={detail.source} />
                 <HttpStatusBadge status={detail.http_status} />
                 {detail.resolved ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">

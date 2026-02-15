@@ -27,6 +27,11 @@ module Audit
       success(event)
     rescue StandardError => e
       log_error("Failed to create audit event: #{e.message}")
+      ErrorLoggingService.capture_service_error(e,
+        service: "Audit::LogEventService",
+        severity: "warning",
+        metadata: { event_type: @event_type, action: @action }
+      )
       failure("Failed to create audit event: #{e.message}")
     end
   end

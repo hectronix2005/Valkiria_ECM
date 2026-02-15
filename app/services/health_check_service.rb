@@ -18,6 +18,10 @@ class HealthCheckService < BaseService
     )
   rescue StandardError => e
     log_error("Health check failed: #{e.message}")
+    ErrorLoggingService.capture_service_error(e,
+      service: "HealthCheckService",
+      metadata: {}
+    )
     failure("Health check failed: #{e.message}")
   end
 

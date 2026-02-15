@@ -41,6 +41,11 @@ module Templates
         variables.to_a.sort
       rescue StandardError => e
         Rails.logger.error "TemplateParser error: #{e.message}"
+        ErrorLoggingService.capture_service_error(e,
+          service: "Templates::TemplateParserService",
+          severity: "warning",
+          metadata: { content_size: @file_content&.bytesize }
+        )
         []
       ensure
         tempfile.close

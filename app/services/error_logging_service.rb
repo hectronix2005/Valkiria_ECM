@@ -106,6 +106,57 @@ class ErrorLoggingService
     )
   end
 
+  # Convenience: capture exception from a service
+  def self.capture_service_error(exception, service:, severity: "error", metadata: {})
+    capture(exception,
+      source: "service",
+      severity: severity,
+      metadata: metadata.merge(service_class: service)
+    )
+  end
+
+  # Convenience: log non-exception event from a service
+  def self.log_service_event(message, service:, severity: "warning", event_type: "process_failure", metadata: {})
+    log_event(message,
+      source: "service",
+      severity: severity,
+      event_type: event_type,
+      metadata: metadata.merge(service_class: service)
+    )
+  end
+
+  # Convenience: capture exception from a background job
+  def self.capture_job_error(exception, job_class:, job_id: nil, arguments: [], metadata: {})
+    capture(exception,
+      source: "job",
+      severity: "error",
+      metadata: metadata.merge(
+        job_class: job_class,
+        job_id: job_id,
+        job_arguments: arguments.inspect.truncate(500)
+      )
+    )
+  end
+
+  # Convenience: capture frontend error reported by browser
+  def self.capture_frontend_error(message:, error_class: "FrontendError", backtrace: [], url: nil, user_agent: nil, metadata: {})
+    System::ErrorLog.create(
+      error_class: error_class.to_s.truncate(500),
+      message: message.to_s.truncate(5000),
+      backtrace: Array(backtrace).first(50),
+      source: "frontend",
+      severity: "error",
+      event_type: "frontend_error",
+      request_path: url&.truncate(2000),
+      user_agent: user_agent&.truncate(1000),
+      ip_address: Current.ip_address,
+      request_id: Current.request_id,
+      metadata: metadata
+    )
+  rescue StandardError => e
+    Rails.logger.error("[ErrorLoggingService] Failed to log frontend error: #{e.message}")
+  end
+
   # --- Private helpers ---
 
   def self.enrich_from_request(context, request)

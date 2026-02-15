@@ -24,6 +24,11 @@ class ApplicationJob < ActiveJob::Base
   rescue StandardError => e
     Rails.logger.error("Job failed: #{e.message}")
     Rails.logger.error(e.backtrace&.first(10)&.join("\n"))
+    ErrorLoggingService.capture_job_error(e,
+      job_class: job.class.name,
+      job_id: job.job_id,
+      arguments: job.arguments
+    )
     raise
   end
 

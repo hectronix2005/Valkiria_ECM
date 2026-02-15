@@ -26,6 +26,10 @@ class RetentionProcessorJob < ApplicationJob
       process_organization(org)
     rescue StandardError => e
       Rails.logger.error "[RetentionProcessor] Error processing org #{org.id}: #{e.message}"
+      ErrorLoggingService.capture_job_error(e,
+        job_class: self.class.name,
+        metadata: { organization_id: org.id.to_s, step: "process_organization" }
+      )
     end
 
     # Also process schedules without organization (shouldn't happen, but safety)
@@ -79,6 +83,10 @@ class RetentionProcessorJob < ApplicationJob
       count += 1
     rescue StandardError => e
       Rails.logger.error "[RetentionProcessor] Warning error for schedule #{schedule.id}: #{e.message}"
+      ErrorLoggingService.capture_job_error(e,
+        job_class: self.class.name,
+        metadata: { schedule_id: schedule.id.to_s, step: "process_warnings" }
+      )
     end
 
     count
@@ -104,6 +112,10 @@ class RetentionProcessorJob < ApplicationJob
       marked += 1
     rescue StandardError => e
       Rails.logger.error "[RetentionProcessor] Expiration error for schedule #{schedule.id}: #{e.message}"
+      ErrorLoggingService.capture_job_error(e,
+        job_class: self.class.name,
+        metadata: { schedule_id: schedule.id.to_s, step: "process_expirations" }
+      )
     end
 
     { marked: marked, skipped: skipped }

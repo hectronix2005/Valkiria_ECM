@@ -31,6 +31,13 @@ class RetentionNotificationJob < ApplicationJob
     end
   rescue Mongoid::Errors::DocumentNotFound
     Rails.logger.error "[RetentionNotification] Schedule not found: #{schedule_id}"
+    ErrorLoggingService.log_service_event(
+      "Retention schedule not found: #{schedule_id}",
+      service: "RetentionNotificationJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { schedule_id: schedule_id, notification_type: notification_type }
+    )
   end
 
   private

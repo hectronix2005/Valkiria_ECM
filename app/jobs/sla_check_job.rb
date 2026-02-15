@@ -16,6 +16,13 @@ class SlaCheckJob < ApplicationJob
     handle_sla_breach(task) if task.overdue?
   rescue Mongoid::Errors::DocumentNotFound
     Rails.logger.warn "[SlaCheckJob] Task not found: #{task_id}"
+    ErrorLoggingService.log_service_event(
+      "Workflow task not found: #{task_id}",
+      service: "SlaCheckJob",
+      severity: "warning",
+      event_type: "not_found",
+      metadata: { task_id: task_id }
+    )
   end
 
   private

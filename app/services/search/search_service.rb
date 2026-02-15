@@ -162,6 +162,11 @@ module Search
       )
     rescue StandardError => e
       Rails.logger.warn("Failed to log search audit: #{e.message}")
+      ErrorLoggingService.capture_service_error(e,
+        service: "Search::SearchService",
+        severity: "warning",
+        metadata: { search_text: query.text.presence }
+      )
     end
   end
 end
