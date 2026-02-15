@@ -243,9 +243,14 @@ module Api
             return render json: { error: "Error al leer el archivo del servidor" }, status: :internal_server_error
           end
 
+          # Detect format from file_name extension
+          is_docx = generated_doc.file_name&.end_with?(".docx")
+          content_type = is_docx ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf"
+          fallback_name = is_docx ? "certificacion.docx" : "certificacion.pdf"
+
           send_data file_content,
-                    filename: generated_doc.file_name || "certificacion.pdf",
-                    type: "application/pdf",
+                    filename: generated_doc.file_name || fallback_name,
+                    type: content_type,
                     disposition: "inline"
         end
 

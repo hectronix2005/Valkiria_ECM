@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { renderAsync } from 'docx-preview'
 import { approvalService, certificationService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -182,28 +183,64 @@ function CertificationApprovalsTable({ requests, onApprove, onReject, onView, on
 // Componente para mostrar el detalle de una solicitud de vacaciones con documento
 function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
   const [pdfUrl, setPdfUrl] = useState(null)
+  const [docxBlob, setDocxBlob] = useState(null)
+  const docxRef = useRef(null)
+  const [docxMetrics, setDocxMetrics] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
   const queryClient = useQueryClient()
 
-  // Cargar PDF
   useEffect(() => {
     if (request.pdf_ready && request.document_uuid) {
-      loadPdf()
+      loadDocument()
     }
     return () => {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     }
   }, [request.id, request.document_uuid, request.pdf_ready])
 
-  const loadPdf = async () => {
+  // Render DOCX with docx-preview
+  useEffect(() => {
+    if (!docxBlob || !docxRef.current) return
+    docxRef.current.innerHTML = ''
+    setDocxMetrics(null)
+    renderAsync(docxBlob, docxRef.current, null, {
+      inWrapper: true, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
+      breakPages: true, ignoreLastRenderedPageBreak: false, experimental: true,
+      trimXmlDeclaration: true, useBase64URL: true,
+    }).then(() => {
+      const section = docxRef.current?.querySelector('section.docx')
+      if (section) {
+        const container = docxRef.current
+        const sectionRect = section.getBoundingClientRect()
+        const containerRect = container.getBoundingClientRect()
+        setDocxMetrics({
+          offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
+          offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
+          scale: sectionRect.width / 612,
+        })
+      }
+    }).catch(e => console.error('[VacApprovals] Error rendering DOCX:', e))
+  }, [docxBlob])
+
+  const loadDocument = async () => {
     setPdfLoading(true)
     try {
       const response = await approvalService.downloadDocument(request.id)
-      const blob = new Blob([response.data], { type: 'application/pdf' })
-      setPdfUrl(URL.createObjectURL(blob))
+      const blob = response.data
+      // Detect DOCX by checking file signature (PK zip header) instead of relying on Content-Type
+      const header = await blob.slice(0, 4).arrayBuffer()
+      const bytes = new Uint8Array(header)
+      const isDocx = bytes[0] === 0x50 && bytes[1] === 0x4B // PK signature = ZIP/DOCX
+      if (isDocx) {
+        setDocxBlob(blob)
+        setPdfUrl(null)
+      } else {
+        setPdfUrl(URL.createObjectURL(blob))
+        setDocxBlob(null)
+      }
     } catch (err) {
-      console.error('Error loading PDF:', err)
+      console.error('[Approvals] Error loading document:', err)
     } finally {
       setPdfLoading(false)
     }
@@ -214,12 +251,9 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
     onSuccess: () => {
       queryClient.invalidateQueries(['approvals'])
       setSignError('')
-      // Reload PDF to show updated signature
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl)
-        setPdfUrl(null)
-      }
-      loadPdf()
+      if (pdfUrl) { URL.revokeObjectURL(pdfUrl); setPdfUrl(null) }
+      setDocxBlob(null)
+      loadDocument()
     },
     onError: (err) => {
       setSignError(err.response?.data?.error || 'Error al firmar el documento')
@@ -305,7 +339,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
             Documento de Solicitud
           </h3>
 
-          {/* PDF Preview */}
+          {/* Document Preview */}
           {pdfLoading ? (
             <div className="border rounded-lg p-8 text-center bg-gray-50">
               <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
@@ -325,6 +359,33 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
                 className="w-full h-[350px] border-0"
                 title="Vista previa del documento"
               />
+            </div>
+          ) : docxBlob ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-4 py-2">
+                <span className="text-sm font-medium text-gray-700">Vista Previa del Documento</span>
+              </div>
+              <div className="relative max-h-[500px] overflow-auto bg-white">
+                <div ref={docxRef} style={{ position: 'relative' }} />
+                {docxMetrics && documentInfo?.signatures?.filter(s => s.signed && s.signature_image && s.position_box).map((sig, idx) => {
+                  const box = sig.position_box
+                  const m = docxMetrics
+                  return (
+                    <div key={idx} style={{
+                      position: 'absolute',
+                      left: m.offsetLeft + box.x * m.scale,
+                      top: m.offsetTop + box.y * m.scale,
+                      width: box.width * m.scale,
+                      height: box.height * m.scale,
+                      zIndex: 10, pointerEvents: 'none', background: '#fff',
+                    }}>
+                      <img src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                        alt={`Firma de ${sig.signed_by}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           ) : request.pdf_ready === false ? (
             <div className="border rounded-lg p-6 text-center bg-amber-50 border-amber-200">
@@ -452,6 +513,9 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
 // Componente para mostrar el detalle de una solicitud de certificación con documento
 function CertificationDetailWithDocument({ request, onClose, onApprove, onReject, onGenerateDocument, isGenerating, generateError }) {
   const [pdfUrl, setPdfUrl] = useState(null)
+  const [docxBlob, setDocxBlob] = useState(null)
+  const docxRef = useRef(null)
+  const [docxMetrics, setDocxMetrics] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
   const [autoGenTriggered, setAutoGenTriggered] = useState(false)
@@ -465,24 +529,56 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
     }
   }, [request.id, request.has_document])
 
-  // Cargar PDF
   useEffect(() => {
     if (request.pdf_ready && request.document_uuid) {
-      loadPdf()
+      loadDocument()
     }
     return () => {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     }
   }, [request.id, request.document_uuid, request.pdf_ready])
 
-  const loadPdf = async () => {
+  // Render DOCX with docx-preview
+  useEffect(() => {
+    if (!docxBlob || !docxRef.current) return
+    docxRef.current.innerHTML = ''
+    setDocxMetrics(null)
+    renderAsync(docxBlob, docxRef.current, null, {
+      inWrapper: true, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
+      breakPages: true, ignoreLastRenderedPageBreak: false, experimental: true,
+      trimXmlDeclaration: true, useBase64URL: true,
+    }).then(() => {
+      const section = docxRef.current?.querySelector('section.docx')
+      if (section) {
+        const container = docxRef.current
+        const sectionRect = section.getBoundingClientRect()
+        const containerRect = container.getBoundingClientRect()
+        setDocxMetrics({
+          offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
+          offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
+          scale: sectionRect.width / 612,
+        })
+      }
+    }).catch(e => console.error('Error rendering DOCX:', e))
+  }, [docxBlob])
+
+  const loadDocument = async () => {
     setPdfLoading(true)
     try {
       const response = await approvalService.downloadDocument(request.id)
-      const blob = new Blob([response.data], { type: 'application/pdf' })
-      setPdfUrl(URL.createObjectURL(blob))
+      const blob = response.data
+      const header = await blob.slice(0, 4).arrayBuffer()
+      const bytes = new Uint8Array(header)
+      const isDocx = bytes[0] === 0x50 && bytes[1] === 0x4B
+      if (isDocx) {
+        setDocxBlob(blob)
+        setPdfUrl(null)
+      } else {
+        setPdfUrl(URL.createObjectURL(blob))
+        setDocxBlob(null)
+      }
     } catch (err) {
-      console.error('Error loading PDF:', err)
+      console.error('Error loading document:', err)
     } finally {
       setPdfLoading(false)
     }
@@ -493,11 +589,9 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
     onSuccess: () => {
       queryClient.invalidateQueries(['approvals'])
       setSignError('')
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl)
-        setPdfUrl(null)
-      }
-      loadPdf()
+      if (pdfUrl) { URL.revokeObjectURL(pdfUrl); setPdfUrl(null) }
+      setDocxBlob(null)
+      loadDocument()
     },
     onError: (err) => {
       setSignError(err.response?.data?.error || 'Error al firmar el documento')
@@ -561,7 +655,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
             Documento de Certificacion
           </h3>
 
-          {/* PDF Preview */}
+          {/* Document Preview */}
           {pdfLoading ? (
             <div className="border rounded-lg p-8 text-center bg-gray-50">
               <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
@@ -581,6 +675,33 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
                 className="w-full h-[350px] border-0"
                 title="Vista previa del documento"
               />
+            </div>
+          ) : docxBlob ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-4 py-2">
+                <span className="text-sm font-medium text-gray-700">Vista Previa del Documento</span>
+              </div>
+              <div className="relative max-h-[500px] overflow-auto bg-white">
+                <div ref={docxRef} style={{ position: 'relative' }} />
+                {docxMetrics && documentInfo?.signatures?.filter(s => s.signed && s.signature_image && s.position_box).map((sig, idx) => {
+                  const box = sig.position_box
+                  const m = docxMetrics
+                  return (
+                    <div key={idx} style={{
+                      position: 'absolute',
+                      left: m.offsetLeft + box.x * m.scale,
+                      top: m.offsetTop + box.y * m.scale,
+                      width: box.width * m.scale,
+                      height: box.height * m.scale,
+                      zIndex: 10, pointerEvents: 'none', background: '#fff',
+                    }}>
+                      <img src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                        alt={`Firma de ${sig.signed_by}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           ) : request.pdf_ready === false ? (
             <div className="border rounded-lg p-6 text-center bg-amber-50 border-amber-200">

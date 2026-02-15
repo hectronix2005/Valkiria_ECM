@@ -260,15 +260,68 @@ module Templates
       return unless entry
 
       xml_content = entry.get_input_stream.read
-      doc = Nokogiri::XML(xml_content)
 
-      # Process all paragraphs
-      doc.xpath("//w:p", "w" => WORD_NAMESPACE).each do |paragraph|
-        process_paragraph(paragraph)
+      # Strategy 1: Try raw string replacement first (preserves 100% of formatting)
+      modified_content = try_raw_string_replacement(xml_content)
+
+      if modified_content
+        # Raw replacement succeeded for all variables - write back without any XML parsing
+        zipfile.get_output_stream(entry_name) { |f| f.write(modified_content) }
+      else
+        # Strategy 2: Fall back to Nokogiri for fragmented variables spanning multiple runs
+        # Clear partial log entries from the raw attempt since Nokogiri will re-process everything
+        @replacement_log.clear
+        doc = Nokogiri::XML(xml_content)
+
+        doc.xpath("//w:p", "w" => WORD_NAMESPACE).each do |paragraph|
+          process_paragraph(paragraph)
+        end
+
+        # Write back preserving original XML structure (no added indentation/formatting)
+        zipfile.get_output_stream(entry_name) do |f|
+          f.write(doc.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML))
+        end
+      end
+    end
+
+    # Try to replace all variables using raw string operations (no XML parsing)
+    # Returns modified content if all variables were replaced, nil if fragmented variables exist
+    def try_raw_string_replacement(xml_content)
+      content = xml_content.dup
+
+      # Find all variables present in the raw XML
+      variables_in_xml = content.scan(VARIABLE_PATTERN).flatten
+      return content if variables_in_xml.empty? # No variables, return as-is
+
+      # Check if all variables appear as complete strings (not fragmented across XML tags)
+      has_fragmented = false
+      variables_in_xml.uniq.each do |var_name|
+        pattern = "{{#{var_name}}}"
+        replacement = find_variable_value(var_name)
+
+        if replacement.nil?
+          @replacement_log << { variable: var_name, status: "not_found", reason: "No mapping found" }
+          next
+        end
+
+        # Check if the variable appears inside a single <w:t> tag (not fragmented)
+        # A fragmented variable would have XML tags breaking it up: {{Var</w:t>...</w:t>iable}}
+        if content.include?(pattern)
+          # Escape XML special characters in the replacement value
+          safe_replacement = replacement.to_s
+                                        .gsub("&", "&amp;")
+                                        .gsub("<", "&lt;")
+                                        .gsub(">", "&gt;")
+          content = content.gsub(pattern, safe_replacement)
+          @replacement_log << { variable: var_name, status: "replaced", value: replacement.to_s }
+        else
+          # Variable is fragmented across multiple runs - need Nokogiri
+          has_fragmented = true
+          break
+        end
       end
 
-      # Write back
-      zipfile.get_output_stream(entry_name) { |f| f.write(doc.to_xml) }
+      has_fragmented ? nil : content
     end
 
     def process_paragraph(paragraph)

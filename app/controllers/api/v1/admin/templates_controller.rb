@@ -263,7 +263,16 @@ module Api
             return render json: { error: "No se pudo obtener el archivo" }, status: :internal_server_error
           end
 
-          # Convert Word to PDF using multiple fallback methods
+          # On macOS dev, serve the DOCX directly (frontend uses docx-preview for rendering)
+          # This avoids launching LibreOffice or Pandoc conversion
+          if RUBY_PLATFORM.include?("darwin") && @template.file_name&.end_with?(".docx")
+            return send_data file_content,
+                      filename: @template.file_name,
+                      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                      disposition: "inline"
+          end
+
+          # Convert Word to PDF using multiple fallback methods (production/Heroku)
           temp_dir = Dir.mktmpdir
           begin
             docx_path = File.join(temp_dir, "template.docx")
@@ -322,6 +331,8 @@ module Api
             :company_id,
             :preview_scale,
             :preview_page_height,
+            :pdf_width,
+            :pdf_height,
             :sequential_signing,
             variable_mappings: {}
           )

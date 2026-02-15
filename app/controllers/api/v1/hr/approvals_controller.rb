@@ -99,22 +99,27 @@ module Api
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
 
-          pdf_content = generated_doc.file_content
-          unless pdf_content
-            return render json: { error: "Archivo PDF no encontrado" }, status: :not_found
+          file_content = generated_doc.file_content
+          unless file_content
+            return render json: { error: "Archivo no encontrado" }, status: :not_found
           end
+
+          # Detect format from file_name extension
+          is_docx = generated_doc.file_name&.end_with?(".docx")
+          ext = is_docx ? "docx" : "pdf"
+          content_type = is_docx ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf"
 
           filename = case @approvable
                      when ::Hr::VacationRequest
-                       "solicitud_vacaciones_#{@approvable.request_number}.pdf"
+                       "solicitud_vacaciones_#{@approvable.request_number}.#{ext}"
                      when ::Hr::EmploymentCertificationRequest
-                       "certificacion_#{@approvable.request_number}.pdf"
+                       "certificacion_#{@approvable.request_number}.#{ext}"
                      else
-                       "documento_#{@approvable.request_number}.pdf"
+                       "documento_#{@approvable.request_number}.#{ext}"
                      end
 
-          send_data pdf_content,
-                    type: "application/pdf",
+          send_data file_content,
+                    type: content_type,
                     filename: filename,
                     disposition: "inline"
         end
@@ -287,15 +292,31 @@ module Api
             status: doc.status,
             pdf_ready: !doc.pending_pdf? && doc.draft_file_id.present?,
             signatures: doc.signatures.map do |sig|
-              {
+              sig_data = {
                 signatory_type_code: sig["signatory_type_code"],
                 label: sig["label"],
                 position: sig["position"],
                 signed: sig["signed_at"].present?,
                 signed_at: sig["signed_at"],
                 signed_by_name: sig["signed_by_name"],
+                signed_by: sig["signed_by_name"],
                 required: sig["required"]
               }
+              if sig["signed_at"].present? && sig["signature_id"].present?
+                user_sig = ::Identity::UserSignature.where(uuid: sig["signature_id"]).first
+                sig_data[:signature_image] = user_sig&.to_image_data
+              end
+              if sig["signatory_id"].present?
+                tmpl_sig = doc.template&.signatories&.where(uuid: sig["signatory_id"])&.first
+                if tmpl_sig
+                  sig_data[:position_box] = {
+                    x: tmpl_sig.x_position, y: tmpl_sig.y_position,
+                    width: tmpl_sig.width, height: tmpl_sig.height,
+                    page: tmpl_sig.page_number
+                  }
+                end
+              end
+              sig_data
             end
           }
         end

@@ -290,33 +290,18 @@ module Templates
         content = file_content
         return unless content
 
-        # Get PDF content - either directly or by converting docx
-        pdf_content = if file_name&.end_with?(".pdf")
-                        content
-                      elsif file_name&.end_with?(".docx")
-                        convert_docx_to_pdf_for_dimensions(content)
-                      end
-
-        return unless pdf_content
-
-        # Store the PDF preview in GridFS for servers without LibreOffice
         if file_name&.end_with?(".docx")
-          store_pdf_preview!(pdf_content)
+          # Extract dimensions directly from DOCX XML (no conversion needed)
+          extract_dimensions_from_docx(content)
+
+          # Only generate PDF preview on Heroku (not on macOS dev where docx-preview is used)
+          unless RUBY_PLATFORM.include?("darwin")
+            pdf_content = convert_docx_to_pdf_for_dimensions(content)
+            store_pdf_preview!(pdf_content) if pdf_content
+          end
+        elsif file_name&.end_with?(".pdf")
+          extract_dimensions_from_pdf(content)
         end
-
-        require "combine_pdf"
-        pdf = CombinePDF.parse(pdf_content)
-        return if pdf.pages.empty?
-
-        first_page = pdf.pages.first
-        mediabox = first_page.mediabox
-
-        self.pdf_width = mediabox[2].to_f
-        self.pdf_height = mediabox[3].to_f
-        self.pdf_page_count = pdf.pages.count
-
-        # Also update preview_page_height to match actual PDF
-        self.preview_page_height = pdf_height.to_i if pdf_height.present?
 
         Rails.logger.info "Extracted PDF dimensions: #{pdf_width}x#{pdf_height}, #{pdf_page_count} pages"
       rescue StandardError => e
@@ -327,6 +312,63 @@ module Templates
         self.pdf_height ||= 792.0
         self.pdf_page_count ||= 1
       end
+    end
+
+    # Extract page dimensions directly from DOCX XML without any conversion
+    # Reads the w:pgSz element which contains width/height in TWIPs (1/20th of a point)
+    def extract_dimensions_from_docx(docx_content)
+      require "zip"
+      require "nokogiri"
+
+      io = StringIO.new(docx_content)
+      Zip::File.open_buffer(io) do |zipfile|
+        doc_entry = zipfile.find_entry("word/document.xml")
+        return set_default_dimensions! unless doc_entry
+
+        xml = Nokogiri::XML(doc_entry.get_input_stream.read)
+        ns = { "w" => "http://schemas.openxmlformats.org/wordprocessingml/2006/main" }
+
+        # w:pgSz contains page dimensions in TWIPs (1/20th of a point)
+        pg_sz = xml.at_xpath("//w:pgSz", ns)
+        if pg_sz
+          twips_w = pg_sz["w:w"]&.to_f || 12_240 # Letter default
+          twips_h = pg_sz["w:h"]&.to_f || 15_840
+          self.pdf_width = (twips_w / 20.0).round(1)
+          self.pdf_height = (twips_h / 20.0).round(1)
+        else
+          set_default_dimensions!
+        end
+
+        # Count page breaks for page count estimate
+        page_breaks = xml.xpath("//w:br[@w:type='page']", ns).count
+        # Also count section breaks (each section can start a new page)
+        section_breaks = xml.xpath("//w:sectPr", ns).count
+        self.pdf_page_count = [page_breaks + 1, section_breaks].max.clamp(1, 100)
+
+        self.preview_page_height = pdf_height.to_i if pdf_height.present?
+      end
+    rescue StandardError => e
+      Rails.logger.warn "Could not extract DOCX dimensions: #{e.message}"
+      set_default_dimensions!
+    end
+
+    def extract_dimensions_from_pdf(pdf_content)
+      require "combine_pdf"
+      pdf = CombinePDF.parse(pdf_content)
+      return set_default_dimensions! if pdf.pages.empty?
+
+      first_page = pdf.pages.first
+      mediabox = first_page.mediabox
+      self.pdf_width = mediabox[2].to_f
+      self.pdf_height = mediabox[3].to_f
+      self.pdf_page_count = pdf.pages.count
+      self.preview_page_height = pdf_height.to_i if pdf_height.present?
+    end
+
+    def set_default_dimensions!
+      self.pdf_width ||= 612.0
+      self.pdf_height ||= 792.0
+      self.pdf_page_count ||= 1
     end
 
     def store_pdf_preview!(pdf_content)

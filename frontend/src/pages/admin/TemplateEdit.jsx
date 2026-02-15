@@ -35,26 +35,25 @@ const DEFAULT_PDF_HEIGHT = 792
 
 // Signature Preview Component - Shows page layout with draggable signature fields
 function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSelect, onUpdatePosition, onUpdateSize, scale = 0.6, numPages = 1, customPageHeight, customPageWidth }) {
-  // Use actual PDF dimensions from template, with Letter size defaults
   const PDF_WIDTH = customPageWidth || DEFAULT_PDF_WIDTH
   const PDF_HEIGHT = customPageHeight || DEFAULT_PDF_HEIGHT
-  const PAGE_HEIGHT = PDF_HEIGHT // Alias for backward compatibility
-  const containerRef = useRef(null)
-  const scrollContainerRef = useRef(null)
-  const docxContainerRef = useRef(null)
+  const docxRef = useRef(null)
+  const scrollRef = useRef(null)
   const [dragging, setDragging] = useState(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [resizing, setResizing] = useState(null)
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
   const [docxLoaded, setDocxLoaded] = useState(false)
   const [docxLoading, setDocxLoading] = useState(false)
-  const [pdfUrl, setPdfUrl] = useState(null)
+  // Metrics from actual rendered section: offset within container + raw section width
+  const [sectionMetrics, setSectionMetrics] = useState(null) // { offsetLeft, offsetTop, sectionWidth }
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Load DOCX and render client-side with docx-preview (preserves original formatting)
+  // Load and render DOCX naturally (same approach as Vacations.jsx)
   useEffect(() => {
     if (!templateId || !hasFile) {
       setDocxLoaded(false)
+      setSectionMetrics(null)
       return
     }
 
@@ -63,15 +62,13 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
 
     templateService.download(templateId)
       .then(response => {
-        if (!isMounted || !docxContainerRef.current) return
+        if (!isMounted || !docxRef.current) return
         const blob = new Blob([response.data], {
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         })
-        // Clear previous render
-        docxContainerRef.current.innerHTML = ''
-        return renderAsync(blob, docxContainerRef.current, null, {
-          className: 'docx-preview-content',
-          inWrapper: false,
+        docxRef.current.innerHTML = ''
+        return renderAsync(blob, docxRef.current, null, {
+          inWrapper: true,
           ignoreWidth: false,
           ignoreHeight: false,
           ignoreFonts: false,
@@ -80,117 +77,100 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
           experimental: true,
           trimXmlDeclaration: true,
           useBase64URL: true,
+          renderHeaders: true,
+          renderFooters: true,
+          renderFootnotes: true,
         })
       })
       .then(() => {
-        if (!isMounted) return
+        if (!isMounted || !docxRef.current) return
         setDocxLoaded(true)
         setDocxLoading(false)
+        // Measure where the section actually rendered (same as Vacations.jsx)
+        const section = docxRef.current?.querySelector('section.docx')
+        if (section) {
+          const container = docxRef.current
+          const sectionRect = section.getBoundingClientRect()
+          const containerRect = container.getBoundingClientRect()
+          const metrics = {
+            offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
+            offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
+            sectionWidth: sectionRect.width, // raw rendered width in pixels
+          }
+          console.log('[SignaturePreview] Section metrics:', metrics, 'pdfWidth:', PDF_WIDTH)
+          setSectionMetrics(metrics)
+        }
       })
       .catch(err => {
         if (!isMounted) return
         console.error('Error rendering DOCX preview:', err)
         setDocxLoading(false)
-        // Fallback: try loading PDF preview
-        templateService.preview(templateId)
-          .then(response => {
-            if (!isMounted) return
-            const pdfBlob = new Blob([response.data], { type: 'application/pdf' })
-            setPdfUrl(URL.createObjectURL(pdfBlob))
-          })
-          .catch(() => {})
       })
 
-    return () => {
-      isMounted = false
-    }
+    return () => { isMounted = false }
   }, [templateId, hasFile])
 
-  // Track scroll position to update current page indicator
-  const handleScroll = useCallback((e) => {
-    const scrollTop = e.target.scrollTop
-    const scaledPageHeight = PAGE_HEIGHT * scale
-    const page = Math.floor(scrollTop / scaledPageHeight) + 1
-    setCurrentPage(Math.min(page, numPages))
-  }, [scale, numPages, PAGE_HEIGHT])
+  // Dynamic scale: maps PDF coordinates to rendered pixels (recalculates when PDF_WIDTH changes)
+  const coordScale = sectionMetrics ? (sectionMetrics.sectionWidth / PDF_WIDTH) : 1
+
+  // Convert mouse position to PDF coordinates using section metrics
+  const mouseToPdf = useCallback((e) => {
+    if (!docxRef.current || !sectionMetrics) return null
+    const containerRect = docxRef.current.getBoundingClientRect()
+    const mouseX = e.clientX - containerRect.left + docxRef.current.scrollLeft
+    const mouseY = e.clientY - containerRect.top + docxRef.current.scrollTop
+    return {
+      x: (mouseX - sectionMetrics.offsetLeft) / coordScale,
+      y: (mouseY - sectionMetrics.offsetTop) / coordScale,
+    }
+  }, [sectionMetrics, coordScale])
 
   const handleMouseDown = (e, sig) => {
     e.preventDefault()
     e.stopPropagation()
-    const rect = containerRef.current.getBoundingClientRect()
-    // Mouse position relative to the scaled container, converted to native PDF coords
-    const mouseXInPdf = (e.clientX - rect.left) / scale
-    const mouseYInPdf = (e.clientY - rect.top) / scale
+    const pdfPos = mouseToPdf(e)
+    if (!pdfPos) return
     setDragOffset({
-      x: mouseXInPdf - (sig.x_position || 350),
-      y: mouseYInPdf - (sig.y_position || 700)
+      x: pdfPos.x - (sig.x_position || 350),
+      y: pdfPos.y - (sig.y_position || 700),
     })
     setDragging(sig.id)
     onSelect(sig.id)
   }
 
   const handleMouseMove = useCallback((e) => {
-    if (!containerRef.current) return
+    const pdfPos = mouseToPdf(e)
+    if (!pdfPos) return
 
-    const rect = containerRef.current.getBoundingClientRect()
-
-    // Handle resizing
     if (resizing && onUpdateSize) {
-      const mouseXInPdf = (e.clientX - rect.left) / scale
-      const mouseYInPdf = (e.clientY - rect.top) / scale
-
-      const deltaX = mouseXInPdf - resizeStart.x
-      const deltaY = mouseYInPdf - resizeStart.y
-
-      const newWidth = Math.max(50, Math.min(400, resizeStart.width + deltaX))
-      const newHeight = Math.max(25, Math.min(200, resizeStart.height + deltaY))
-
-      onUpdateSize(resizing, Math.round(newWidth), Math.round(newHeight))
+      const deltaX = pdfPos.x - resizeStart.x
+      const deltaY = pdfPos.y - resizeStart.y
+      onUpdateSize(resizing, Math.round(Math.max(50, Math.min(400, resizeStart.width + deltaX))), Math.round(Math.max(25, Math.min(200, resizeStart.height + deltaY))))
       return
     }
 
-    // Handle dragging
     if (!dragging) return
-
     const sig = signatories.find(s => s.id === dragging)
     if (!sig) return
 
-    // Calculate total document height (all pages)
-    const totalHeight = PAGE_HEIGHT * numPages
-
-    // Convert mouse position to native PDF coordinates
-    const mouseXInPdf = (e.clientX - rect.left) / scale
-    const mouseYInPdf = (e.clientY - rect.top) / scale
-
-    const newX = Math.max(0, Math.min(PDF_WIDTH - (sig.width || 200), mouseXInPdf - dragOffset.x))
-    const newY = Math.max(0, Math.min(totalHeight - (sig.height || 80), mouseYInPdf - dragOffset.y))
-
+    const totalPdfHeight = PDF_HEIGHT * numPages
+    const newX = Math.max(0, Math.min(PDF_WIDTH - (sig.width || 200), pdfPos.x - dragOffset.x))
+    const newY = Math.max(0, Math.min(totalPdfHeight - (sig.height || 80), pdfPos.y - dragOffset.y))
     onUpdatePosition(dragging, Math.round(newX), Math.round(newY))
-  }, [dragging, dragOffset, resizing, resizeStart, scale, signatories, onUpdatePosition, onUpdateSize, numPages, PAGE_HEIGHT])
+  }, [dragging, dragOffset, resizing, resizeStart, mouseToPdf, signatories, onUpdatePosition, onUpdateSize, numPages, PDF_HEIGHT, PDF_WIDTH])
 
-  const handleMouseUp = () => {
-    setDragging(null)
-    setResizing(null)
-  }
+  const handleMouseUp = () => { setDragging(null); setResizing(null) }
 
-  // Handle resize start
   const handleResizeStart = (e, sig) => {
     e.preventDefault()
     e.stopPropagation()
-    const rect = containerRef.current.getBoundingClientRect()
-    const mouseXInPdf = (e.clientX - rect.left) / scale
-    const mouseYInPdf = (e.clientY - rect.top) / scale
-    setResizeStart({
-      x: mouseXInPdf,
-      y: mouseYInPdf,
-      width: sig.width || 200,
-      height: sig.height || 80
-    })
+    const pdfPos = mouseToPdf(e)
+    if (!pdfPos) return
+    setResizeStart({ x: pdfPos.x, y: pdfPos.y, width: sig.width || 200, height: sig.height || 80 })
     setResizing(sig.id)
     onSelect(sig.id)
   }
 
-  // Signature field colors by role type
   const getSignatureColor = (role) => {
     const colors = {
       employee: { bg: 'rgba(59, 130, 246, 0.3)', border: '#3b82f6', text: '#1d4ed8' },
@@ -206,308 +186,137 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
     return colors[role] || colors.admin
   }
 
-  // Calculate page from Y position
-  const getPageFromY = (y) => Math.floor(y / PAGE_HEIGHT) + 1
-
-  const displayWidth = PDF_WIDTH * scale
-  const displayHeight = PAGE_HEIGHT * scale
-  const totalHeight = displayHeight * numPages
-
-  // Scroll to specific page
-  const scrollToPage = (page) => {
-    if (scrollContainerRef.current) {
-      const targetY = displayHeight * (page - 1)
-      scrollContainerRef.current.scrollTo({ top: targetY, behavior: 'smooth' })
-    }
-  }
+  const getPageFromY = (y) => Math.floor(y / PDF_HEIGHT) + 1
 
   return (
     <div className="relative">
-      {/* Page Controls */}
+      {/* Status bar */}
       <div className="flex items-center justify-end mb-2 gap-3">
-        {docxLoading && (
-          <span className="text-xs text-gray-400 animate-pulse">Cargando documento...</span>
-        )}
-        {docxLoaded && (
-          <span className="text-xs text-green-500">Formato original</span>
-        )}
-        {/* Page indicator and navigation */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">
-            Página {currentPage} de {numPages}
-          </span>
-          {numPages > 1 && (
-            <div className="flex gap-1">
-              {[...Array(numPages)].map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => scrollToPage(i + 1)}
-                  className={`w-5 h-5 text-[10px] rounded ${currentPage === i + 1 ? 'bg-primary-500 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {docxLoading && <span className="text-xs text-gray-400 animate-pulse">Cargando documento...</span>}
+        {docxLoaded && <span className="text-xs text-green-500">Formato original preservado</span>}
+        <span className="text-xs text-gray-500">Página {currentPage} de {numPages}</span>
       </div>
 
-      {/* Scrollable PDF Container - maintains A4 aspect ratio */}
+      {/* Scrollable container - DOCX renders naturally, no transforms */}
       <div
-        ref={scrollContainerRef}
-        className="mx-auto border-2 border-gray-300 rounded-lg shadow-lg overflow-auto bg-gray-100"
-        style={{
-          width: displayWidth + 24, // Extra space for padding and shadows
-          maxHeight: 650, // Visible scroll area
-          padding: 10,
+        ref={scrollRef}
+        className="border-2 border-gray-300 rounded-lg shadow-lg overflow-auto bg-gray-50"
+        style={{ maxHeight: 650 }}
+        onScroll={(e) => {
+          if (!sectionMetrics) return
+          const pageH = PDF_HEIGHT * coordScale
+          const page = Math.floor(e.target.scrollTop / pageH) + 1
+          setCurrentPage(Math.min(page, numPages))
         }}
-        onScroll={handleScroll}
       >
-        {/* Wrapper to maintain scroll height (CSS transform doesn't affect document flow) */}
-        <div style={{ width: displayWidth, height: totalHeight, margin: '0 auto' }}>
-          {/* Scaled container - renders at full PDF size then transforms down */}
-          <div
-            ref={containerRef}
-            className="relative origin-top-left"
-            style={{
-              width: PDF_WIDTH,
-              height: PAGE_HEIGHT * numPages, // Full height for all pages at native size
-              transform: `scale(${scale})`,
-              transformOrigin: 'top left',
-            }}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-          >
-          {/* DOCX Background - rendered client-side with docx-preview */}
-          <div
-            ref={docxContainerRef}
-            className="absolute inset-0 pointer-events-none overflow-hidden"
-            style={{
-              width: PDF_WIDTH,
-              height: PAGE_HEIGHT * numPages,
-            }}
-          />
-
-          {/* PDF fallback background - only if DOCX rendering failed */}
-          {!docxLoaded && pdfUrl && hasFile && (
-            <iframe
-              src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                width: PDF_WIDTH,
-                height: PAGE_HEIGHT * numPages,
-                border: 'none',
-              }}
-              title="PDF Preview"
-            />
-          )}
-
-          {/* Render page placeholders with correct proportions */}
-          {[...Array(numPages)].map((_, pageIndex) => (
-            <div
-              key={pageIndex}
-              className={`border border-gray-300 ${(docxLoaded || pdfUrl) ? 'bg-transparent' : 'bg-white'}`}
-              style={{
-                width: PDF_WIDTH,
-                height: PAGE_HEIGHT,
-                position: 'absolute',
-                top: pageIndex * PAGE_HEIGHT,
-                left: 0,
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                zIndex: -1,
-              }}
-            >
-              {/* Page number indicator */}
-              <div className="absolute top-2 right-2 bg-gray-100/80 text-gray-500 text-xs px-2 py-1 rounded z-10">
-                Página {pageIndex + 1}
-              </div>
-              {/* Visual grid lines to help with positioning - only show if no document rendered */}
-              {!docxLoaded && !pdfUrl && (
-                <>
-                  <div className="absolute inset-4 border border-dashed border-gray-200 pointer-events-none opacity-50" />
-                  <div className="absolute left-1/2 top-4 bottom-4 w-px bg-gray-100 pointer-events-none" />
-                  <div className="absolute top-1/2 left-4 right-4 h-px bg-gray-100 pointer-events-none" />
-                </>
-              )}
-            </div>
-          ))}
-
+        {/* DOCX container - renders naturally like Visualizar/Vacations.jsx */}
+        <div
+          ref={docxRef}
+          className="signature-preview-docx"
+          style={{ position: 'relative', minHeight: 200 }}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
           {/* No file state */}
           {!hasFile && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+            <div className="flex items-center justify-center py-16">
               <div className="text-center text-gray-400 p-4">
                 <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Sube un archivo Word para ver el preview</p>
               </div>
             </div>
           )}
+        </div>
 
-          {/* Page separators - at native PDF dimensions */}
-          {numPages > 1 && [...Array(numPages - 1)].map((_, i) => (
+        {/* Signature Fields Overlay - positioned using measured section metrics */}
+        {sectionMetrics && signatories.map((sig) => {
+          const colors = getSignatureColor(sig.effective_code || sig.role || sig.signatory_type_code)
+          const isSelected = selectedId === sig.id
+          const isDragging = dragging === sig.id
+          const m = sectionMetrics
+          const sigWidth = (sig.width || 200) * coordScale
+          const sigHeight = (sig.height || 80) * coordScale
+          const pixelX = m.offsetLeft + (sig.x_position || 350) * coordScale
+          const pixelY = m.offsetTop + (sig.y_position || 700) * coordScale
+          const datePosition = sig.date_position || 'right'
+          const sigPage = getPageFromY(sig.y_position || 700)
+
+          let sigAreaStyle = {}
+          let dateAreaStyle = {}
+          switch (datePosition) {
+            case 'right':
+              sigAreaStyle = { width: '75%', height: '100%', left: 0, top: 0 }
+              dateAreaStyle = { width: '25%', height: '100%', right: 0, top: 0 }
+              break
+            case 'below':
+              sigAreaStyle = { width: '100%', height: '80%', left: 0, top: 0 }
+              dateAreaStyle = { width: '100%', height: '20%', left: 0, bottom: 0 }
+              break
+            case 'above':
+              sigAreaStyle = { width: '100%', height: '80%', left: 0, bottom: 0 }
+              dateAreaStyle = { width: '100%', height: '20%', left: 0, top: 0 }
+              break
+            default:
+              sigAreaStyle = { width: '100%', height: '100%', left: 0, top: 0 }
+              dateAreaStyle = null
+              break
+          }
+
+          return (
             <div
-              key={i}
-              className="absolute left-0 right-0 border-t-2 border-dashed border-gray-400 pointer-events-none"
-              style={{ top: PAGE_HEIGHT * (i + 1) }}
+              key={sig.id}
+              className="cursor-move transition-all duration-100"
+              style={{
+                position: 'absolute',
+                left: pixelX,
+                top: pixelY,
+                width: sigWidth,
+                height: sigHeight,
+                border: `2px dashed ${colors.border}`,
+                borderRadius: 4,
+                boxShadow: isSelected ? `0 0 0 3px ${colors.border}40, 0 4px 12px rgba(0,0,0,0.15)` : isDragging ? '0 8px 20px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
+                zIndex: isDragging ? 100 : isSelected ? 50 : 10,
+                opacity: isDragging ? 0.9 : 1,
+              }}
+              onMouseDown={(e) => handleMouseDown(e, sig)}
             >
-              <span className="absolute left-2 -top-4 bg-gray-200 px-2 py-0.5 text-xs text-gray-500 rounded">
-                Página {i + 2}
-              </span>
-            </div>
-          ))}
-
-          {/* Signature Fields Overlay - uses native PDF coordinates */}
-          <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-            {signatories.map((sig) => {
-              const colors = getSignatureColor(sig.effective_code || sig.role || sig.signatory_type_code)
-              const isSelected = selectedId === sig.id
-              const isDragging = dragging === sig.id
-              const sigWidth = sig.width || 200
-              const sigHeight = sig.height || 80
-              const datePosition = sig.date_position || 'right'
-              // y_position is already stored as absolute Y coordinate (includes page offset)
-              const absoluteY = sig.y_position || 700
-              // Calculate page number from absolute Y for display
-              const sigPage = Math.floor(absoluteY / PAGE_HEIGHT) + 1
-
-              // Calculate actual signature area based on date position (matching PDF rendering)
-              let actualSigWidth = sigWidth
-              let actualSigHeight = sigHeight
-              let sigAreaStyle = {}
-              let dateAreaStyle = {}
-
-              switch (datePosition) {
-                case 'right':
-                  actualSigWidth = sigWidth * 0.75
-                  sigAreaStyle = { width: '75%', height: '100%', left: 0, top: 0 }
-                  dateAreaStyle = { width: '25%', height: '100%', right: 0, top: 0 }
-                  break
-                case 'below':
-                  actualSigHeight = sigHeight * 0.80
-                  sigAreaStyle = { width: '100%', height: '80%', left: 0, top: 0 }
-                  dateAreaStyle = { width: '100%', height: '20%', left: 0, bottom: 0 }
-                  break
-                case 'above':
-                  actualSigHeight = sigHeight * 0.80
-                  sigAreaStyle = { width: '100%', height: '80%', left: 0, bottom: 0 }
-                  dateAreaStyle = { width: '100%', height: '20%', left: 0, top: 0 }
-                  break
-                case 'none':
-                default:
-                  sigAreaStyle = { width: '100%', height: '100%', left: 0, top: 0 }
-                  dateAreaStyle = null
-                  break
-              }
-
-              return (
-                <div
-                  key={sig.id}
-                  className="absolute cursor-move transition-all duration-100"
-                  style={{
-                    left: sig.x_position || 350,
-                    top: absoluteY,
-                    width: sigWidth,
-                    height: sigHeight,
-                    backgroundColor: 'transparent',
-                    border: `2px dashed ${colors.border}`,
-                    borderRadius: 4,
-                    boxShadow: isSelected ? `0 0 0 3px ${colors.border}40, 0 4px 12px rgba(0,0,0,0.15)` : isDragging ? '0 8px 20px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
-                    zIndex: isDragging ? 100 : isSelected ? 50 : 10,
-                    pointerEvents: 'auto',
-                    opacity: isDragging ? 0.9 : 1
-                  }}
-                  onMouseDown={(e) => handleMouseDown(e, sig)}
-                >
-                  {/* Signature area - shows actual signature space */}
-                  <div
-                    className="absolute flex flex-col items-center justify-center"
-                    style={{
-                      ...sigAreaStyle,
-                      backgroundColor: colors.bg,
-                      borderRadius: 2
-                    }}
-                  >
-                    <PenTool
-                      style={{ width: 16, height: 16, color: colors.text, opacity: 0.6 }}
-                    />
-                    <span
-                      className="font-medium text-center truncate w-full px-1"
-                      style={{ fontSize: 10, color: colors.text }}
-                    >
-                      {sig.label || sig.role_label}
-                    </span>
-                    {sig.required && (
-                      <span style={{ fontSize: 8, color: '#ef4444', fontWeight: 'bold' }}>
-                        *Req
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Date area - shows where date will appear */}
-                  {dateAreaStyle && (
-                    <div
-                      className="absolute flex items-center justify-center"
-                      style={{
-                        ...dateAreaStyle,
-                        backgroundColor: 'rgba(100, 100, 100, 0.15)',
-                        borderRadius: 2
-                      }}
-                    >
-                      <span style={{ fontSize: 8, color: '#666', opacity: 0.8 }}>
-                        {datePosition === 'right' ? '📅' : 'Fecha'}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Page indicator */}
-                  {numPages > 1 && (
-                    <div
-                      className="absolute -left-2 -top-2 w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                      style={{ backgroundColor: colors.border }}
-                    >
-                      {sigPage}
-                    </div>
-                  )}
-
-                  {/* Move indicator */}
-                  {isSelected && (
-                    <div
-                      className="absolute -top-3 -right-3 rounded-full p-1"
-                      style={{ backgroundColor: colors.border }}
-                    >
-                      <Move className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-
-                  {/* Resize handle - functional */}
-                  {isSelected && (
-                    <div
-                      className="absolute -bottom-2 -right-2 w-5 h-5 rounded-full bg-white border-2 cursor-se-resize hover:scale-110 transition-transform flex items-center justify-center"
-                      style={{ borderColor: colors.border }}
-                      onMouseDown={(e) => handleResizeStart(e, sig)}
-                    >
-                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                        <path d="M7 1L1 7M7 4L4 7M7 7L7 7" stroke={colors.border} strokeWidth="1.5" strokeLinecap="round"/>
-                      </svg>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-
-            {/* Empty state */}
-            {signatories.length === 0 && hasFile && !docxLoading && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 text-center shadow-lg">
-                  <PenTool className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm text-gray-600">Agrega firmantes para posicionarlos aquí</p>
-                </div>
+              <div className="absolute flex flex-col items-center justify-center" style={{ ...sigAreaStyle, backgroundColor: colors.bg, borderRadius: 2 }}>
+                <PenTool style={{ width: 16, height: 16, color: colors.text, opacity: 0.6 }} />
+                <span className="font-medium text-center truncate w-full px-1" style={{ fontSize: 10, color: colors.text }}>{sig.label || sig.role_label}</span>
+                {sig.required && <span style={{ fontSize: 8, color: '#ef4444', fontWeight: 'bold' }}>*Req</span>}
               </div>
-            )}
+              {dateAreaStyle && (
+                <div className="absolute flex items-center justify-center" style={{ ...dateAreaStyle, backgroundColor: 'rgba(100, 100, 100, 0.15)', borderRadius: 2 }}>
+                  <span style={{ fontSize: 8, color: '#666', opacity: 0.8 }}>{datePosition === 'right' ? 'Fecha' : 'Fecha'}</span>
+                </div>
+              )}
+              {numPages > 1 && (
+                <div className="absolute -left-2 -top-2 w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: colors.border }}>{sigPage}</div>
+              )}
+              {isSelected && (
+                <div className="absolute -top-3 -right-3 rounded-full p-1" style={{ backgroundColor: colors.border }}>
+                  <Move className="w-4 h-4 text-white" />
+                </div>
+              )}
+              {isSelected && (
+                <div className="absolute -bottom-2 -right-2 w-5 h-5 rounded-full bg-white border-2 cursor-se-resize hover:scale-110 transition-transform flex items-center justify-center" style={{ borderColor: colors.border }} onMouseDown={(e) => handleResizeStart(e, sig)}>
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M7 1L1 7M7 4L4 7M7 7L7 7" stroke={colors.border} strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {/* Empty state */}
+        {signatories.length === 0 && hasFile && docxLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 text-center shadow-lg">
+              <PenTool className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm text-gray-600">Agrega firmantes para posicionarlos aqui</p>
+            </div>
           </div>
-        </div>
-        {/* End wrapper div */}
-        </div>
+        )}
       </div>
 
       {/* Legend */}
@@ -520,67 +329,40 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
               <button
                 key={sig.id}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${selectedId === sig.id ? 'ring-2 ring-offset-1' : 'hover:opacity-80'}`}
-                style={{
-                  backgroundColor: colors.bg,
-                  color: colors.text,
-                  ringColor: colors.border
-                }}
+                style={{ backgroundColor: colors.bg, color: colors.text, ringColor: colors.border }}
                 onClick={() => {
                   onSelect(sig.id)
-                  // Scroll to the signature position
-                  if (scrollContainerRef.current) {
-                    const targetY = (sig.y_position || 700) * scale - 100
-                    scrollContainerRef.current.scrollTo({ top: targetY, behavior: 'smooth' })
+                  if (scrollRef.current && sectionMetrics) {
+                    const targetY = sectionMetrics.offsetTop + (sig.y_position || 700) * coordScale - 100
+                    scrollRef.current.scrollTo({ top: targetY, behavior: 'smooth' })
                   }
                 }}
               >
-                <div
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: colors.border }}
-                />
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.border }} />
                 {sig.label || sig.role_label}
-                {numPages > 1 && (
-                  <span className="ml-1 opacity-70">(p.{sigPage})</span>
-                )}
+                {numPages > 1 && <span className="ml-1 opacity-70">(p.{sigPage})</span>}
               </button>
             )
           })}
         </div>
       )}
 
-      {/* Instructions */}
       <p className="text-xs text-gray-400 text-center mt-2">
-        Coordenadas: {PDF_WIDTH} x {PDF_HEIGHT} pts por página | Usa scroll para documentos largos
+        PDF: {PDF_WIDTH} x {PDF_HEIGHT} pts | Arrastra los campos de firma para posicionarlos
       </p>
 
-      {/* Styles for docx-preview rendering */}
+      {/* Scoped CSS for docx-preview inside signature preview */}
       <style>{`
-        .docx-preview-content {
-          width: ${PDF_WIDTH}px !important;
-          min-height: ${PAGE_HEIGHT * numPages}px !important;
-          overflow: hidden !important;
-          background: white;
+        .signature-preview-docx .docx-wrapper {
+          background: transparent !important;
+          padding: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
         }
-        .docx-preview-content section.docx {
-          width: ${PDF_WIDTH}px !important;
-          min-height: ${PAGE_HEIGHT}px !important;
-          padding: 40px 50px !important;
+        .signature-preview-docx .docx-wrapper > section.docx {
           margin: 0 !important;
-          box-sizing: border-box !important;
-          box-shadow: none !important;
-          overflow: hidden !important;
-          page-break-after: always;
-        }
-        .docx-preview-content section.docx:last-child {
-          page-break-after: auto;
-        }
-        .docx-preview-content table {
-          width: 100% !important;
-          max-width: ${PDF_WIDTH - 100}px !important;
-        }
-        .docx-preview-content img {
-          max-width: 100% !important;
-          height: auto !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
         }
       `}</style>
     </div>
@@ -1190,6 +972,9 @@ export default function TemplateEdit() {
   const [previewScale, setPreviewScale] = useState(0.7)
   const [pageHeight, setPageHeight] = useState(792) // Letter default in points
   const [pageWidth, setPageWidth] = useState(612) // Letter default in points
+  const [showFilePreview, setShowFilePreview] = useState(false)
+  const [filePreviewLoading, setFilePreviewLoading] = useState(false)
+  const filePreviewRef = useRef(null)
 
   const { data: templateData, isLoading } = useQuery({
     queryKey: ['template', id],
@@ -1254,11 +1039,13 @@ export default function TemplateEdit() {
   // Save all position changes and preview settings to backend
   const savePositionsMutation = useMutation({
     mutationFn: async () => {
-      // Save preview settings (scale and page height)
+      // Save preview settings (scale, page width and height)
       await templateService.update(id, {
         template: {
           preview_scale: previewScale,
-          preview_page_height: pageHeight
+          preview_page_height: pageHeight,
+          pdf_width: pageWidth,
+          pdf_height: pageHeight
         }
       })
 
@@ -1320,6 +1107,59 @@ export default function TemplateEdit() {
       setEditingMappings({})
     }
   })
+
+  // Render DOCX preview when toggled
+  useEffect(() => {
+    if (!showFilePreview || !template?.file_name || !filePreviewRef.current) return
+
+    let isMounted = true
+    setFilePreviewLoading(true)
+
+    templateService.download(id)
+      .then(response => {
+        if (!isMounted || !filePreviewRef.current) return
+        const blob = new Blob([response.data], {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        })
+        filePreviewRef.current.innerHTML = ''
+        return renderAsync(blob, filePreviewRef.current, null, {
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: true,
+          ignoreLastRenderedPageBreak: false,
+          experimental: true,
+          trimXmlDeclaration: true,
+          useBase64URL: true,
+        })
+      })
+      .then(() => {
+        if (!isMounted || !filePreviewRef.current) return
+        setFilePreviewLoading(false)
+        // Fix docx-preview inline styles via JS (CSS !important doesn't override inline styles reliably)
+        const wrapper = filePreviewRef.current.querySelector('.docx-wrapper')
+        if (wrapper) {
+          wrapper.style.padding = '10px'
+          wrapper.style.background = 'transparent'
+          wrapper.style.display = 'block'
+          wrapper.style.alignItems = ''
+          wrapper.style.justifyContent = ''
+        }
+        const sections = filePreviewRef.current.querySelectorAll('.docx-wrapper > section.docx')
+        sections.forEach(section => {
+          section.style.margin = '10px auto'
+          section.style.boxShadow = '0 2px 8px rgba(0,0,0,0.12)'
+        })
+      })
+      .catch(err => {
+        if (!isMounted) return
+        console.error('Error rendering file preview:', err)
+        setFilePreviewLoading(false)
+      })
+
+    return () => { isMounted = false }
+  }, [showFilePreview, id, template?.file_name])
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0]
@@ -1415,24 +1255,76 @@ export default function TemplateEdit() {
             </CardHeader>
             <CardContent>
               {template.file_name ? (
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-8 h-8 text-primary-600" />
-                    <div>
-                      <p className="font-medium">{template.file_name}</p>
-                      <p className="text-sm text-gray-500">
-                        {(template.file_size / 1024).toFixed(1)} KB
-                      </p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-8 h-8 text-primary-600" />
+                      <div>
+                        <p className="font-medium">{template.file_name}</p>
+                        <p className="text-sm text-gray-500">
+                          {(template.file_size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowFilePreview(!showFilePreview)}
+                      >
+                        <Eye className="w-4 h-4" />
+                        {showFilePreview ? 'Ocultar' : 'Visualizar'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => fileInputRef.current?.click()}
+                        loading={uploadMutation.isPending}
+                      >
+                        <Upload className="w-4 h-4" />
+                        Reemplazar
+                      </Button>
                     </div>
                   </div>
-                  <Button
-                    variant="secondary"
-                    onClick={() => fileInputRef.current?.click()}
-                    loading={uploadMutation.isPending}
-                  >
-                    <Upload className="w-4 h-4" />
-                    Reemplazar
-                  </Button>
+
+                  {/* Template File Preview */}
+                  {showFilePreview && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-2 flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">
+                          Vista Previa del Archivo Original
+                        </span>
+                        <button
+                          onClick={() => setShowFilePreview(false)}
+                          className="p-1 hover:bg-gray-200 rounded"
+                        >
+                          <X className="w-4 h-4 text-gray-500" />
+                        </button>
+                      </div>
+                      {filePreviewLoading && (
+                        <div className="p-8 text-center bg-white">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500">Cargando vista previa...</p>
+                        </div>
+                      )}
+                      <div
+                        ref={filePreviewRef}
+                        className="file-preview-container bg-gray-50 max-h-[600px] overflow-auto"
+                        style={{ display: filePreviewLoading ? 'none' : 'block' }}
+                      />
+                      <style>{`
+                        .file-preview-container .docx-wrapper {
+                          background: transparent !important;
+                          padding: 0 !important;
+                          margin: 0 !important;
+                        }
+                        .file-preview-container .docx-wrapper > section.docx {
+                          box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important;
+                          background: white;
+                          margin: 0 !important;
+                        }
+                      `}</style>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div
@@ -1573,6 +1465,7 @@ export default function TemplateEdit() {
                 <div className="flex items-center gap-2">
                   {(hasPositionChanges ||
                     previewScale !== (template?.preview_scale || 0.7) ||
+                    pageWidth !== (template?.pdf_width || 612) ||
                     pageHeight !== (template?.preview_page_height || 842)) && (
                     <Button
                       size="sm"
@@ -1609,7 +1502,19 @@ export default function TemplateEdit() {
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Alto página:</label>
+                    <label className="text-xs text-gray-500">Ancho:</label>
+                    <input
+                      type="number"
+                      min="300"
+                      max="1200"
+                      step="10"
+                      value={pageWidth}
+                      onChange={(e) => setPageWidth(parseInt(e.target.value) || 612)}
+                      className="w-20 px-2 py-1 text-xs border rounded text-center"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500">Alto:</label>
                     <input
                       type="number"
                       min="500"
