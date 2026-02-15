@@ -437,15 +437,15 @@ module Templates
         return result if result
       end
 
-      # Priority 3: Preview-based PDF with variable replacement (preserves original formatting)
-      if template&.preview_file_id
-        result = convert_using_preview_with_overlay(docx_path)
+      # Priority 3: Pandoc + wkhtmltopdf (available on Heroku, variables replaced but simpler formatting)
+      if pandoc_available?
+        result = convert_with_pandoc_wkhtmltopdf(docx_path)
         return result if result
       end
 
-      # Priority 4: Pandoc + wkhtmltopdf (available on Heroku, loses formatting)
-      if pandoc_available?
-        result = convert_with_pandoc_wkhtmltopdf(docx_path)
+      # Priority 4: Preview-based PDF with variable replacement (preserves original formatting)
+      if template&.preview_file_id
+        result = convert_using_preview_with_overlay(docx_path)
         return result if result
       end
 
