@@ -524,6 +524,7 @@ export default function Certifications() {
     }
   }, [location.state, location.pathname, navigate])
 
+
   // Fetch available certification types (only those with templates)
   const { data: availableTypesData } = useQuery({
     queryKey: ['certification-available-types'],
@@ -628,6 +629,20 @@ export default function Certifications() {
   const hasInProgressCertifications = certifications
     .filter(c => c.is_mine)
     .some(c => ['pending', 'processing'].includes(c.status))
+
+  // Auto-open detail modal when navigated with ?id= query param (from notifications)
+  const highlightId = new URLSearchParams(location.search).get('id')
+  useEffect(() => {
+    if (highlightId && certifications.length > 0) {
+      const target = certifications.find(c => c.id === highlightId)
+      if (target) {
+        setSelectedCertification(target)
+        setShowDetailModal(true)
+      }
+      // Clear query param to prevent re-opening
+      navigate(location.pathname, { replace: true })
+    }
+  }, [highlightId, certifications]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleView = (certification) => {
     setSelectedCertification(certification)

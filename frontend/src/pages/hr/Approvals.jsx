@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { renderAsync } from 'docx-preview'
 import { approvalService, certificationService } from '../../services/api'
@@ -857,6 +858,8 @@ export default function Approvals() {
   const [selectedType, setSelectedType] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
   const queryClient = useQueryClient()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const { data: pendingData, isLoading: pendingLoading } = useQuery({
     queryKey: ['approvals', 'pending'],
@@ -954,6 +957,31 @@ export default function Approvals() {
 
   const pendingApprovals = pendingData?.data?.data || { vacation_requests: [], certification_requests: [] }
   const historyApprovals = historyData?.data?.data || { vacation_requests: [], certification_requests: [] }
+
+  // Auto-open detail modal when navigated with ?id= query param (from notifications)
+  const highlightId = new URLSearchParams(location.search).get('id')
+  useEffect(() => {
+    if (!highlightId) return
+    const allRequests = [
+      ...(pendingApprovals.vacation_requests || []).map(r => ({ ...r, _type: 'vacation' })),
+      ...(pendingApprovals.certification_requests || []).map(r => ({ ...r, _type: 'certification' })),
+      ...(historyApprovals.vacation_requests || []).map(r => ({ ...r, _type: 'vacation' })),
+      ...(historyApprovals.certification_requests || []).map(r => ({ ...r, _type: 'certification' })),
+    ]
+    const target = allRequests.find(r => r.id === highlightId)
+    if (target) {
+      setSelectedRequest(target)
+      setSelectedType(target._type === 'vacation' ? 'vacation_request' : 'certification_request')
+      setShowDetailModal(true)
+      // Switch to history tab if the request is in history
+      const inPending = [
+        ...(pendingApprovals.vacation_requests || []),
+        ...(pendingApprovals.certification_requests || []),
+      ].some(r => r.id === highlightId)
+      if (!inPending) setActiveTab('history')
+    }
+    navigate(location.pathname, { replace: true })
+  }, [highlightId, pendingApprovals, historyApprovals]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPending = (pendingApprovals.vacation_requests?.length || 0) + (pendingApprovals.certification_requests?.length || 0)
   const totalHistory = (historyApprovals.vacation_requests?.length || 0) + (historyApprovals.certification_requests?.length || 0)

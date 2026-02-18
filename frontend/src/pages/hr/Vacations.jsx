@@ -1398,6 +1398,20 @@ export default function Vacations() {
   const vacations = data?.data?.data || []
   const balance = data?.data?.meta?.vacation_balance || {}
 
+  // Auto-open detail modal when navigated with ?id= query param (from notifications)
+  const highlightId = new URLSearchParams(location.search).get('id')
+  useEffect(() => {
+    if (highlightId && vacations.length > 0) {
+      const target = vacations.find(v => v.id === highlightId)
+      if (target) {
+        setSelectedVacation(target)
+        setShowDetailModal(true)
+      }
+      // Clear query param to prevent re-opening
+      navigate(location.pathname, { replace: true })
+    }
+  }, [highlightId, vacations]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleView = (vacation) => {
     setSelectedVacation(vacation)
     setShowDetailModal(true)

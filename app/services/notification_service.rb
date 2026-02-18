@@ -16,7 +16,7 @@ class NotificationService
         actor_name: vacation_request.employee.full_name,
         source_type: "Hr::VacationRequest",
         source_uuid: vacation_request.uuid,
-        link: "/hr/approvals"
+        link: "/hr/approvals?id=#{vacation_request.uuid}"
       )
     end
 
@@ -34,7 +34,7 @@ class NotificationService
         actor_name: vacation_request.approved_by_name,
         source_type: "Hr::VacationRequest",
         source_uuid: vacation_request.uuid,
-        link: "/hr/my-requests/vacations"
+        link: "/hr/my-requests/vacations?id=#{vacation_request.uuid}"
       )
     end
 
@@ -52,7 +52,7 @@ class NotificationService
         actor_name: vacation_request.approved_by_name,
         source_type: "Hr::VacationRequest",
         source_uuid: vacation_request.uuid,
-        link: "/hr/my-requests/vacations"
+        link: "/hr/my-requests/vacations?id=#{vacation_request.uuid}"
       )
     end
 
@@ -66,11 +66,11 @@ class NotificationService
         category: "certification",
         action: "completed",
         title: "Certificaci\u00F3n completada",
-        body: "Tu solicitud de certificaci\u00F3n laboral ha sido completada",
-        actor_name: nil,
+        body: "Tu solicitud de certificaci\u00F3n laboral #{certification.request_number} ha sido completada",
+        actor_name: certification.processed_by&.full_name,
         source_type: "Hr::EmploymentCertificationRequest",
         source_uuid: certification.uuid,
-        link: "/hr/my-requests/certifications"
+        link: "/hr/my-requests/certifications?id=#{certification.uuid}"
       )
     end
 
@@ -85,10 +85,10 @@ class NotificationService
         action: "rejected",
         title: "Certificaci\u00F3n rechazada",
         body: "Tu solicitud de certificaci\u00F3n laboral fue rechazada: #{certification.rejection_reason}",
-        actor_name: nil,
+        actor_name: certification.processed_by&.full_name,
         source_type: "Hr::EmploymentCertificationRequest",
         source_uuid: certification.uuid,
-        link: "/hr/my-requests/certifications"
+        link: "/hr/my-requests/certifications?id=#{certification.uuid}"
       )
     end
 
