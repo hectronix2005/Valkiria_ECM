@@ -111,6 +111,15 @@ class NotificationService
     end
 
     def create_notification(attrs)
+      if attrs[:source_uuid].present?
+        existing = Notification.where(
+          source_uuid: attrs[:source_uuid],
+          action: attrs[:action],
+          recipient_id: attrs[:recipient]&.id
+        ).first
+        return existing if existing
+      end
+
       Notification.create!(attrs)
     rescue StandardError => e
       Rails.logger.error("NotificationService error: #{e.message}")
