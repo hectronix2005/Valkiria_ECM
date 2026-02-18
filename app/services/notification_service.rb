@@ -60,13 +60,15 @@ class NotificationService
       employee_user = certification.employee.user
       return unless employee_user
 
+      type_label = certification_type_label(certification.certification_type)
+
       create_notification(
         recipient: employee_user,
         organization: certification.organization,
         category: "certification",
         action: "completed",
-        title: "Certificaci\u00F3n completada",
-        body: "Tu solicitud de certificaci\u00F3n laboral #{certification.request_number} ha sido completada",
+        title: "#{type_label} completada",
+        body: "Tu #{type_label.downcase} #{certification.request_number} ha sido completada",
         actor_name: certification.processed_by&.full_name,
         source_type: "Hr::EmploymentCertificationRequest",
         source_uuid: certification.uuid,
@@ -78,13 +80,15 @@ class NotificationService
       employee_user = certification.employee.user
       return unless employee_user
 
+      type_label = certification_type_label(certification.certification_type)
+
       create_notification(
         recipient: employee_user,
         organization: certification.organization,
         category: "certification",
         action: "rejected",
-        title: "Certificaci\u00F3n rechazada",
-        body: "Tu solicitud de certificaci\u00F3n laboral fue rechazada: #{certification.rejection_reason}",
+        title: "#{type_label} rechazada",
+        body: "Tu #{type_label.downcase} #{certification.request_number} fue rechazada: #{certification.rejection_reason}",
         actor_name: certification.processed_by&.full_name,
         source_type: "Hr::EmploymentCertificationRequest",
         source_uuid: certification.uuid,
@@ -93,6 +97,18 @@ class NotificationService
     end
 
     private
+
+    CERTIFICATION_TYPE_LABELS = {
+      "employment" => "Certificaci\u00F3n Laboral",
+      "salary" => "Certificaci\u00F3n Salarial",
+      "position" => "Certificaci\u00F3n de Cargo",
+      "full" => "Certificaci\u00F3n Completa",
+      "custom" => "Certificaci\u00F3n Personalizada"
+    }.freeze
+
+    def certification_type_label(type)
+      CERTIFICATION_TYPE_LABELS[type] || "Certificaci\u00F3n"
+    end
 
     def create_notification(attrs)
       Notification.create!(attrs)
