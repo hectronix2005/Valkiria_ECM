@@ -56,6 +56,7 @@ module Api
             # Certifications need to go through processing first
             @approvable.start_processing!(actor: current_employee) if @approvable.pending?
             @approvable.complete!(actor: current_employee, document_uuid: params[:document_uuid] || @approvable.document_uuid || SecureRandom.uuid)
+            auto_sign_certification_document(@approvable)
             NotificationService.certification_completed(@approvable)
           end
 
@@ -380,6 +381,35 @@ module Api
               hire_date: Date.current,
               vacation_balance_days: 15.0
             )
+        end
+
+        # When HR approves a certification, auto-sign the document's HR signature slot.
+        # This ensures the document status is consistent with the certification status.
+        def auto_sign_certification_document(certification)
+          return unless certification.document_uuid.present?
+
+          doc = ::Templates::GeneratedDocument.where(uuid: certification.document_uuid).first
+          return unless doc&.pending_signatures?
+
+          sig_slot = doc.pending_signature_for(current_user)
+          return unless sig_slot
+
+          user_signature = current_user.signatures.where(is_default: true).first || current_user.signatures.first
+
+          if user_signature
+            # Sign with the user's digital signature (applies image to PDF)
+            doc.sign!(user: current_user, signature: user_signature)
+          else
+            # No digital signature configured — mark the slot as administratively signed
+            sig_slot["status"] = "signed"
+            sig_slot["signed_at"] = Time.current.iso8601
+            sig_slot["signed_by_name"] = current_user.full_name
+            doc.save!
+            doc.send(:check_completion!)
+          end
+        rescue StandardError => e
+          Rails.logger.warn("Auto-sign failed for certification #{certification.request_number}: #{e.message}")
+          # Don't fail the approval if auto-sign fails — certification is already completed
         end
 
         def render_missing_reason
