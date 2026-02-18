@@ -163,6 +163,26 @@ class ErrorDiagnosticService
       end
     end
 
+    # 5. Auth failures with failed login attempts (expected user error, not security issue)
+    if log.event_type == "auth_failure" && log.message&.match?(/Login fallido.*Contrase[nñ]a incorrecta/i)
+      return "Intento de login con contrasena incorrecta (error de usuario)"
+    end
+
+    # 6. Transient network timeouts (Net::ReadTimeout, Net::OpenTimeout)
+    if log.event_type == "exception" && log.error_class&.match?(/Net::ReadTimeout|Net::OpenTimeout/)
+      return "Timeout de red transitorio (#{log.error_class})"
+    end
+
+    # 7. Process failures with 422 status (expected validation at business level)
+    if log.event_type == "process_failure" && log.http_status == 422
+      return "Fallo de proceso esperado (validacion de negocio, HTTP 422)"
+    end
+
+    # 8. Frontend errors mirroring backend 500s (symptom, not root cause)
+    if log.event_type == "frontend_error" && log.error_class == "HttpError500"
+      return "Error frontend reflejo de error backend 500 (resolver causa raiz en backend)"
+    end
+
     nil
   end
 

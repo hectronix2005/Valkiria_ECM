@@ -260,6 +260,7 @@ module Templates
       return unless entry
 
       xml_content = entry.get_input_stream.read
+      xml_content = xml_content.force_encoding("UTF-8") unless xml_content.encoding == Encoding::UTF_8
 
       # Strategy 1: Try raw string replacement first (preserves 100% of formatting)
       modified_content = try_raw_string_replacement(xml_content)
@@ -375,7 +376,9 @@ module Templates
     # Normalize a string for comparison (lowercase, no accents)
     def normalize_for_comparison(str)
       # Remove accents and convert to lowercase
+      # Force UTF-8 encoding since DOCX XML content may be read as ASCII-8BIT
       str.to_s
+         .encode("UTF-8", invalid: :replace, undef: :replace, replace: "")
          .unicode_normalize(:nfd)
          .gsub(/[\u0300-\u036f]/, "")
          .downcase
