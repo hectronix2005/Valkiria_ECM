@@ -29,7 +29,7 @@ class GotenbergPdfRetryJob < ApplicationJob
       tmp_file.write(docx_data)
       tmp_file.close
 
-      pdf_bytes = Templates::GotenbergConversionService.convert(tmp_file.path)
+      pdf_bytes = Templates::GotenbergConversionService.convert_with_retries(tmp_file.path)
 
       if pdf_bytes
         doc.store_pdf_from_sync!(pdf_bytes)

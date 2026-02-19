@@ -7,14 +7,30 @@ module Templates
   # Single-responsibility service for converting DOCX to PDF via Gotenberg.
   # Reusable from the document generator and the async retry job.
   class GotenbergConversionService
-    MAX_ATTEMPTS = 3
-    BACKOFF_SECONDS = [0, 5, 10].freeze
-    OPEN_TIMEOUT = 45   # Render free-tier cold start can take ~30-40s
-    READ_TIMEOUT = 120  # Large documents need time to convert
+    # Web-safe mode: single fast attempt that fits within Heroku's 30s timeout
+    WEB_OPEN_TIMEOUT = 10
+    WEB_READ_TIMEOUT = 15
 
-    # Converts a DOCX file to PDF bytes via Gotenberg.
-    # Returns the PDF bytes on success, or nil if all attempts fail.
+    # Job mode: multiple attempts with generous timeouts for cold starts
+    JOB_MAX_ATTEMPTS = 3
+    JOB_BACKOFF_SECONDS = [0, 5, 10].freeze
+    JOB_OPEN_TIMEOUT = 45
+    JOB_READ_TIMEOUT = 120
+
+    # Quick conversion for web requests — single attempt, short timeouts.
+    # Returns PDF bytes or nil (caller should create pending doc + enqueue job).
     def self.convert(docx_path)
+      attempt_conversion(docx_path, attempts: 1, open_timeout: WEB_OPEN_TIMEOUT, read_timeout: WEB_READ_TIMEOUT)
+    end
+
+    # Full conversion for async jobs — multiple retries, generous timeouts.
+    # Returns PDF bytes or nil (job will re-raise to trigger Sidekiq retry).
+    def self.convert_with_retries(docx_path)
+      attempt_conversion(docx_path, attempts: JOB_MAX_ATTEMPTS, backoffs: JOB_BACKOFF_SECONDS,
+                                    open_timeout: JOB_OPEN_TIMEOUT, read_timeout: JOB_READ_TIMEOUT)
+    end
+
+    def self.attempt_conversion(docx_path, attempts:, open_timeout:, read_timeout:, backoffs: [0])
       return nil unless ENV["GOTENBERG_URL"].present?
 
       gotenberg_url = ENV["GOTENBERG_URL"].chomp("/")
@@ -26,8 +42,9 @@ module Templates
       # Wake up Gotenberg before the first conversion attempt
       GotenbergWarmupService.ping
 
-      MAX_ATTEMPTS.times do |attempt|
-        sleep(BACKOFF_SECONDS[attempt]) if BACKOFF_SECONDS[attempt] > 0
+      attempts.times do |attempt|
+        backoff = backoffs[attempt] || 0
+        sleep(backoff) if backoff > 0
 
         begin
           boundary = "----GotenbergBoundary#{SecureRandom.hex(8)}"
@@ -35,14 +52,14 @@ module Templates
 
           http = Net::HTTP.new(uri.host, uri.port)
           http.use_ssl = uri.scheme == "https"
-          http.open_timeout = OPEN_TIMEOUT
-          http.read_timeout = READ_TIMEOUT
+          http.open_timeout = open_timeout
+          http.read_timeout = read_timeout
 
           request = Net::HTTP::Post.new(uri.request_uri)
           request["Content-Type"] = "multipart/form-data; boundary=#{boundary}"
           request.body = body
 
-          Rails.logger.info "[GotenbergConversion] Attempt #{attempt + 1}/#{MAX_ATTEMPTS}..."
+          Rails.logger.info "[GotenbergConversion] Attempt #{attempt + 1}/#{attempts}..."
           response = http.request(request)
 
           if response.code == "200"
@@ -60,9 +77,10 @@ module Templates
         end
       end
 
-      Rails.logger.error "[GotenbergConversion] All #{MAX_ATTEMPTS} attempts failed"
+      Rails.logger.error "[GotenbergConversion] All #{attempts} attempts failed"
       nil
     end
+    private_class_method :attempt_conversion
 
     def self.build_multipart_body(boundary, file_name, file_content)
       body = String.new(encoding: "BINARY")
