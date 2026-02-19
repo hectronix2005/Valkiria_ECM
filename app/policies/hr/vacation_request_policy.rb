@@ -25,7 +25,7 @@ module Hr
     def cancel?
       return false if record.rejected?
 
-      hr_manager? || (owner? && can_employee_cancel?)
+      admin? || hr_staff? || (owner? && can_employee_cancel?)
     end
 
     def destroy?

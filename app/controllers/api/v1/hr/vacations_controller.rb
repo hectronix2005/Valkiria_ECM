@@ -340,6 +340,7 @@ module Api
           json = {
             id: vacation.uuid,
             request_number: vacation.request_number,
+            employee_name: vacation.employee&.full_name,
             vacation_type: vacation.vacation_type,
             start_date: vacation.start_date&.iso8601,
             end_date: vacation.end_date&.iso8601,
@@ -352,7 +353,8 @@ module Api
             has_document: vacation.document_uuid.present?,
             pdf_ready: pdf_ready,
             needs_employee_signature: needs_signature,
-            can_delete: can_delete_for_user?(vacation)
+            can_delete: can_delete_for_user?(vacation),
+            can_cancel: vacation_cancelable?(vacation)
           }
 
           if detailed
@@ -576,6 +578,16 @@ module Api
           return true if current_user.admin? || current_employee&.hr_manager?
 
           can_delete_vacation_for?(vacation)
+        end
+
+        def vacation_cancelable?(vacation)
+          policy = ::Hr::VacationRequestPolicy.new(current_user, vacation)
+          result = policy.cancel?
+          Rails.logger.debug("vacation_cancelable? #{vacation.uuid} status=#{vacation.status} result=#{result} user_admin=#{current_user.admin?}")
+          result
+        rescue StandardError => e
+          Rails.logger.error("vacation_cancelable? error for #{vacation.uuid}: #{e.class} - #{e.message}")
+          false
         end
 
         def can_delete_vacation_for?(vacation)

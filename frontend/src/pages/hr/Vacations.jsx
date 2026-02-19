@@ -14,7 +14,7 @@ import { renderAsync } from 'docx-preview'
 import {
   Calendar, Plus, Send, X, Eye, Filter, CalendarCheck, CalendarClock,
   CalendarDays, FileDown, FileText, PenTool, Users, CheckCircle, Clock,
-  AlertCircle, Loader2, ExternalLink, Trash2
+  AlertCircle, Loader2, ExternalLink, Trash2, Ban
 } from 'lucide-react'
 
 const vacationTypes = [
@@ -918,7 +918,7 @@ const typeLabels = {
   unpaid: 'Sin Goce',
 }
 
-function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDownload, onSign }) {
+function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDownload, onSign, isHR }) {
   return (
     <Card>
       <div className="overflow-x-auto">
@@ -926,6 +926,7 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="text-left px-4 py-3 font-medium text-gray-500">Solicitud</th>
+              {isHR && <th className="text-left px-4 py-3 font-medium text-gray-500">Empleado</th>}
               <th className="text-left px-4 py-3 font-medium text-gray-500">Tipo</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Período</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500">Días</th>
@@ -940,6 +941,11 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
                 <td className="px-4 py-3">
                   <span className="font-medium text-gray-900">{vacation.request_number}</span>
                 </td>
+                {isHR && (
+                  <td className="px-4 py-3 text-gray-700">
+                    {vacation.employee_name || '—'}
+                  </td>
+                )}
                 <td className="px-4 py-3 text-gray-700">
                   {typeLabels[vacation.vacation_type] || vacation.vacation_type}
                 </td>
@@ -985,9 +991,9 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
                       </Button>
                     )}
 
-                    {['draft', 'pending'].includes(vacation.status) && (
-                      <Button variant="ghost" size="sm" onClick={() => onCancel(vacation.id)} title="Cancelar solicitud">
-                        <X className="w-4 h-4" />
+                    {vacation.can_cancel && (
+                      <Button variant="ghost" size="sm" onClick={() => onCancel(vacation)} title="Anular solicitud">
+                        <Ban className="w-4 h-4" />
                       </Button>
                     )}
 
@@ -1340,13 +1346,19 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
 }
 
 export default function Vacations() {
+  const { user } = useAuth()
   const [showNewModal, setShowNewModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedVacation, setSelectedVacation] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelTargetId, setCancelTargetId] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
   const queryClient = useQueryClient()
   const location = useLocation()
   const navigate = useNavigate()
+
+  const isHR = user?.roles?.some(r => ['hr', 'hr_manager', 'admin'].includes(r))
 
   // Auto-open modal if navigated with openNew state (from Dashboard quick action)
   useEffect(() => {
@@ -1373,9 +1385,12 @@ export default function Vacations() {
   })
 
   const cancelMutation = useMutation({
-    mutationFn: (id) => vacationService.cancel(id),
+    mutationFn: ({ id, reason }) => vacationService.cancel(id, reason),
     onSuccess: () => {
-      window.location.reload()
+      setShowCancelModal(false)
+      setCancelTargetId(null)
+      setCancelReason('')
+      queryClient.invalidateQueries(['vacations'])
     },
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al cancelar la solicitud')
@@ -1418,6 +1433,17 @@ export default function Vacations() {
 
   const handleSign = (vacation) => {
     signMutation.mutate(vacation.id)
+  }
+
+  const handleCancel = (vacation) => {
+    setCancelTargetId(vacation.id)
+    setCancelReason('')
+    setShowCancelModal(true)
+  }
+
+  const confirmCancel = () => {
+    if (!cancelReason.trim()) return
+    cancelMutation.mutate({ id: cancelTargetId, reason: cancelReason })
   }
 
   const vacations = data?.data?.data || []
@@ -1548,11 +1574,12 @@ export default function Vacations() {
         <VacationTable
           vacations={vacations}
           onSubmit={(id) => submitMutation.mutate(id)}
-          onCancel={(id) => cancelMutation.mutate(id)}
+          onCancel={handleCancel}
           onDelete={handleDelete}
           onView={handleView}
           onDownload={handleDownload}
           onSign={handleSign}
+          isHR={isHR}
         />
       ) : (
         <Card>
@@ -1601,6 +1628,48 @@ export default function Vacations() {
             onDownload={handleDownload}
           />
         )}
+      </Modal>
+
+      {/* Cancel/Annul Modal */}
+      <Modal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        title="Anular Solicitud"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Por favor, proporciona el motivo de la anulación de esta solicitud.
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Motivo de Anulación *
+            </label>
+            <textarea
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              rows={4}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Explica el motivo de la anulación..."
+              required
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="secondary" onClick={() => setShowCancelModal(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={confirmCancel}
+              loading={cancelMutation.isPending}
+              disabled={!cancelReason.trim()}
+            >
+              Confirmar Anulación
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )
