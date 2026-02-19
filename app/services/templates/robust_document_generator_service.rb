@@ -591,8 +591,12 @@ module Templates
       Rails.logger.info "Document created with pending PDF generation: #{generated_doc.uuid}"
 
       # Enqueue async retry job to generate the PDF via Gotenberg
-      GotenbergPdfRetryJob.perform_later(generated_doc.id.to_s)
-      Rails.logger.info "Enqueued GotenbergPdfRetryJob for document #{generated_doc.uuid}"
+      begin
+        GotenbergPdfRetryJob.perform_later(generated_doc.id.to_s)
+        Rails.logger.info "Enqueued GotenbergPdfRetryJob for document #{generated_doc.uuid}"
+      rescue StandardError => e
+        Rails.logger.warn "Could not enqueue GotenbergPdfRetryJob: #{e.class} - #{e.message}"
+      end
 
       generated_doc
     end
