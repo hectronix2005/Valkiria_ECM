@@ -25,7 +25,7 @@ module Hr
     end
 
     def generate_document?
-      hr_staff? # Only HR can generate documents
+      hr_staff? # Only HR can generate/regenerate documents
     end
 
     def sign_document?

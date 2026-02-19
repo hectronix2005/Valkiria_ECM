@@ -991,6 +991,21 @@ export default function Certifications() {
                             )}
                           </button>
                         )}
+                        {/* Botón regenerar documento (HR/Admin, cuando ya tiene documento) */}
+                        {(isHR || isAdmin) && certification.document_uuid && (
+                          <button
+                            onClick={() => handleGenerateDocument(certification.id)}
+                            disabled={generatingId === certification.id}
+                            className="p-1.5 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors disabled:opacity-50"
+                            title="Regenerar documento"
+                          >
+                            {generatingId === certification.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <FileCheck className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                         {/* Botón previsualizar (cuando hay documento y puede descargar) */}
                         {certification.document_uuid && certification.document_info?.can_download && (
                           <button
@@ -1217,6 +1232,17 @@ export default function Certifications() {
                   <Download className="w-4 h-4" />
                   Descargar Certificación
                 </Button>
+                {(isHR || isAdmin) && (
+                  <Button
+                    className="w-full"
+                    variant="secondary"
+                    onClick={() => handleGenerateDocument(selectedCertification.id)}
+                    loading={generatingId === selectedCertification.id}
+                  >
+                    <FileCheck className="w-4 h-4" />
+                    Regenerar Documento
+                  </Button>
+                )}
               </div>
             )}
           </div>

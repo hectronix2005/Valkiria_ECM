@@ -114,11 +114,10 @@ module Api
           generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
           generated_doc = generator.generate!
 
-          # Link document to certification
-          @certification.update!(
-            document_uuid: generated_doc.uuid,
-            status: "processing"
-          )
+          # Link document to certification (preserve status if already completed)
+          updates = { document_uuid: generated_doc.uuid }
+          updates[:status] = "processing" unless @certification.completed?
+          @certification.update!(updates)
 
           render json: {
             data: {

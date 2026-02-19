@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { vacationService, publicTemplateService } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
@@ -36,6 +37,7 @@ const statusFilters = [
 
 // Componente de creación con template integrado
 function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] }) {
+  const { user } = useAuth()
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState({
     vacation_type: 'vacation',
@@ -451,6 +453,8 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
 
   const employeeSigned = documentInfo?.employee_signed || false
   const pdfPending = createdVacation?.pdf_ready === false
+  const employeeSig = documentInfo?.signatures?.find(s => s.signatory_type_code === 'employee')
+  const employeeCanSign = !employeeSig || employeeSig.signed || employeeSig.can_sign_now !== false
   const canSubmit = employeeSigned || pdfPending // Can submit if signed OR if PDF is pending
 
   return (
@@ -752,7 +756,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
                         )}
                       </div>
                     </div>
-                    {sig.signatory_type_code === 'employee' && !sig.signed && (
+                    {sig.signatory_type_code === 'employee' && !sig.signed && sig.can_sign_now !== false && sig.user_id === user?.id && (
                       <Button
                         size="sm"
                         onClick={handleSign}
@@ -761,6 +765,11 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
                         <PenTool className="w-4 h-4" />
                         Firmar
                       </Button>
+                    )}
+                    {!sig.signed && (sig.can_sign_now === false || sig.signatory_type_code !== 'employee' || sig.user_id !== user?.id) && sig.signatory_type_code === 'employee' && (
+                      <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                        {sig.can_sign_now === false ? 'Esperando firmas previas' : 'Pendiente'}
+                      </span>
                     )}
                     {sig.signatory_type_code !== 'employee' && !sig.signed && (
                       <span className="text-xs text-gray-500 px-2 py-1 bg-gray-200 rounded">
@@ -799,12 +808,22 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
             </div>
           )}
 
-          {!pdfPending && !employeeSigned && (
+          {!pdfPending && !employeeSigned && employeeCanSign && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
               <div className="text-sm text-amber-800">
                 <p className="font-medium">Debes firmar el documento antes de enviar</p>
                 <p className="mt-1">Haz clic en el botón "Firmar" junto a tu nombre para continuar.</p>
+              </div>
+            </div>
+          )}
+
+          {!pdfPending && !employeeSigned && !employeeCanSign && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <p className="font-medium">Esperando firmas previas</p>
+                <p className="mt-1">Debe esperar las firmas de: {employeeSig?.waiting_for?.join(', ')} antes de poder firmar.</p>
               </div>
             </div>
           )}
@@ -990,6 +1009,7 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
 
 // Componente para ver el detalle de una solicitud con documento
 function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
+  const { user } = useAuth()
   const [pdfUrl, setPdfUrl] = useState(null)
   const [docxBlob, setDocxBlob] = useState(null)
   const docxDetailRef = useRef(null)
@@ -1258,7 +1278,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                           )}
                         </div>
                       </div>
-                      {sig.signatory_type_code === 'employee' && !sig.signed && (
+                      {sig.signatory_type_code === 'employee' && !sig.signed && sig.can_sign_now !== false && sig.user_id === user?.id && (
                         <Button
                           size="sm"
                           onClick={handleSign}
@@ -1267,6 +1287,11 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                           <PenTool className="w-4 h-4" />
                           Firmar
                         </Button>
+                      )}
+                      {sig.signatory_type_code === 'employee' && !sig.signed && (sig.can_sign_now === false || sig.user_id !== user?.id) && (
+                        <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                          {sig.can_sign_now === false ? 'Esperando firmas previas' : 'Pendiente'}
+                        </span>
                       )}
                       {sig.signatory_type_code !== 'employee' && !sig.signed && (
                         <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">

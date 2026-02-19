@@ -170,12 +170,17 @@ module Api
             return render json: { error: "No hay espacio de firma para empleado en este documento" }, status: :unprocessable_content
           end
 
+          # Verify current user is the assigned employee signer
+          unless employee_sig["user_id"] == current_user.id.to_s
+            return render json: { error: "Solo el empleado solicitante puede firmar este documento" }, status: :unprocessable_content
+          end
+
           if employee_sig["signed_at"].present?
             return render json: { error: "Ya has firmado este documento" }, status: :unprocessable_content
           end
 
-          # Sign the document
-          generated_doc.sign!(user: current_user, signature: signature)
+          # Sign the document specifying the signatory type
+          generated_doc.sign!(user: current_user, signature: signature, signatory_type_code: "employee")
 
           render json: {
             data: vacation_json(@vacation, detailed: true),
@@ -322,13 +327,13 @@ module Api
         end
 
         def vacation_json(vacation, detailed: false) # rubocop:disable Metrics/MethodLength
-          # Check if document exists and needs employee signature
+          # Check if document exists and needs employee signature FROM the current user
           needs_signature = false
           pdf_ready = false
           if vacation.document_uuid.present?
             doc = @preloaded_docs&.dig(vacation.document_uuid) ||
                   ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
-            needs_signature = doc && !employee_has_signed?(doc)
+            needs_signature = doc && current_user_is_employee_signer?(doc) && !employee_has_signed?(doc)
             pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
           end
 
@@ -517,12 +522,16 @@ module Api
             has_pdf: doc.draft_file_id.present? || doc.final_file_id.present?,
             employee_signed: employee_has_signed?(doc),
             signatures: doc.signatures.map do |sig|
+              order_status = doc.signature_with_order_status(sig)
               sig_data = {
                 signatory_type_code: sig["signatory_type_code"],
                 label: sig["label"],
+                user_id: sig["user_id"],
                 signed: sig["signed_at"].present?,
                 signed_at: sig["signed_at"],
-                signed_by: sig["signed_by_name"]
+                signed_by: sig["signed_by_name"],
+                can_sign_now: order_status[:can_sign_now],
+                waiting_for: order_status[:waiting_for]
               }
               # Include signature image and position for signed entries
               if sig["signed_at"].present? && sig["signature_id"].present?
@@ -548,6 +557,11 @@ module Api
         def employee_has_signed?(doc)
           employee_sig = doc.signatures.find { |s| s["signatory_type_code"] == "employee" }
           employee_sig && employee_sig["signed_at"].present?
+        end
+
+        def current_user_is_employee_signer?(doc)
+          employee_sig = doc.signatures.find { |s| s["signatory_type_code"] == "employee" }
+          employee_sig && employee_sig["user_id"] == current_user.id.to_s
         end
 
         # Check if vacation can be deleted (for action)
