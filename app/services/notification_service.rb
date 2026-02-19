@@ -56,6 +56,34 @@ class NotificationService
       )
     end
 
+    def certification_submitted(certification)
+      type_label = certification_type_label(certification.certification_type)
+
+      # Find HR roles and notify all HR users in the organization
+      hr_roles = ::Identity::Role.where(:name.in => %w[hr hr_manager admin])
+      hr_users = ::Identity::User.where(
+        organization_id: certification.organization_id,
+        :role_ids.in => hr_roles.pluck(:id)
+      )
+
+      hr_users.each do |hr_user|
+        next if hr_user.id == certification.employee&.user_id
+
+        create_notification(
+          recipient: hr_user,
+          organization: certification.organization,
+          category: "certification",
+          action: "submitted",
+          title: "Nueva solicitud de #{type_label.downcase}",
+          body: "#{certification.employee.full_name} solicitó #{type_label.downcase} #{certification.request_number}",
+          actor_name: certification.employee.full_name,
+          source_type: "Hr::EmploymentCertificationRequest",
+          source_uuid: certification.uuid,
+          link: "/hr/my-requests/certifications?id=#{certification.uuid}"
+        )
+      end
+    end
+
     def certification_completed(certification)
       employee_user = certification.employee.user
       return unless employee_user

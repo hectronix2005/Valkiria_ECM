@@ -44,6 +44,7 @@ module Api
           authorize @certification
 
           if @certification.save
+            NotificationService.certification_submitted(@certification)
             render json: { data: certification_json(@certification) }, status: :created
           else
             render json: { errors: @certification.errors.full_messages }, status: :unprocessable_content
