@@ -301,6 +301,12 @@ module Templates
         replacement = find_variable_value(var_name)
 
         if replacement.nil?
+          # If the captured "variable name" contains XML tags, it's a fragmented variable
+          # spanning multiple Word runs — fall back to Nokogiri which handles cross-run replacement
+          if var_name.include?("</w:t>") || var_name.include?("<w:r")
+            has_fragmented = true
+            break
+          end
           @replacement_log << { variable: var_name, status: "not_found", reason: "No mapping found" }
           next
         end
