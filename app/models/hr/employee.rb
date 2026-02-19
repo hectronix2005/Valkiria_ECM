@@ -272,9 +272,11 @@ module Hr
         .sum(:days_requested)
     end
 
-    # Días disponibles totales (acumulados - usados)
+    # Días disponibles totales (acumulados - usados, tope 30 según ley colombiana)
     def available_vacation_days
-      (accrued_vacation_days - total_used_vacation_days).round(2)
+      max_allowed = 30.0 # Colombian law: max 2 periods accumulation (2 × 15)
+      uncapped = (accrued_vacation_days - total_used_vacation_days).round(2)
+      [uncapped, max_allowed].min
     end
 
     # Días disponibles sin programación (para nuevas solicitudes)

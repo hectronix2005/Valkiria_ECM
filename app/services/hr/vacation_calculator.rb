@@ -111,9 +111,9 @@ module Hr
     private
 
     def total_days_used
-      # Sum all approved vacation requests
+      # Sum all vacation requests that consume balance (approved + enjoyed)
       employee.vacation_requests
-        .where(status: "approved")
+        .used
         .sum(:days_requested) || 0.0
     end
 
