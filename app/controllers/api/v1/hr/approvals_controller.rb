@@ -174,6 +174,12 @@ module Api
         private
 
         def ensure_approver_access
+          # In employee mode, block all approver actions
+          if employee_mode?
+            render json: { error: "No disponible en modo empleado" }, status: :forbidden
+            return
+          end
+
           return if current_employee.hr_staff? || current_employee.hr_manager? || current_employee.supervisor?
 
           render json: { error: "Access denied. Approver privileges required." }, status: :forbidden
@@ -254,7 +260,7 @@ module Api
                   @preloaded_docs&.dig(vacation.document_uuid) ||
                     ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
                 end
-          pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
+          pdf_ready = doc&.draft_file_id.present?
 
           json = {
             id: vacation.uuid,
@@ -291,7 +297,7 @@ module Api
             uuid: doc.uuid,
             name: doc.name,
             status: doc.status,
-            pdf_ready: !doc.pending_pdf? && doc.draft_file_id.present?,
+            pdf_ready: doc.draft_file_id.present?,
             signatures: doc.signatures.map do |sig|
               sig_data = {
                 signatory_type_code: sig["signatory_type_code"],
@@ -328,7 +334,7 @@ module Api
                   @preloaded_docs&.dig(certification.document_uuid) ||
                     ::Templates::GeneratedDocument.where(uuid: certification.document_uuid).first
                 end
-          pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
+          pdf_ready = doc&.draft_file_id.present?
 
           json = {
             id: certification.uuid,

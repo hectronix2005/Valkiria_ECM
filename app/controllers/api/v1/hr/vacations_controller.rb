@@ -9,15 +9,18 @@ module Api
 
         # GET /api/v1/hr/vacations
         def index
-          # Auto-marcar vacaciones pasadas como disfrutadas
-          current_employee.vacation_requests.approved.where(:end_date.lt => Date.current).each do |v|
-            v.mark_as_enjoyed!
+          # Auto-marcar vacaciones pasadas como disfrutadas (incluye end_date == hoy después de las 6 PM)
+          current_employee.vacation_requests.approved.where(:end_date.lte => Date.current).each do |v|
+            v.mark_as_enjoyed! # should_mark_as_enjoyed? checks vacation_period_ended? (6 PM rule)
           rescue ::Hr::VacationRequest::InvalidStateError
             next
           end
 
           @vacations = policy_scope(::Hr::VacationRequest)
             .order(created_at: :desc)
+
+          # In employee mode, force scope to only own requests
+          @vacations = @vacations.where(employee_id: current_employee.id) if employee_mode?
 
           @vacations = apply_filters(@vacations)
           @vacations = paginate(@vacations)
@@ -125,7 +128,7 @@ module Api
           if @vacation.document_uuid
             doc = ::Templates::GeneratedDocument.where(uuid: @vacation.document_uuid).first
             # Only require signature if PDF is available (not pending)
-            pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
+            pdf_ready = doc&.draft_file_id.present?
             if pdf_ready && !employee_has_signed?(doc)
               return render json: {
                 error: "Debes firmar el documento antes de enviar la solicitud"
@@ -147,6 +150,9 @@ module Api
 
         # POST /api/v1/hr/vacations/:id/sign_document
         def sign_document
+          if employee_mode?
+            return render json: { error: "No disponible en modo empleado" }, status: :forbidden
+          end
           authorize @vacation, :show?
 
           unless @vacation.document_uuid
@@ -334,7 +340,7 @@ module Api
             doc = @preloaded_docs&.dig(vacation.document_uuid) ||
                   ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
             needs_signature = doc && current_user_is_employee_signer?(doc) && !employee_has_signed?(doc)
-            pdf_ready = doc && !doc.pending_pdf? && doc.draft_file_id.present?
+            pdf_ready = doc&.draft_file_id.present?
           end
 
           json = {
@@ -488,18 +494,40 @@ module Api
             user: current_user
           }
 
-          # Timeout to avoid Heroku H12 (30s limit) - leave buffer for response
-          Timeout.timeout(20) do
+          # generate! uses DOCX-first strategy: saves the DOCX immediately, then
+          # attempts PDF conversion. Even if PDF conversion times out (Gotenberg cold
+          # start), the DOCX is already saved and viewable via docx-preview.
+          Timeout.timeout(25) do
             generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
             generated_doc = generator.generate!
             @vacation.update!(document_uuid: generated_doc.uuid)
           end
         rescue Timeout::Error
-          Rails.logger.warn("Vacation document generation timed out for #{@vacation.request_number} - vacation created without document")
+          # The DOCX-first strategy in generate! saves the document before PDF conversion.
+          # If timeout fires during PDF conversion, the document may already exist.
+          # Try to find and link it so the user can view the DOCX immediately.
+          recover_orphaned_document
         rescue StandardError => e
           # Log but don't fail the create if document generation fails
           Rails.logger.error("Error auto-generating vacation document: #{e.class} - #{e.message}")
           Rails.logger.error(e.backtrace.first(5).join("\n"))
+        end
+
+        def recover_orphaned_document
+          return if @vacation.document_uuid.present?
+
+          # Find any document created for this vacation (source_id matches)
+          orphan = ::Templates::GeneratedDocument
+            .where(source_type: "Hr::VacationRequest", source_id: @vacation.id)
+            .order(created_at: :desc)
+            .first
+
+          if orphan
+            @vacation.update!(document_uuid: orphan.uuid)
+            Rails.logger.info("Recovered orphaned document #{orphan.uuid} for #{@vacation.request_number} after timeout")
+          else
+            Rails.logger.warn("Vacation document generation timed out for #{@vacation.request_number} - no document recovered")
+          end
         end
 
         def generated_document_json(doc)
@@ -575,13 +603,22 @@ module Api
 
         # Check if current user can delete this vacation (for JSON response)
         def can_delete_for_user?(vacation)
-          # Admin and HR can delete any vacation
-          return true if current_user.admin? || current_employee&.hr_manager?
+          # In employee mode, only allow owner actions
+          unless employee_mode?
+            # Admin and HR can delete any vacation
+            return true if current_user.admin? || current_employee&.hr_manager?
+          end
 
           can_delete_vacation_for?(vacation)
         end
 
         def vacation_cancelable?(vacation)
+          # In employee mode, only allow cancellation as owner (draft/pending only)
+          if employee_mode?
+            return vacation.employee_id == current_employee&.id &&
+              !vacation.rejected? && (vacation.draft? || vacation.pending?)
+          end
+
           policy = ::Hr::VacationRequestPolicy.new(current_user, vacation)
           result = policy.cancel?
           Rails.logger.debug("vacation_cancelable? #{vacation.uuid} status=#{vacation.status} result=#{result} user_admin=#{current_user.admin?}")

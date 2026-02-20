@@ -523,26 +523,29 @@ module Templates
     end
 
     def pdf_ready?
-      pdf_generation_status == "completed" && (draft_file_id.present? || final_file_id.present?)
+      # Document is viewable when a file (PDF or DOCX) is available in draft_file_id.
+      # When Gotenberg fails, DOCX is stored directly and rendered by docx-preview on the frontend.
+      draft_file_id.present? || final_file_id.present?
     end
 
     def store_pdf_from_sync!(pdf_content)
-      file_name = "#{name.parameterize}.pdf"
+      pdf_file_name = name.to_s.sub(/\.docx\z/i, "").parameterize + ".pdf"
       pdf_file = Mongoid::GridFs.put(
         StringIO.new(pdf_content),
-        filename: file_name,
+        filename: pdf_file_name,
         content_type: "application/pdf"
       )
 
-      # Store as both draft and original (original never gets modified)
+      # Replace DOCX draft with PDF and update file name
       update!(
         draft_file_id: pdf_file.id,
         original_draft_file_id: pdf_file.id,
+        file_name: pdf_file_name,
         pdf_generation_status: "completed"
       )
 
-      # Initialize signatures now that we have a PDF
-      initialize_signatures!
+      # Only initialize signatures if not already set (DOCX-first flow sets them early)
+      initialize_signatures! if signatures.blank?
     end
 
     # Reset signatures and restore original PDF without any signatures

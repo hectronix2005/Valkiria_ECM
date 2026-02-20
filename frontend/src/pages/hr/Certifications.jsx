@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { certificationService, templateService } from '../../services/api'
@@ -9,6 +9,7 @@ import Modal from '../../components/ui/Modal'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
 import { FileText, Plus, X, Eye, Filter, Clock, CheckCircle, AlertCircle, Calendar, Download, FilePlus, Loader2, AlertTriangle, ExternalLink, Trash2, PenTool, Settings, Save, FileCheck } from 'lucide-react'
+import { renderAsync } from 'docx-preview'
 import { useAuth } from '../../contexts/AuthContext'
 
 
@@ -508,6 +509,8 @@ export default function Certifications() {
   const [downloadingId, setDownloadingId] = useState(null)
   const [signingId, setSigningId] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewDocxBlob, setPreviewDocxBlob] = useState(null)
+  const previewDocxRef = useRef(null)
   const [previewingId, setPreviewingId] = useState(null)
   const [initialType, setInitialType] = useState(null)
   const queryClient = useQueryClient()
@@ -671,11 +674,16 @@ export default function Certifications() {
     try {
       setDownloadingId(certification.id)
       const response = await certificationService.downloadDocument(certification.id)
-      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const blob = response.data
+      // Detect format from blob header
+      const header = await blob.slice(0, 4).arrayBuffer()
+      const bytes = new Uint8Array(header)
+      const isDocx = bytes[0] === 0x50 && bytes[1] === 0x4B
+      const ext = isDocx ? 'docx' : 'pdf'
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `${certification.request_number}.pdf`
+      link.download = `${certification.request_number}.${ext}`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -692,10 +700,20 @@ export default function Certifications() {
   const handlePreviewDocument = async (certification) => {
     try {
       setPreviewingId(certification.id)
+      setPreviewUrl(null)
+      setPreviewDocxBlob(null)
       const response = await certificationService.downloadDocument(certification.id)
-      const blob = new Blob([response.data], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      setPreviewUrl(url)
+      const blob = response.data
+      // Detect DOCX by PK zip header
+      const header = await blob.slice(0, 4).arrayBuffer()
+      const bytes = new Uint8Array(header)
+      const isDocx = bytes[0] === 0x50 && bytes[1] === 0x4B
+      if (isDocx) {
+        setPreviewDocxBlob(blob)
+      } else {
+        const pdfBlob = new Blob([blob], { type: 'application/pdf' })
+        setPreviewUrl(URL.createObjectURL(pdfBlob))
+      }
     } catch (error) {
       console.error('Error previewing document:', error)
       const errorData = await parseBlobError(error)
@@ -705,11 +723,23 @@ export default function Certifications() {
     }
   }
 
+  // Render DOCX with docx-preview
+  useEffect(() => {
+    if (!previewDocxBlob || !previewDocxRef.current) return
+    previewDocxRef.current.innerHTML = ''
+    renderAsync(previewDocxBlob, previewDocxRef.current, null, {
+      inWrapper: true, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
+      breakPages: true, ignoreLastRenderedPageBreak: false, experimental: true,
+      trimXmlDeclaration: true, useBase64URL: true,
+    }).catch(err => console.error('Error rendering DOCX:', err))
+  }, [previewDocxBlob])
+
   const handleClosePreview = () => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl)
     }
     setPreviewUrl(null)
+    setPreviewDocxBlob(null)
   }
 
   return (
@@ -893,22 +923,25 @@ export default function Certifications() {
           <table className="w-full table-fixed">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="w-[15%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Número
                 </th>
-                <th className="w-[18%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="w-[16%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Empleado
+                </th>
+                <th className="w-[14%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Tipo
                 </th>
-                <th className="w-[17%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="w-[14%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Propósito
                 </th>
-                <th className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Estado
                 </th>
-                <th className="w-[10%] px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="w-[7%] px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Días
                 </th>
-                <th className="w-[13%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Fecha
                 </th>
                 <th className="w-[15%] px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -921,6 +954,7 @@ export default function Certifications() {
                 [...Array(3)].map((_, i) => (
                   <tr key={i} className="animate-pulse">
                     <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
                     <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
                     <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
                     <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
@@ -936,6 +970,12 @@ export default function Certifications() {
                       <code className="text-sm font-mono text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
                         {certification.request_number}
                       </code>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm text-gray-900">{certification.employee_name || '—'}</div>
+                      {certification.employee_identification && (
+                        <div className="text-xs text-gray-500">{certification.employee_identification}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -1100,7 +1140,7 @@ export default function Certifications() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
+                  <td colSpan={8} className="px-4 py-12 text-center">
                     <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
                     <h3 className="text-base font-medium text-gray-900 mb-1">
                       No tienes solicitudes de certificaciones
@@ -1382,22 +1422,31 @@ export default function Certifications() {
         )}
       </Modal>
 
-      {/* PDF Preview Modal */}
+      {/* Document Preview Modal */}
       <Modal
-        isOpen={!!previewUrl}
+        isOpen={!!(previewUrl || previewDocxBlob)}
         onClose={handleClosePreview}
         title="Previsualización de Documento"
         size="full"
       >
-        <div className="flex flex-col h-[80vh]">
-          {previewUrl && (
+        <div className="space-y-4">
+          {previewUrl ? (
             <iframe
               src={previewUrl}
-              className="w-full flex-1 border rounded-lg bg-gray-100"
+              className="w-full h-[70vh] border rounded-lg bg-gray-100"
               title="Vista previa del documento"
             />
-          )}
-          <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+          ) : previewDocxBlob ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-4 py-2">
+                <span className="text-sm font-medium text-gray-700">Vista Previa del Documento</span>
+              </div>
+              <div className="relative max-h-[70vh] overflow-auto bg-white">
+                <div ref={previewDocxRef} style={{ position: 'relative' }} />
+              </div>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-3 pt-4 border-t">
             <Button variant="secondary" onClick={handleClosePreview}>
               <X className="w-4 h-4" />
               Cerrar

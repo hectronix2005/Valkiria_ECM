@@ -148,16 +148,30 @@ module Hr
     end
 
     # Effective status considering dates (for display purposes)
+    # Uses employee's local timezone for accurate date comparisons
     def effective_status
       return status unless approved?
 
-      if end_date < Date.current
+      tz = employee&.user&.time_zone || "America/Bogota"
+      local_today = Time.current.in_time_zone(tz).to_date
+
+      if vacation_period_ended?
         STATUS_ENJOYED  # Ya pasó - disfrutada
-      elsif start_date <= Date.current && end_date >= Date.current
+      elsif start_date <= local_today && end_date >= local_today
         "in_progress"   # En curso
       else
         status          # Programada (futuro)
       end
+    end
+
+    # Vacation period ends after end_date, or on end_date after 6 PM (fin de jornada laboral)
+    # Uses employee's timezone for accurate business-day calculation
+    def vacation_period_ended?
+      tz = employee&.user&.time_zone || "America/Bogota"
+      local_now = Time.current.in_time_zone(tz)
+      local_today = local_now.to_date
+
+      end_date < local_today || (end_date == local_today && local_now.hour >= 18)
     end
 
     def effective_status_label
@@ -173,7 +187,7 @@ module Hr
 
     # Check if vacation period has passed and should be marked as enjoyed
     def should_mark_as_enjoyed?
-      approved? && end_date < Date.current
+      approved? && vacation_period_ended?
     end
 
     # Mark as enjoyed (called when vacation period ends)

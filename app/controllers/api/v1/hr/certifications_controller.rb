@@ -12,6 +12,9 @@ module Api
           @certifications = policy_scope(::Hr::EmploymentCertificationRequest)
             .order(created_at: :desc)
 
+          # In employee mode, force scope to only own requests
+          @certifications = @certifications.where(employee_id: current_employee.id) if employee_mode?
+
           @certifications = apply_filters(@certifications)
           @certifications = paginate(@certifications)
 
@@ -93,6 +96,9 @@ module Api
 
         # POST /api/v1/hr/certifications/:id/generate_document
         def generate_document
+          if employee_mode?
+            return render json: { error: "No disponible en modo empleado" }, status: :forbidden
+          end
           authorize @certification, :generate_document?
 
           # Find appropriate template
@@ -140,6 +146,9 @@ module Api
 
         # POST /api/v1/hr/certifications/:id/sign_document
         def sign_document
+          if employee_mode?
+            return render json: { error: "No disponible en modo empleado" }, status: :forbidden
+          end
           authorize @certification, :sign_document?
 
           unless @certification.document_uuid
@@ -319,6 +328,8 @@ module Api
             document_uuid: certification.document_uuid,
             document_info: doc_info,
             employee_id: certification.employee&.uuid,
+            employee_name: certification.employee&.full_name,
+            employee_identification: certification.employee&.identification_number,
             is_mine: certification.employee_id == current_employee&.id
           }
 

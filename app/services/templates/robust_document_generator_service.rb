@@ -215,24 +215,65 @@ module Templates
           raise GenerationError, "El DOCX procesado está vacío. Posible error en el procesamiento del template."
         end
 
-        # Try to convert to PDF
+        # DOCX-first strategy: save the DOCX immediately so the document is available
+        # even if PDF conversion fails or times out (Gotenberg cold start, Heroku H12).
+        # The frontend renders DOCX files via docx-preview when PDF isn't available.
+        generated_doc = create_generated_document_docx(docx_content)
+
+        # Try to convert to PDF (may be slow due to Gotenberg cold start)
         conversion_result = convert_to_pdf(output_file.path)
 
         if conversion_result.is_a?(Hash) && conversion_result[:format] == :docx
-          # macOS development: store DOCX directly as the document file
-          create_generated_document_docx(conversion_result[:content])
+          # macOS development: DOCX is already stored, nothing more to do
+          generated_doc
         elsif conversion_result
-          # PDF conversion successful - create complete document
-          create_generated_document(conversion_result, docx_content: nil)
+          # PDF conversion successful - upgrade the document from DOCX to PDF
+          upgrade_document_to_pdf!(generated_doc, conversion_result)
         else
-          # PDF conversion failed - store DOCX for local sync
-          Rails.logger.warn "PDF conversion failed. Storing DOCX for local sync workflow."
-          create_generated_document_pending_pdf(docx_content)
+          # PDF conversion failed - DOCX is already available for viewing.
+          # Enqueue background retry for PDF generation.
+          Rails.logger.warn "PDF conversion failed. DOCX already stored for immediate viewing."
+          enqueue_pdf_retry(generated_doc)
+          generated_doc
         end
       ensure
         input_file.unlink
         output_file.unlink
       end
+    end
+
+    # Upgrade an existing DOCX document to PDF after successful Gotenberg conversion
+    def upgrade_document_to_pdf!(generated_doc, pdf_content)
+      file_name = generated_doc.file_name.to_s.sub(/\.docx\z/i, ".pdf")
+
+      pdf_file = Mongoid::GridFs.put(
+        StringIO.new(pdf_content),
+        filename: file_name,
+        content_type: "application/pdf"
+      )
+
+      generated_doc.update!(
+        draft_file_id: pdf_file.id,
+        original_draft_file_id: pdf_file.id,
+        file_name: file_name,
+        name: file_name,
+        pdf_generation_status: "completed"
+      )
+
+      generated_doc
+    end
+
+    def enqueue_pdf_retry(generated_doc)
+      # Ensure the DOCX is also stored in docx_file_id for the retry job
+      unless generated_doc.docx_file_id.present?
+        generated_doc.update!(docx_file_id: generated_doc.draft_file_id)
+      end
+      generated_doc.update!(pdf_generation_status: "pending") unless generated_doc.pdf_generation_status == "pending"
+
+      GotenbergPdfRetryJob.perform_later(generated_doc.id.to_s)
+      Rails.logger.info "Enqueued GotenbergPdfRetryJob for document #{generated_doc.uuid}"
+    rescue StandardError => e
+      Rails.logger.warn "Could not enqueue GotenbergPdfRetryJob: #{e.class} - #{e.message}"
     end
 
     def process_docx(input_path, output_path)
@@ -278,10 +319,19 @@ module Templates
           process_paragraph(paragraph)
         end
 
-        # Write back preserving original XML structure (no added indentation/formatting)
-        zipfile.get_output_stream(entry_name) do |f|
-          f.write(doc.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML))
-        end
+        # Remove empty <w:r> elements left by fragmented variable replacement.
+        # These have formatting properties but no text, and docx-preview may render
+        # them as extra whitespace.
+        remove_empty_runs(doc)
+
+        # Serialize back to XML, preserving the original XML declaration
+        serialized = doc.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML |
+                                           Nokogiri::XML::Node::SaveOptions::NO_DECLARATION)
+        # Preserve original XML declaration (Nokogiri may alter standalone="yes" etc.)
+        original_declaration = xml_content[/\A<\?xml[^?]*\?>\s*/]
+        output = original_declaration ? "#{original_declaration.rstrip}\n#{serialized}" : serialized
+
+        zipfile.get_output_stream(entry_name) { |f| f.write(output) }
       end
     end
 
@@ -477,6 +527,27 @@ module Templates
       true
     end
 
+    # Remove <w:r> elements whose text content is completely empty after variable replacement.
+    # Fragmented variable replacement clears subsequent runs' text but leaves the <w:r> elements
+    # with formatting properties (bold, font, size, etc.) and empty <w:t/> tags. docx-preview
+    # may render these as extra whitespace or spacing artifacts.
+    def remove_empty_runs(doc)
+      doc.xpath("//w:r", "w" => WORD_NAMESPACE).each do |run|
+        text_nodes = run.xpath(".//w:t", "w" => WORD_NAMESPACE)
+        # Only remove runs that have text nodes but all are empty
+        next if text_nodes.empty?
+        next if text_nodes.any? { |t| !t.text.empty? }
+
+        # Don't remove runs that contain non-text elements (images, breaks, etc.)
+        has_non_text = run.children.any? do |child|
+          child.element? && child.name != "rPr" && child.name != "t"
+        end
+        next if has_non_text
+
+        run.remove
+      end
+    end
+
     def log_replacement_results
       Rails.logger.info "=== Document Generation: Replacement Results ==="
       @replacement_log.each do |log|
@@ -553,6 +624,7 @@ module Templates
         organization: context[:organization],
         requested_by: context[:user],
         draft_file_id: docx_file.id,
+        docx_file_id: docx_file.id,
         file_name: file_name,
         variable_values: variable_values,
         source: context[:request],
@@ -567,7 +639,9 @@ module Templates
     def create_generated_document_pending_pdf(docx_content)
       file_name = "#{template.name.parameterize}-#{Time.current.strftime('%Y%m%d%H%M%S')}"
 
-      # Store DOCX in GridFS for later local conversion
+      # Store DOCX in GridFS for later PDF conversion AND immediate viewing.
+      # The DOCX is served directly to the frontend (rendered by docx-preview)
+      # while the background job retries PDF conversion via Gotenberg.
       docx_file = Mongoid::GridFs.put(
         StringIO.new(docx_content),
         filename: "#{file_name}.docx",
@@ -575,12 +649,13 @@ module Templates
       )
 
       generated_doc = GeneratedDocument.create!(
-        name: "#{file_name}.pdf",
+        name: "#{file_name}.docx",
         template: template,
         organization: context[:organization],
         requested_by: context[:user],
+        draft_file_id: docx_file.id,
         docx_file_id: docx_file.id,
-        file_name: "#{file_name}.pdf",
+        file_name: "#{file_name}.docx",
         variable_values: variable_values,
         source: context[:request],
         employee: context[:employee],
@@ -588,7 +663,7 @@ module Templates
       )
 
       generated_doc.initialize_signatures!
-      Rails.logger.info "Document created with pending PDF generation: #{generated_doc.uuid}"
+      Rails.logger.info "Document created with DOCX for immediate viewing, PDF pending: #{generated_doc.uuid}"
 
       # Enqueue async retry job to generate the PDF via Gotenberg
       begin
