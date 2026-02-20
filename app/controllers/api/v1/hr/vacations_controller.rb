@@ -341,6 +341,7 @@ module Api
             id: vacation.uuid,
             request_number: vacation.request_number,
             employee_name: vacation.employee&.full_name,
+            employee_identification: vacation.employee&.identification_number,
             vacation_type: vacation.vacation_type,
             start_date: vacation.start_date&.iso8601,
             end_date: vacation.end_date&.iso8601,

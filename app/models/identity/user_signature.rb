@@ -124,10 +124,8 @@ module Identity
       end
     end
 
-    # Render styled signature as base64 PNG image
+    # Render styled signature as base64 PNG image (always re-render to pick up fixes)
     def render_styled_signature
-      return image_data if image_data.present? && styled?
-
       Templates::SignatureRendererService.new(self).render_styled
     end
 

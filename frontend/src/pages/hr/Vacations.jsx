@@ -942,8 +942,11 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
                   <span className="font-medium text-gray-900">{vacation.request_number}</span>
                 </td>
                 {isHR && (
-                  <td className="px-4 py-3 text-gray-700">
-                    {vacation.employee_name || '—'}
+                  <td className="px-4 py-3">
+                    <div className="text-gray-900">{vacation.employee_name || '—'}</div>
+                    {vacation.employee_identification && (
+                      <div className="text-xs text-gray-500">{vacation.employee_identification}</div>
+                    )}
                   </td>
                 )}
                 <td className="px-4 py-3 text-gray-700">

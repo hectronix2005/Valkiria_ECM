@@ -152,22 +152,26 @@ module Api
           end
 
           # Verificar que el usuario puede firmar este documento
-          unless generated_doc.can_be_signed_by?(current_user)
-            # Verificar si es HR y hay firma pendiente de HR
-            # Check both signatory_role and signatory_type_code for HR signatures
-            pending_hr = generated_doc.signatures.find do |s|
-              s["status"] == "pending" && (
-                s["signatory_role"] == "hr" ||
-                s["signatory_type_code"] == "hr" ||
-                s["signatory_label"]&.downcase&.include?("recursos humanos")
-              )
+          # Use role-based matching (pending_signature_for) instead of direct user_id only
+          unless generated_doc.pending_signature_for(current_user)
+            # No direct or role-based match — try assigning HR/admin user to an HR-type slot
+            if hr_or_admin?
+              pending_hr = generated_doc.signatures.find do |s|
+                s["status"] == "pending" && (
+                  s["signatory_role"]&.in?(%w[hr hr_manager admin]) ||
+                  s["signatory_type_code"]&.in?(%w[hr hr_manager admin]) ||
+                  s["signatory_label"]&.downcase&.match?(/recursos humanos|rr\.?hh|gerente/)
+                )
+              end
+              if pending_hr
+                pending_hr["user_id"] = current_user.id.to_s
+                pending_hr["user_name"] = current_user.full_name
+                generated_doc.save!
+              end
             end
-            if pending_hr && hr_or_admin?
-              # Asignar este usuario HR como firmante
-              pending_hr["user_id"] = current_user.id.to_s
-              pending_hr["user_name"] = current_user.full_name
-              generated_doc.save!
-            else
+
+            # Final check after possible reassignment
+            unless generated_doc.pending_signature_for(current_user)
               return render json: { error: "No tienes firma pendiente en este documento" }, status: :forbidden
             end
           end

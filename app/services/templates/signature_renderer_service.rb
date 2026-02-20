@@ -36,8 +36,8 @@ module Templates
 
       # Trim whitespace and add padding
       image.trim
+      image.bordercolor "white"
       image.border "10x10"
-      image.bordercolor "transparent"
 
       # Convert to base64
       Base64.strict_encode64(image.to_blob)
@@ -73,11 +73,11 @@ module Templates
     private
 
     def transparent_base_image
-      # Create a transparent 400x150 PNG base using tempfile
+      # Create a white 400x150 PNG base using tempfile
       @base_tempfile = Tempfile.new(["base", ".png"])
       MiniMagick::Tool::Convert.new do |convert|
         convert << "-size" << "400x150"
-        convert << "xc:transparent"
+        convert << "xc:white"
         convert << @base_tempfile.path
       end
       @base_tempfile.path
@@ -108,7 +108,7 @@ module Templates
 
       MiniMagick::Tool::Convert.new do |convert|
         convert << "-size" << "400x150"
-        convert << "xc:transparent"
+        convert << "xc:white"
         convert << "-font" << "Helvetica-Oblique"
         convert << "-pointsize" << "36"
         convert << "-fill" << "##{color}"

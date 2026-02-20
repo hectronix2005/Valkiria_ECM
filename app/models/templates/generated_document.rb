@@ -613,7 +613,8 @@ module Templates
       signatures.find do |s|
         next false unless s["status"] == "pending"
 
-        signatory_type = s["signatory_type_code"]
+        # Use signatory_type_code first, fall back to legacy signatory_role field
+        signatory_type = s["signatory_type_code"].presence || s["signatory_role"]
         next false if signatory_type.blank?
 
         # Check if user has a role that matches the signatory type
@@ -627,9 +628,9 @@ module Templates
     def roles_for_signatory_type(signatory_type)
       case signatory_type
       when "hr"
-        %w[hr hr_manager hr_staff]
+        %w[hr hr_manager admin]
       when "hr_manager"
-        %w[hr_manager]
+        %w[hr_manager admin]
       when "supervisor"
         %w[supervisor manager]
       when "legal", "legal_representative"
