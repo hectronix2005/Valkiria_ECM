@@ -298,6 +298,7 @@ module Api
             name: doc.name,
             status: doc.status,
             pdf_ready: doc.draft_file_id.present?,
+            pdf_width: doc.template&.pdf_width || 612,
             signatures: doc.signatures.map do |sig|
               sig_data = {
                 signatory_type_code: sig["signatory_type_code"],

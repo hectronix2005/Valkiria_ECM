@@ -252,11 +252,12 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
         const containerRect = container.getBoundingClientRect()
         const offsetLeft = sectionRect.left - containerRect.left + container.scrollLeft
         const offsetTop = sectionRect.top - containerRect.top + container.scrollTop
-        const scale = sectionRect.width / 612 // TemplateEdit uses 612px coordinate system
+        const pdfW = documentInfo?.pdf_width || 612
+        const scale = sectionRect.width / pdfW
         setDocxSectionMetrics({ offsetLeft, offsetTop, scale })
       }
     }).catch(e => console.error('Error rendering DOCX:', e))
-  }, [docxBlob])
+  }, [docxBlob, documentInfo?.pdf_width])
 
   // Calcular Domingo de Pascua (Algoritmo de Butcher)
   const getEasterSunday = (year) => {
@@ -1128,11 +1129,12 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
         const containerRect = container.getBoundingClientRect()
         const offsetLeft = sectionRect.left - containerRect.left + container.scrollLeft
         const offsetTop = sectionRect.top - containerRect.top + container.scrollTop
-        const scale = sectionRect.width / 612
+        const pdfW = documentInfo?.pdf_width || 612
+        const scale = sectionRect.width / pdfW
         setDocxDetailMetrics({ offsetLeft, offsetTop, scale })
       }
     }).catch(e => console.error('Error rendering DOCX:', e))
-  }, [docxBlob])
+  }, [docxBlob, documentInfo?.pdf_width])
 
   const openPdfInNewTab = () => {
     if (pdfUrl) {

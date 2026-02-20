@@ -215,14 +215,15 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
         const container = docxRef.current
         const sectionRect = section.getBoundingClientRect()
         const containerRect = container.getBoundingClientRect()
+        const pdfW = documentInfo?.pdf_width || 612
         setDocxMetrics({
           offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
           offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
-          scale: sectionRect.width / 612,
+          scale: sectionRect.width / pdfW,
         })
       }
     }).catch(e => console.error('[VacApprovals] Error rendering DOCX:', e))
-  }, [docxBlob])
+  }, [docxBlob, documentInfo?.pdf_width])
 
   const loadDocument = async () => {
     setPdfLoading(true)
@@ -554,14 +555,15 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
         const container = docxRef.current
         const sectionRect = section.getBoundingClientRect()
         const containerRect = container.getBoundingClientRect()
+        const pdfW = documentInfo?.pdf_width || 612
         setDocxMetrics({
           offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
           offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
-          scale: sectionRect.width / 612,
+          scale: sectionRect.width / pdfW,
         })
       }
     }).catch(e => console.error('Error rendering DOCX:', e))
-  }, [docxBlob])
+  }, [docxBlob, documentInfo?.pdf_width])
 
   const loadDocument = async () => {
     setPdfLoading(true)

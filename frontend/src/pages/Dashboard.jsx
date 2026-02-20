@@ -429,14 +429,15 @@ export default function Dashboard() {
         const container = vacationDocxRef.current
         const sectionRect = section.getBoundingClientRect()
         const containerRect = container.getBoundingClientRect()
+        const pdfW = vacationDocumentInfo?.pdf_width || 612
         setVacationDocxMetrics({
           offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
           offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
-          scale: sectionRect.width / 612,
+          scale: sectionRect.width / pdfW,
         })
       }
     }).catch(err => console.error('Error rendering DOCX:', err))
-  }, [vacationDocxBlob])
+  }, [vacationDocxBlob, vacationDocumentInfo?.pdf_width])
 
   const handleCloseVacationPreview = () => {
     if (vacationPreviewUrl) URL.revokeObjectURL(vacationPreviewUrl)
@@ -505,14 +506,15 @@ export default function Dashboard() {
         const container = certDocxRef.current
         const sectionRect = section.getBoundingClientRect()
         const containerRect = container.getBoundingClientRect()
+        const pdfW = certDocumentInfo?.pdf_width || 612
         setCertDocxMetrics({
           offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
           offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
-          scale: sectionRect.width / 612,
+          scale: sectionRect.width / pdfW,
         })
       }
     }).catch(err => console.error('Error rendering certification DOCX:', err))
-  }, [certDocxBlob])
+  }, [certDocxBlob, certDocumentInfo?.pdf_width])
 
   const handleCloseCertPreview = () => {
     if (certPreviewUrl) URL.revokeObjectURL(certPreviewUrl)

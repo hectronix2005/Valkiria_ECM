@@ -308,6 +308,7 @@ module Api
                 status: generated_doc.status,
                 pdf_ready: generated_doc.pdf_ready?,
                 pdf_status: generated_doc.pdf_generation_status,
+                pdf_width: generated_doc.template&.pdf_width || 612,
                 can_download: can_download_document?(generated_doc, certification) && generated_doc.pdf_ready?,
                 pending_signatures: generated_doc.pending_signatories.map { |s| s["signatory_label"] },
                 completed_signatures: generated_doc.signed_signatories.map { |s| s["signatory_label"] },

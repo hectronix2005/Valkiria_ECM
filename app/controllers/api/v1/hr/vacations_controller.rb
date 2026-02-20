@@ -89,7 +89,7 @@ module Api
           # Should not happen after retry, but handle gracefully
           Rails.logger.error("Vacation create duplicate key after retries: #{e.message}")
           render json: { error: "Error al generar número de solicitud. Intenta de nuevo." }, status: :conflict
-        rescue ActiveRecord::RecordInvalid, Mongoid::Errors::Validations => e
+        rescue Mongoid::Errors::Validations => e
           Rails.logger.warn("Vacation create failed for employee #{current_employee.uuid}: #{@vacation.errors.full_messages.join(', ')}")
           render json: {
             error: "No se pudo crear la solicitud de vacaciones",
@@ -551,6 +551,7 @@ module Api
             name: doc.name,
             status: doc.status,
             has_pdf: doc.draft_file_id.present? || doc.final_file_id.present?,
+            pdf_width: doc.template&.pdf_width || 612,
             employee_signed: employee_has_signed?(doc),
             signatures: doc.signatures.map do |sig|
               order_status = doc.signature_with_order_status(sig)
