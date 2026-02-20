@@ -5,6 +5,7 @@ module Identity
     include Mongoid::Document
     include Mongoid::Timestamps
     include UuidIdentifiable
+    include AuditTrackable
 
     # Collection
     store_in collection: "identity_companies"

@@ -5,6 +5,7 @@ module Legal
     include Mongoid::Document
     include Mongoid::Timestamps
     include UuidIdentifiable
+    include AuditTrackable
 
     # Collection
     store_in collection: "legal_third_party_types"

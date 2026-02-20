@@ -5,6 +5,7 @@ module Legal
     include Mongoid::Document
     include Mongoid::Timestamps
     include UuidIdentifiable
+    include AuditTrackable
 
     # Constants
     TYPES = %w[

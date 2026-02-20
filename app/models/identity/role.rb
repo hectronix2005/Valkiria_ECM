@@ -4,6 +4,7 @@ module Identity
   class Role
     include Mongoid::Document
     include Mongoid::Timestamps
+    include AuditTrackable
 
     store_in collection: "roles"
 

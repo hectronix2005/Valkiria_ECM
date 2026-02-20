@@ -86,6 +86,13 @@ Rails.application.routes.draw do
         # Permissions management (strict admin only)
         resources :permissions, only: [:index, :update]
 
+        # Audit logs
+        resources :audit_logs, only: [:index, :show] do
+          collection do
+            get :stats
+          end
+        end
+
         # Error logs
         resources :error_logs, only: [:index, :show] do
           member do

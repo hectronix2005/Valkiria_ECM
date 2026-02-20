@@ -4,6 +4,7 @@ module Legal
   class ContractApproval
     include Mongoid::Document
     include Mongoid::Timestamps
+    include AuditTrackable
 
     # Constants
     STATUSES = %w[pending approved rejected].freeze

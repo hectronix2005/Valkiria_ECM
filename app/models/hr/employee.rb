@@ -8,6 +8,8 @@ module Hr
     include Mongoid::Document
     include Mongoid::Timestamps
     include UuidIdentifiable
+    include AuditTrackable
+    skip_audit_for :vacation_balance_days
 
     store_in collection: "hr_employees"
 

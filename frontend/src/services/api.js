@@ -395,6 +395,13 @@ export const permissionService = {
   updateRole: (roleId, permissionIds) => api.patch(`/admin/permissions/${roleId}`, { permission_ids: permissionIds }),
 }
 
+// Admin - Audit Logs
+export const auditLogService = {
+  list: (params) => api.get('/admin/audit_logs', { params }),
+  get: (id) => api.get(`/admin/audit_logs/${id}`),
+  stats: () => api.get('/admin/audit_logs/stats'),
+}
+
 // Admin - Error Logs
 export const errorLogService = {
   list: (params) => api.get('/admin/error_logs', { params }),

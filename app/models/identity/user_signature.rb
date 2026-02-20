@@ -5,6 +5,8 @@ module Identity
     include Mongoid::Document
     include Mongoid::Timestamps
     include UuidIdentifiable
+    include AuditTrackable
+    skip_audit_for :signature_data
 
     store_in collection: "user_signatures"
 

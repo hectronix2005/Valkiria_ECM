@@ -259,6 +259,10 @@ module Audit
           TYPES[:hr]
         when /\ARetention::/
           TYPES[:record]
+        when /\ALegal::/
+          TYPES[:system]
+        when /\ATemplates::/
+          TYPES[:system]
         else
           # Audit::* and all other models default to system
           TYPES[:system]

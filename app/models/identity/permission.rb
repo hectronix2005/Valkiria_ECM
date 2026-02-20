@@ -4,6 +4,7 @@ module Identity
   class Permission
     include Mongoid::Document
     include Mongoid::Timestamps
+    include AuditTrackable
 
     store_in collection: "permissions"
 

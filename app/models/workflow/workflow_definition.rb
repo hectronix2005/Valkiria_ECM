@@ -11,6 +11,7 @@ module Workflow
     include Mongoid::Document
     include Mongoid::Timestamps
     include UuidIdentifiable
+    include AuditTrackable
 
     store_in collection: "workflow_definitions"
 

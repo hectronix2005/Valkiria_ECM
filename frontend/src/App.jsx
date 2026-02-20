@@ -105,6 +105,7 @@ const Settings = lazy(() => import('./pages/admin/Settings'))
 const Departments = lazy(() => import('./pages/admin/Departments'))
 const AdminUsers = lazy(() => import('./pages/admin/Users'))
 const ErrorLogs = lazy(() => import('./pages/admin/ErrorLogs'))
+const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'))
 const Permissions = lazy(() => import('./pages/admin/Permissions'))
 const Documents = lazy(() => import('./pages/Documents'))
 const Folders = lazy(() => import('./pages/Folders'))
@@ -409,6 +410,16 @@ export default function App() {
         element={
           <ProtectedRoute requireStrictAdmin>
             <Permissions />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Audit Logs (strict admin only) */}
+      <Route
+        path="/admin/audit-logs"
+        element={
+          <ProtectedRoute requireStrictAdmin>
+            <AuditLogs />
           </ProtectedRoute>
         }
       />
