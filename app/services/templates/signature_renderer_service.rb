@@ -14,7 +14,7 @@ module Templates
       @signature = signature
     end
 
-    # Render styled signature as base64 PNG
+    # Render styled signature as base64 PNG with transparent background
     def render_styled
       return @signature.image_data if @signature.drawn?
 
@@ -23,7 +23,7 @@ module Templates
       color = @signature.font_color&.delete("#") || "000000"
       size = @signature.font_size || 48
 
-      # Create signature image using MiniMagick
+      # Create signature image on transparent background using MiniMagick
       image = MiniMagick::Image.open(transparent_base_image)
 
       image.combine_options do |c|
@@ -34,10 +34,13 @@ module Templates
         c.draw "text 0,0 '#{escape_text(text)}'"
       end
 
-      # Trim whitespace and add padding
+      # Trim empty space and add transparent padding
       image.trim
-      image.bordercolor "white"
+      image.bordercolor "none"
       image.border "10x10"
+
+      # Ensure output is PNG (supports transparency)
+      image.format "png"
 
       # Convert to base64
       Base64.strict_encode64(image.to_blob)
@@ -73,11 +76,11 @@ module Templates
     private
 
     def transparent_base_image
-      # Create a white 400x150 PNG base using tempfile
+      # Create a transparent 400x150 PNG base using tempfile
       @base_tempfile = Tempfile.new(["base", ".png"])
       MiniMagick::Tool::Convert.new do |convert|
         convert << "-size" << "400x150"
-        convert << "xc:white"
+        convert << "xc:none"
         convert << @base_tempfile.path
       end
       @base_tempfile.path
@@ -100,7 +103,7 @@ module Templates
     end
 
     def generate_fallback_signature
-      # Generate a simple fallback signature using ImageMagick
+      # Generate a simple fallback signature on transparent background
       text = @signature.styled_text || "Signature"
       color = @signature.font_color&.delete("#") || "000000"
 
@@ -108,7 +111,7 @@ module Templates
 
       MiniMagick::Tool::Convert.new do |convert|
         convert << "-size" << "400x150"
-        convert << "xc:white"
+        convert << "xc:none"
         convert << "-font" << "Helvetica-Oblique"
         convert << "-pointsize" << "36"
         convert << "-fill" << "##{color}"
@@ -118,6 +121,7 @@ module Templates
       end
 
       image = MiniMagick::Image.open(tempfile.path)
+      image.format "png"
       Base64.strict_encode64(image.to_blob)
     ensure
       tempfile&.close

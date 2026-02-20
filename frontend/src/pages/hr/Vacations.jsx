@@ -926,7 +926,7 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="text-left px-4 py-3 font-medium text-gray-500">Solicitud</th>
-              {isHR && <th className="text-left px-4 py-3 font-medium text-gray-500">Empleado</th>}
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Empleado</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Tipo</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Período</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500">Días</th>
@@ -941,14 +941,12 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
                 <td className="px-4 py-3">
                   <span className="font-medium text-gray-900">{vacation.request_number}</span>
                 </td>
-                {isHR && (
-                  <td className="px-4 py-3">
-                    <div className="text-gray-900">{vacation.employee_name || '—'}</div>
-                    {vacation.employee_identification && (
-                      <div className="text-xs text-gray-500">{vacation.employee_identification}</div>
-                    )}
-                  </td>
-                )}
+                <td className="px-4 py-3">
+                  <div className="text-gray-900">{vacation.employee_name || '—'}</div>
+                  {vacation.employee_identification && (
+                    <div className="text-xs text-gray-500">{vacation.employee_identification}</div>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-gray-700">
                   {typeLabels[vacation.vacation_type] || vacation.vacation_type}
                 </td>
