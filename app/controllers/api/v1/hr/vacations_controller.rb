@@ -9,6 +9,9 @@ module Api
 
         # GET /api/v1/hr/vacations
         def index
+          # Apply legal cap adjustments if employee exceeds 30-day limit
+          current_employee.apply_legal_cap_adjustments!
+
           # Auto-marcar vacaciones pasadas como disfrutadas (incluye end_date == hoy después de las 6 PM)
           current_employee.vacation_requests.approved.where(:end_date.lte => Date.current).each do |v|
             v.mark_as_enjoyed! # should_mark_as_enjoyed? checks vacation_period_ended? (6 PM rule)

@@ -19,8 +19,9 @@ module Hr
     STATUS_ENJOYED = "enjoyed"      # Disfrutada (vacaciones ya tomadas)
     STATUS_REJECTED = "rejected"
     STATUS_CANCELLED = "cancelled"
+    STATUS_SYSTEM = "system"
 
-    STATUSES = [STATUS_DRAFT, STATUS_PENDING, STATUS_APPROVED, STATUS_ENJOYED, STATUS_REJECTED, STATUS_CANCELLED].freeze
+    STATUSES = [STATUS_DRAFT, STATUS_PENDING, STATUS_APPROVED, STATUS_ENJOYED, STATUS_REJECTED, STATUS_CANCELLED, STATUS_SYSTEM].freeze
 
     STATUS_LABELS = {
       STATUS_DRAFT => "Borrador",
@@ -28,7 +29,8 @@ module Hr
       STATUS_APPROVED => "Aprobada",
       STATUS_ENJOYED => "Disfrutada",
       STATUS_REJECTED => "Rechazada",
-      STATUS_CANCELLED => "Cancelada"
+      STATUS_CANCELLED => "Cancelada",
+      STATUS_SYSTEM => "Ajuste Sistema"
     }.freeze
 
     # Vacation type constants
@@ -106,7 +108,8 @@ module Hr
     scope :decided, -> { where(:status.in => [STATUS_APPROVED, STATUS_REJECTED]) }
     scope :scheduled, -> { approved.where(:start_date.gt => Date.current) }  # Programadas (futuras)
     scope :in_progress, -> { approved.where(:start_date.lte => Date.current, :end_date.gte => Date.current) }
-    scope :used, -> { where(:status.in => [STATUS_APPROVED, STATUS_ENJOYED]) }  # Consumen balance
+    scope :system, -> { where(status: STATUS_SYSTEM) }
+    scope :used, -> { where(:status.in => [STATUS_APPROVED, STATUS_ENJOYED, STATUS_SYSTEM]) }  # Consumen balance
     scope :for_approval_by, ->(employee) { pending.where(approver_id: employee.id) }
     scope :upcoming, -> { approved.where(:start_date.gte => Date.current) }
     scope :past, -> { approved.where(:end_date.lt => Date.current) }
@@ -137,6 +140,10 @@ module Hr
 
     def enjoyed?
       status == STATUS_ENJOYED
+    end
+
+    def system?
+      status == STATUS_SYSTEM
     end
 
     def decided?
@@ -180,6 +187,8 @@ module Hr
         "En Curso"
       when STATUS_ENJOYED
         "Disfrutada"
+      when STATUS_SYSTEM
+        "Ajuste Sistema"
       else
         STATUS_LABELS[effective_status] || effective_status
       end
@@ -318,6 +327,34 @@ module Hr
       end
     end
 
+    # Create a system adjustment to cap vacation balance at the legal limit (30 days)
+    def self.create_legal_cap_adjustment!(employee, organization)
+      excess = employee.accrued_vacation_days - employee.total_used_vacation_days - 30.0
+      return nil if excess < 1
+
+      days = excess.floor
+      today = Date.current
+
+      request = create!(
+        employee: employee,
+        organization: organization,
+        vacation_type: TYPE_VACATION,
+        start_date: today,
+        end_date: today,
+        days_requested: days,
+        status: STATUS_SYSTEM,
+        reason: "Ajuste automático por tope legal (CST Art. 186). " \
+                "Días causados: #{employee.accrued_vacation_days}, " \
+                "exceso sobre 30 días: #{days} días descontados."
+      )
+
+      request.send(:record_history, "system_adjustment", nil,
+                    "Ajuste automático por tope de ley: #{days} días")
+      request.save!
+
+      request
+    end
+
     # Check if actor can approve this request
     def can_approve?(actor)
       # Must be in same organization
@@ -387,6 +424,7 @@ module Hr
 
     def dates_not_in_past
       return unless start_date
+      return if status == STATUS_SYSTEM
 
       # Allow 1 day tolerance for timezone differences (UTC vs local time)
       errors.add(:start_date, "cannot be in the past") if start_date < Date.current - 1.day
@@ -394,6 +432,7 @@ module Hr
 
     def no_overlapping_requests
       return unless employee && start_date && end_date
+      return if status == STATUS_SYSTEM
 
       # Find other requests from the same employee that overlap with these dates
       # Exclude cancelled and rejected requests, and exclude self (for updates)

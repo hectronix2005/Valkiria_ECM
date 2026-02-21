@@ -291,6 +291,20 @@ module Hr
       (accrued_vacation_days - enjoyed_vacation_days).round(2)
     end
 
+    # Apply legal cap adjustments (CST Art. 186: max 30 days accumulation)
+    # Creates system vacation requests to deduct excess days. Idempotent.
+    def apply_legal_cap_adjustments!
+      excess = accrued_vacation_days - total_used_vacation_days - 30.0
+      return unless excess >= 1
+
+      # Skip if there's already a system adjustment this year
+      return if vacation_requests.system
+                  .where(:created_at.gte => Date.current.beginning_of_year)
+                  .exists?
+
+      Hr::VacationRequest.create_legal_cap_adjustment!(self, organization)
+    end
+
     # Resumen de vacaciones
     def vacation_summary
       {
