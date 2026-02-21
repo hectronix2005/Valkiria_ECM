@@ -695,28 +695,6 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
               </div>
               <div className="relative max-h-[500px] overflow-auto bg-white">
                 <div ref={docxContainerRef} style={{ position: 'relative' }} />
-                {/* Signature overlays — coordinates mapped from TemplateEdit 612px system to rendered section */}
-                {docxSectionMetrics && documentInfo?.signatures?.filter(s => s.signed && s.signature_image && s.position_box).map((sig, idx) => {
-                  const box = sig.position_box
-                  const m = docxSectionMetrics
-                  return (
-                    <div key={idx} style={{
-                      position: 'absolute',
-                      left: m.offsetLeft + box.x * m.scale,
-                      top: m.offsetTop + box.y * m.scale,
-                      width: box.width * m.scale,
-                      height: box.height * m.scale,
-                      zIndex: 10,
-                      pointerEvents: 'none',
-                    }}>
-                      <img
-                        src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
-                        alt={`Firma de ${sig.signed_by}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
-                    </div>
-                  )
-                })}
               </div>
             </div>
           ) : createdVacation?.pdf_ready === false ? (
@@ -1507,10 +1485,10 @@ export default function Vacations() {
               </div>
               <div>
                 <p className="text-3xl font-bold text-blue-600">
-                  {Math.floor((balance.accrued || 0) - (balance.enjoyed || 0))}
+                  {Math.min(30, Math.floor((balance.accrued || 0) - (balance.enjoyed || 0)))}
                 </p>
-                <p className="text-sm text-blue-700 font-medium">Días por Contrato</p>
-                <p className="text-xs text-blue-500">Acumulados - Disfrutados</p>
+                <p className="text-sm text-blue-700 font-medium">Días Acumulados</p>
+                <p className="text-xs text-blue-500">Según antigüedad (máx. 30)</p>
               </div>
             </div>
           </CardContent>

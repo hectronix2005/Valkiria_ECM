@@ -78,8 +78,8 @@ module Api
 
           save_with_retry(@vacation)
 
-          # Auto-generate document immediately after creation
-          generate_vacation_document_if_available
+          # Auto-generate document immediately after creation (template already fetched above)
+          generate_vacation_document_if_available(template)
 
           render json: {
             data: vacation_json(@vacation, detailed: true),
@@ -436,7 +436,7 @@ module Api
 
         def find_vacation_template
           # Search for vacation template (hr module, vacation category)
-          ::Templates::Template.where(
+          @vacation_template ||= ::Templates::Template.where(
             organization_id: current_organization.id,
             module_type: "hr",
             category: "vacation",
@@ -480,8 +480,8 @@ module Api
           messages.join(". ")
         end
 
-        def generate_vacation_document_if_available
-          template = find_vacation_template
+        def generate_vacation_document_if_available(template = nil)
+          template ||= find_vacation_template
           Rails.logger.info "=== Vacation Document Generation ==="
           Rails.logger.info "Looking for template with: module_type=hr, category=vacation, org=#{current_organization.id}"
           Rails.logger.info "Template found: #{template&.name || 'NONE'}"
@@ -494,40 +494,17 @@ module Api
             user: current_user
           }
 
-          # generate! uses DOCX-first strategy: saves the DOCX immediately, then
-          # attempts PDF conversion. Even if PDF conversion times out (Gotenberg cold
-          # start), the DOCX is already saved and viewable via docx-preview.
-          Timeout.timeout(25) do
-            generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
-            generated_doc = generator.generate!
-            @vacation.update!(document_uuid: generated_doc.uuid)
-          end
-        rescue Timeout::Error
-          # The DOCX-first strategy in generate! saves the document before PDF conversion.
-          # If timeout fires during PDF conversion, the document may already exist.
-          # Try to find and link it so the user can view the DOCX immediately.
-          recover_orphaned_document
+          # skip_pdf: true — saves the DOCX immediately and enqueues a background job
+          # for PDF conversion via Gotenberg. This avoids blocking the request for
+          # 5-25s waiting on Gotenberg (cold start on Heroku).
+          # The frontend renders the DOCX via docx-preview and polls for the PDF.
+          generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
+          generated_doc = generator.generate!(skip_pdf: true)
+          @vacation.update!(document_uuid: generated_doc.uuid)
         rescue StandardError => e
           # Log but don't fail the create if document generation fails
           Rails.logger.error("Error auto-generating vacation document: #{e.class} - #{e.message}")
           Rails.logger.error(e.backtrace.first(5).join("\n"))
-        end
-
-        def recover_orphaned_document
-          return if @vacation.document_uuid.present?
-
-          # Find any document created for this vacation (source_id matches)
-          orphan = ::Templates::GeneratedDocument
-            .where(source_type: "Hr::VacationRequest", source_id: @vacation.id)
-            .order(created_at: :desc)
-            .first
-
-          if orphan
-            @vacation.update!(document_uuid: orphan.uuid)
-            Rails.logger.info("Recovered orphaned document #{orphan.uuid} for #{@vacation.request_number} after timeout")
-          else
-            Rails.logger.warn("Vacation document generation timed out for #{@vacation.request_number} - no document recovered")
-          end
         end
 
         def generated_document_json(doc)

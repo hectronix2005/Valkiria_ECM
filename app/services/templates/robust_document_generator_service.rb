@@ -20,12 +20,13 @@ module Templates
     end
 
     # Generate a document from template
-    def generate!
+    # @param skip_pdf [Boolean] when true, skip synchronous PDF conversion and enqueue background job instead
+    def generate!(skip_pdf: false)
       validate_template!
       resolve_variables!
       validate_required_variables!
       log_variables_to_replace
-      generate_document!
+      generate_document!(skip_pdf: skip_pdf)
     end
 
     # Validate variables without generating - returns hash with missing info
@@ -181,7 +182,7 @@ module Templates
       Rails.logger.info "================================================="
     end
 
-    def generate_document!
+    def generate_document!(skip_pdf: false)
       template_content = template.file_content
       raise GenerationError, "No se pudo leer el archivo del template" unless template_content
 
@@ -219,6 +220,14 @@ module Templates
         # even if PDF conversion fails or times out (Gotenberg cold start, Heroku H12).
         # The frontend renders DOCX files via docx-preview when PDF isn't available.
         generated_doc = create_generated_document_docx(docx_content)
+
+        # When skip_pdf is true, skip synchronous PDF conversion entirely.
+        # The DOCX is already saved and viewable; enqueue a background job for PDF.
+        if skip_pdf
+          Rails.logger.info "skip_pdf: true — skipping synchronous PDF conversion, enqueuing background job"
+          enqueue_pdf_retry(generated_doc)
+          return generated_doc
+        end
 
         # Try to convert to PDF (may be slow due to Gotenberg cold start)
         conversion_result = convert_to_pdf(output_file.path)
