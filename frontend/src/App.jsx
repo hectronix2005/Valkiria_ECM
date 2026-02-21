@@ -127,7 +127,7 @@ function PageLoader() {
 
 // Protected Route wrapper
 function ProtectedRoute({ children, requireHR = false, requireApprover = false, requireAdmin = false, requireStrictAdmin = false }) {
-  const { isAuthenticated, loading, isHR, isSupervisor, isAdmin, hasAdminAccess } = useAuth()
+  const { isAuthenticated, loading, isHR, isSupervisor, isFounder, isAdmin, hasAdminAccess } = useAuth()
 
   if (loading) {
     return (
@@ -153,7 +153,7 @@ function ProtectedRoute({ children, requireHR = false, requireApprover = false, 
     return <Navigate to="/" replace />
   }
 
-  if (requireApprover && !isHR && !isSupervisor) {
+  if (requireApprover && !isHR && !isSupervisor && !isFounder) {
     return <Navigate to="/" replace />
   }
 

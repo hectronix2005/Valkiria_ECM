@@ -66,8 +66,8 @@ const hrAdminNavigation = [
 ]
 
 // Combined HR navigation based on user role
-const getHrNavigation = (isSupervisor, isHR, employeeMode) => {
-  if (employeeMode || (!isSupervisor && !isHR)) {
+const getHrNavigation = (isSupervisor, isHR, isFounder, employeeMode) => {
+  if (employeeMode || (!isSupervisor && !isHR && !isFounder)) {
     return hrNavigation
   }
   return [...hrNavigation, ...hrAdminNavigation]
@@ -94,7 +94,7 @@ export default function Layout({ children }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState([])
-  const { user, logout, isAdmin, isHR, isSupervisor, hasAdminAccess, employeeMode, toggleEmployeeMode, hasElevatedRole } = useAuth()
+  const { user, logout, isAdmin, isHR, isSupervisor, isFounder, hasAdminAccess, employeeMode, toggleEmployeeMode, hasElevatedRole } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -119,7 +119,7 @@ export default function Layout({ children }) {
   const { data: hrApprovalsData } = useQuery({
     queryKey: ['hr-approvals-count'],
     queryFn: () => approvalService.list(),
-    enabled: isSupervisor || isHR,
+    enabled: isSupervisor || isHR || isFounder,
     refetchInterval: 60000,
   })
 
@@ -353,7 +353,7 @@ export default function Layout({ children }) {
           <CollapsibleSection
             id="hr"
             title="Recursos Humanos"
-            items={getHrNavigation(isSupervisor, isHR, employeeMode)}
+            items={getHrNavigation(isSupervisor, isHR, isFounder, employeeMode)}
             icon={Users}
           />
 

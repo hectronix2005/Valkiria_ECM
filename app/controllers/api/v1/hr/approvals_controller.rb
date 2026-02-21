@@ -159,6 +159,14 @@ module Api
           # Sign the document using the standard method (which respects signature order)
           generated_doc.sign!(user: current_user, signature: signature)
 
+          # Auto-complete certification if all signatures are done
+          if @approvable.is_a?(::Hr::EmploymentCertificationRequest) &&
+             @approvable.processing? && generated_doc.reload.all_required_signed?
+            @approvable.complete!(actor: current_employee, document_uuid: @approvable.document_uuid)
+          end
+
+          @approvable.reload
+
           render json: {
             data: approvable_json(@approvable, detailed: true),
             message: "Documento firmado exitosamente como #{sig_slot['label']}"
@@ -180,7 +188,7 @@ module Api
             return
           end
 
-          return if current_employee.hr_staff? || current_employee.hr_manager? || current_employee.supervisor?
+          return if current_employee.hr_staff? || current_employee.hr_manager? || current_employee.supervisor? || current_employee.founder?
 
           render json: { error: "Access denied. Approver privileges required." }, status: :forbidden
         end
@@ -218,6 +226,21 @@ module Api
 
         def pending_certifications_scope
           # Include both pending and processing (with document awaiting signatures)
+          scope = base_scope(::Hr::EmploymentCertificationRequest)
+            .where(:status.in => %w[pending processing])
+            .order(submitted_at: :asc)
+
+          # Auto-complete processing certifications whose documents are fully signed
+          scope.select(&:processing?).each do |cert|
+            next unless cert.document_uuid.present?
+            doc = ::Templates::GeneratedDocument.where(uuid: cert.document_uuid).first
+            next unless doc&.all_required_signed?
+            cert.complete!(actor: cert.processed_by || current_employee, document_uuid: cert.document_uuid)
+          rescue StandardError => e
+            Rails.logger.warn("Auto-complete failed for #{cert.request_number}: #{e.message}")
+          end
+
+          # Re-query to exclude any that were just completed
           base_scope(::Hr::EmploymentCertificationRequest)
             .where(:status.in => %w[pending processing])
             .order(submitted_at: :asc)
@@ -240,6 +263,12 @@ module Api
         def base_scope(klass)
           if current_employee.hr_staff? || current_employee.hr_manager?
             klass.where(organization_id: current_organization.id)
+          elsif current_employee.founder?
+            founder_ids = ::Hr::Employee.where(
+              organization_id: current_organization.id,
+              employment_type: ::Hr::Employee::TYPE_FOUNDER
+            ).where(:id.ne => current_employee.id).pluck(:id)
+            klass.where(:employee_id.in => founder_ids)
           else
             klass.where(:employee_id.in => current_employee.subordinates.pluck(:id))
           end

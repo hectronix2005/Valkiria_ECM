@@ -127,10 +127,14 @@ module Hr
       status == STATUS_CANCELLED
     end
 
-    # Start processing (by HR)
+    # Start processing (by HR, or by another founder for founder employees)
     def start_processing!(actor:)
       raise InvalidStateError, "Can only process pending requests" unless pending?
-      raise AuthorizationError, "Only HR staff can process requests" unless actor.hr_staff?
+      if employee.founder?
+        raise AuthorizationError, "Solo un socio fundador puede procesar esta solicitud" unless actor.founder?
+      else
+        raise AuthorizationError, "Only HR staff can process requests" unless actor.hr_staff?
+      end
 
       self.status = STATUS_PROCESSING
       self.processed_by = actor
@@ -144,11 +148,15 @@ module Hr
       self
     end
 
-    # Complete request (by HR)
+    # Complete request (by HR, or by another founder for founder employees)
     # rubocop:disable Naming/PredicateMethod
     def complete!(actor:, document_uuid: nil, notes: nil)
       raise InvalidStateError, "Can only complete processing requests" unless processing?
-      raise AuthorizationError, "Only HR staff can complete requests" unless actor.hr_staff?
+      if employee.founder?
+        raise AuthorizationError, "Solo un socio fundador puede completar esta solicitud" unless actor.founder?
+      else
+        raise AuthorizationError, "Only HR staff can complete requests" unless actor.hr_staff?
+      end
 
       self.status = STATUS_COMPLETED
       self.completed_at = Time.current
@@ -163,10 +171,14 @@ module Hr
       true
     end
 
-    # Reject request (by HR)
+    # Reject request (by HR, or by another founder for founder employees)
     def reject!(actor:, reason:)
       raise InvalidStateError, "Cannot reject completed requests" if completed?
-      raise AuthorizationError, "Only HR staff can reject requests" unless actor.hr_staff?
+      if employee.founder?
+        raise AuthorizationError, "Solo un socio fundador puede rechazar esta solicitud" unless actor.founder?
+      else
+        raise AuthorizationError, "Only HR staff can reject requests" unless actor.hr_staff?
+      end
       raise ValidationError, "Rejection reason is required" if reason.blank?
 
       self.status = STATUS_REJECTED

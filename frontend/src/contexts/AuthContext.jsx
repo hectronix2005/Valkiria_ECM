@@ -115,13 +115,15 @@ export function AuthProvider({ children }) {
   const realIsLegal = user?.roles?.includes('legal')
   const realIsHR = user?.is_hr || user?.roles?.includes('hr') || user?.roles?.includes('hr_manager')
   const realIsSupervisor = user?.is_supervisor || false
-  const hasElevatedRole = realIsAdmin || realIsLegal || realIsHR || realIsSupervisor
+  const realIsFounder = user?.is_founder || false
+  const hasElevatedRole = realIsAdmin || realIsLegal || realIsHR || realIsSupervisor || realIsFounder
 
   // Effective roles (affected by employee mode) - for permission checks
   const isAdmin = employeeMode ? false : realIsAdmin
   const isLegal = employeeMode ? false : realIsLegal
   const isHR = employeeMode ? false : realIsHR
   const isSupervisor = employeeMode ? false : realIsSupervisor
+  const isFounder = employeeMode ? false : realIsFounder
   // Admin-level access: admin OR legal (same permissions, except error logs)
   const hasAdminAccess = isAdmin || isLegal
   const mustChangePassword = user?.must_change_password || false
@@ -157,6 +159,7 @@ export function AuthProvider({ children }) {
     isLegal,
     isHR,
     isSupervisor,
+    isFounder,
     hasAdminAccess,
     isAuthenticated: !!user,
     mustChangePassword,

@@ -360,6 +360,11 @@ module Hr
       # Must be in same organization
       return false unless actor.organization_id == organization_id
 
+      # Founders can only be approved by another founder
+      if employee.founder?
+        return actor.founder? && actor.id != employee.id
+      end
+
       # HR Manager or HR Staff can approve after all document signatures are complete
       if actor.hr_manager? || actor.hr_staff?
         # If there's a document, all signatures must be complete

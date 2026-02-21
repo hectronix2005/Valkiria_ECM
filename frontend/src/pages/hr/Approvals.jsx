@@ -190,6 +190,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
   const queryClient = useQueryClient()
+  const documentInfo = request.document
 
   useEffect(() => {
     if (request.pdf_ready && request.document_uuid) {
@@ -272,8 +273,6 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
       window.open(pdfUrl, '_blank')
     }
   }
-
-  const documentInfo = request.document
 
   // Determine which signature slots belong to the current approver
   const supervisorSig = documentInfo?.signatures?.find(s => s.signatory_type_code === 'supervisor')
@@ -522,6 +521,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
   const [signError, setSignError] = useState('')
   const [autoGenTriggered, setAutoGenTriggered] = useState(false)
   const queryClient = useQueryClient()
+  const documentInfo = request.document
 
   // Auto-generar documento si no existe
   useEffect(() => {
@@ -612,7 +612,6 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
     }
   }
 
-  const documentInfo = request.document
   const canSign = documentInfo?.signatures?.some(s => !s.signed)
 
   return (

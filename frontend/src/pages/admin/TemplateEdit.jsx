@@ -26,7 +26,8 @@ import {
   Edit2,
   Move,
   Eye,
-  PenTool
+  PenTool,
+  Download
 } from 'lucide-react'
 
 // Default PDF dimensions (Letter size) in points (72 DPI)
@@ -34,7 +35,7 @@ const DEFAULT_PDF_WIDTH = 612
 const DEFAULT_PDF_HEIGHT = 792
 
 // Signature Preview Component - Shows page layout with draggable signature fields
-function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSelect, onUpdatePosition, onUpdateSize, scale = 0.6, numPages = 1, customPageHeight, customPageWidth }) {
+function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSelect, onUpdatePosition, onUpdateSize, scale = 0.6, numPages = 1, customPageHeight, customPageWidth, onPageWidthDetected, fileVersion = 0 }) {
   const PDF_WIDTH = customPageWidth || DEFAULT_PDF_WIDTH
   const PDF_HEIGHT = customPageHeight || DEFAULT_PDF_HEIGHT
   const docxRef = useRef(null)
@@ -86,18 +87,27 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
         if (!isMounted || !docxRef.current) return
         setDocxLoaded(true)
         setDocxLoading(false)
-        // Measure where the section actually rendered (same as Vacations.jsx)
+        // Measure section offset relative to scrollRef's padding box (the positioned scroll container).
+        // This ensures signature overlays align correctly regardless of scroll position.
         const section = docxRef.current?.querySelector('section.docx')
         if (section) {
-          const container = docxRef.current
+          const container = scrollRef.current || docxRef.current
           const sectionRect = section.getBoundingClientRect()
           const containerRect = container.getBoundingClientRect()
+          // Subtract clientLeft/clientTop (border widths) to get padding-box origin
           const metrics = {
-            offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
-            offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
-            sectionWidth: sectionRect.width, // raw rendered width in pixels
+            offsetLeft: sectionRect.left - containerRect.left - container.clientLeft + container.scrollLeft,
+            offsetTop: sectionRect.top - containerRect.top - container.clientTop + container.scrollTop,
+            sectionWidth: sectionRect.width,
           }
-          console.log('[SignaturePreview] Section metrics:', metrics, 'pdfWidth:', PDF_WIDTH)
+          // Auto-detect page width from DOCX section CSS (set by docx-preview in pt)
+          const sectionCssWidth = section.style.width
+          if (sectionCssWidth && sectionCssWidth.endsWith('pt')) {
+            const detectedWidth = parseFloat(sectionCssWidth)
+            if (detectedWidth > 0 && onPageWidthDetected) {
+              onPageWidthDetected(detectedWidth)
+            }
+          }
           setSectionMetrics(metrics)
         }
       })
@@ -108,17 +118,20 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
       })
 
     return () => { isMounted = false }
-  }, [templateId, hasFile])
+  }, [templateId, hasFile, fileVersion])
 
   // Dynamic scale: maps PDF coordinates to rendered pixels (recalculates when PDF_WIDTH changes)
   const coordScale = sectionMetrics ? (sectionMetrics.sectionWidth / PDF_WIDTH) : 1
 
   // Convert mouse position to PDF coordinates using section metrics
+  // Uses scrollRef (the positioned scroll container) as the reference frame
   const mouseToPdf = useCallback((e) => {
-    if (!docxRef.current || !sectionMetrics) return null
-    const containerRect = docxRef.current.getBoundingClientRect()
-    const mouseX = e.clientX - containerRect.left + docxRef.current.scrollLeft
-    const mouseY = e.clientY - containerRect.top + docxRef.current.scrollTop
+    const container = scrollRef.current
+    if (!container || !sectionMetrics) return null
+    const containerRect = container.getBoundingClientRect()
+    // Account for border (clientLeft/clientTop) to measure from padding box
+    const mouseX = e.clientX - containerRect.left - container.clientLeft + container.scrollLeft
+    const mouseY = e.clientY - containerRect.top - container.clientTop + container.scrollTop
     return {
       x: (mouseX - sectionMetrics.offsetLeft) / coordScale,
       y: (mouseY - sectionMetrics.offsetTop) / coordScale,
@@ -197,26 +210,26 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
         <span className="text-xs text-gray-500">Página {currentPage} de {numPages}</span>
       </div>
 
-      {/* Scrollable container - DOCX renders naturally, no transforms */}
+      {/* Scrollable container - position:relative makes it the containing block for absolute overlays */}
       <div
         ref={scrollRef}
         className="border-2 border-gray-300 rounded-lg shadow-lg overflow-auto bg-gray-50"
-        style={{ maxHeight: 650 }}
+        style={{ maxHeight: 650, position: 'relative' }}
         onScroll={(e) => {
           if (!sectionMetrics) return
           const pageH = PDF_HEIGHT * coordScale
           const page = Math.floor(e.target.scrollTop / pageH) + 1
           setCurrentPage(Math.min(page, numPages))
         }}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
       >
         {/* DOCX container - renders naturally like Visualizar/Vacations.jsx */}
         <div
           ref={docxRef}
           className="signature-preview-docx"
           style={{ position: 'relative', minHeight: 200 }}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
         >
           {/* No file state */}
           {!hasFile && (
@@ -974,6 +987,7 @@ export default function TemplateEdit() {
   const [pageWidth, setPageWidth] = useState(612) // Letter default in points
   const [showFilePreview, setShowFilePreview] = useState(false)
   const [filePreviewLoading, setFilePreviewLoading] = useState(false)
+  const [fileVersion, setFileVersion] = useState(0)
   const filePreviewRef = useRef(null)
 
   const { data: templateData, isLoading } = useQuery({
@@ -1076,6 +1090,7 @@ export default function TemplateEdit() {
     mutationFn: (file) => templateService.upload(id, file),
     onSuccess: () => {
       queryClient.invalidateQueries(['template', id])
+      setFileVersion(v => v + 1)
     }
   })
 
@@ -1159,7 +1174,7 @@ export default function TemplateEdit() {
       })
 
     return () => { isMounted = false }
-  }, [showFilePreview, id, template?.file_name])
+  }, [showFilePreview, id, template?.file_name, fileVersion])
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0]
@@ -1274,6 +1289,28 @@ export default function TemplateEdit() {
                       >
                         <Eye className="w-4 h-4" />
                         {showFilePreview ? 'Ocultar' : 'Visualizar'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const res = await templateService.download(template.uuid)
+                            const url = URL.createObjectURL(res.data)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = template.file_name || `${template.name}.docx`
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                            URL.revokeObjectURL(url)
+                          } catch (err) {
+                            console.error('Error downloading template:', err)
+                          }
+                        }}
+                      >
+                        <Download className="w-4 h-4" />
+                        Descargar
                       </Button>
                       <Button
                         variant="secondary"
@@ -1531,6 +1568,7 @@ export default function TemplateEdit() {
               <SignaturePreview
                 templateId={id}
                 hasFile={!!template.file_name}
+                fileVersion={fileVersion}
                 signatories={localSignatories}
                 selectedId={selectedSignatoryId}
                 onSelect={(id) => setSelectedSignatoryId(id)}
@@ -1540,6 +1578,12 @@ export default function TemplateEdit() {
                 numPages={documentPages}
                 customPageHeight={pageHeight}
                 customPageWidth={pageWidth}
+                onPageWidthDetected={(w) => {
+                  if (Math.abs(w - pageWidth) > 1) {
+                    setPageWidth(w)
+                    setHasPositionChanges(true)
+                  }
+                }}
               />
 
               {/* Selected signatory details */}

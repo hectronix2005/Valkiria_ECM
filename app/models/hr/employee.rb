@@ -26,8 +26,9 @@ module Hr
     TYPE_PART_TIME = "part_time"
     TYPE_CONTRACTOR = "contractor"
     TYPE_INTERN = "intern"
+    TYPE_FOUNDER = "founder"
 
-    EMPLOYMENT_TYPES = [TYPE_FULL_TIME, TYPE_PART_TIME, TYPE_CONTRACTOR, TYPE_INTERN].freeze
+    EMPLOYMENT_TYPES = [TYPE_FULL_TIME, TYPE_PART_TIME, TYPE_CONTRACTOR, TYPE_INTERN, TYPE_FOUNDER].freeze
 
     # Contract type constants
     CONTRACT_INDEFINITE = "indefinite"
@@ -167,6 +168,11 @@ module Hr
     def hr_staff?
       return false unless user
       user.has_role?("hr") || user.has_role?("hr_manager") || user.admin?
+    end
+
+    # Check if employee is a founder (socio fundador)
+    def founder?
+      employment_type == TYPE_FOUNDER
     end
 
     # Check if employee is HR manager

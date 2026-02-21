@@ -131,6 +131,7 @@ module Api
             locale: user.locale,
             is_supervisor: employee&.supervisor? || false,
             is_hr: employee&.hr_staff? || employee&.hr_manager? || false,
+            is_founder: employee&.founder? || false,
             must_change_password: user.must_change_password || false,
             employee: employee ? {
               id: employee.uuid,

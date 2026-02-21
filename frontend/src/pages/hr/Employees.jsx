@@ -72,6 +72,7 @@ const employmentTypeOptions = [
   { value: 'part_time', label: 'Medio Tiempo' },
   { value: 'contractor', label: 'Contratista' },
   { value: 'intern', label: 'Pasante' },
+  { value: 'founder', label: 'Socio Fundador' },
 ]
 
 const contractTypeOptions = [
@@ -203,6 +204,7 @@ const employmentTypeLabels = {
   part_time: 'Medio Tiempo',
   contractor: 'Contratista',
   intern: 'Pasante',
+  founder: 'Socio Fundador',
 }
 
 function EmployeeEditForm({ employee, employees, contractTemplates = [], departmentOptions = [], companies = [], onSubmit, onCancel, loading, error }) {
