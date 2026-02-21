@@ -22,9 +22,6 @@ module Api
           @vacations = policy_scope(::Hr::VacationRequest)
             .order(created_at: :desc)
 
-          # In employee mode, force scope to only own requests
-          @vacations = @vacations.where(employee_id: current_employee.id) if employee_mode?
-
           @vacations = apply_filters(@vacations)
           @vacations = paginate(@vacations)
 

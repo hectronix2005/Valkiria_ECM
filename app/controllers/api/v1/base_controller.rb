@@ -6,6 +6,8 @@ module Api
       include Pundit::Authorization
 
       before_action :authenticate_user!
+      before_action :set_employee_mode_thread_local
+      after_action :clear_employee_mode_thread_local
 
       rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
 
@@ -103,6 +105,15 @@ module Api
         @_error_already_logged = true
         log_error(exception, severity: "warning") if exception
         render json: { error: "You are not authorized to perform this action" }, status: :forbidden
+      end
+
+      # Share employee_mode? with Pundit policies via thread-local
+      def set_employee_mode_thread_local
+        Thread.current[:employee_mode] = employee_mode?
+      end
+
+      def clear_employee_mode_thread_local
+        Thread.current[:employee_mode] = nil
       end
     end
   end
