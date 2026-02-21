@@ -1475,55 +1475,20 @@ export default function Vacations() {
         </Button>
       </div>
 
-      {/* Balance Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 rounded-xl">
-                <CalendarDays className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-blue-600">
-                  {Math.min(30, Math.floor((balance.accrued || 0) - (balance.enjoyed || 0)))}
-                </p>
-                <p className="text-sm text-blue-700 font-medium">Días Acumulados</p>
-                <p className="text-xs text-blue-500">Según antigüedad (máx. 30)</p>
-              </div>
+      {/* Balance Card */}
+      <Card className="bg-green-50 border-green-300 ring-2 ring-green-200">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-green-100 rounded-xl">
+              <CalendarDays className="w-6 h-6 text-green-600" />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-amber-50 border-amber-200">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-amber-100 rounded-xl">
-                <CalendarClock className="w-6 h-6 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-amber-600">{Math.floor(balance.scheduled || 0)}</p>
-                <p className="text-sm text-amber-700 font-medium">Días Programados</p>
-                <p className="text-xs text-amber-500">Aprobados sin disfrutar</p>
-              </div>
+            <div>
+              <p className="text-3xl font-bold text-green-600">{Math.floor(balance.available || 0)}</p>
+              <p className="text-sm text-green-700 font-medium">Días de Vacaciones</p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-green-50 border-green-300 ring-2 ring-green-200">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 rounded-xl">
-                <Plus className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-green-600">{Math.floor(balance.available || 0)}</p>
-                <p className="text-sm text-green-700 font-medium">Días Vacaciones</p>
-                <p className="text-xs text-green-500">Para solicitar</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
