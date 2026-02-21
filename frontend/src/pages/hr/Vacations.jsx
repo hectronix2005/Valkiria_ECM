@@ -1328,7 +1328,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
 }
 
 export default function Vacations() {
-  const { user } = useAuth()
+  const { user, employeeMode } = useAuth()
   const [showNewModal, setShowNewModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedVacation, setSelectedVacation] = useState(null)
@@ -1340,7 +1340,7 @@ export default function Vacations() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  const isHR = user?.roles?.some(r => ['hr', 'hr_manager', 'admin'].includes(r))
+  const isHR = !employeeMode && user?.roles?.some(r => ['hr', 'hr_manager', 'admin'].includes(r))
 
   // Auto-open modal if navigated with openNew state (from Dashboard quick action)
   useEffect(() => {
@@ -1352,7 +1352,7 @@ export default function Vacations() {
   }, [location.state, location.pathname, navigate])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['vacations', { status: statusFilter }],
+    queryKey: ['vacations', { status: statusFilter, employeeMode }],
     queryFn: () => vacationService.list({ status: statusFilter || undefined }),
   })
 
