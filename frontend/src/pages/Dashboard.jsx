@@ -543,10 +543,7 @@ export default function Dashboard() {
           value={Math.floor(user?.vacation?.days_available ?? 0)}
           icon={Calendar}
           color="blue"
-          subtitle={user?.vacation?.days_pending > user?.vacation?.days_available
-            ? `${Math.floor(user?.vacation?.days_pending)} pendientes`
-            : "Disponibles"
-          }
+          subtitle="Disponibles"
           href="/hr/my-requests/vacations"
         />
         <StatCard

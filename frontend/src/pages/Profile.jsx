@@ -810,10 +810,6 @@ export default function Profile() {
                   <span className="text-gray-500">Días usados (total)</span>
                   <span className="font-medium">{Math.floor(vacation.days_used_total || 0)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Días pendientes</span>
-                  <span className="font-medium text-primary-600">{Math.floor(vacation.days_pending || 0)}</span>
-                </div>
                 <div className="border-t pt-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Máximo acumulable</span>
