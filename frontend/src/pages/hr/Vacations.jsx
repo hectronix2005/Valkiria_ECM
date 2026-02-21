@@ -978,7 +978,7 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
                       </Button>
                     )}
 
-                    {vacation.status !== 'system' && vacation.can_delete && (
+                    {vacation.can_delete && (
                       <Button variant="danger" size="sm" onClick={() => onDelete(vacation.id)} title="Eliminar solicitud">
                         <Trash2 className="w-4 h-4" />
                       </Button>

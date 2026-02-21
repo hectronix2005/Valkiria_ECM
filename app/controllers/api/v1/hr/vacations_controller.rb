@@ -584,6 +584,9 @@ module Api
 
         # Check if current user can delete this vacation (for JSON response)
         def can_delete_for_user?(vacation)
+          # System adjustments can only be deleted by admins
+          return current_user.admin? if vacation.system?
+
           # In employee mode, only allow owner actions
           unless employee_mode?
             # Admin and HR can delete any vacation
