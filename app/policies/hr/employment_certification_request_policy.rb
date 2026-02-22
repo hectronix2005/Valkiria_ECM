@@ -38,7 +38,7 @@ module Hr
 
     class Scope < ApplicationPolicy::Scope
       def resolve
-        if user_employee.hr_staff? || user_employee.hr_manager?
+        if !employee_mode? && (user_employee.hr_staff? || user_employee.hr_manager?)
           scope.where(organization_id: user.organization_id)
         else
           scope.where(employee_id: user_employee.id)
@@ -49,6 +49,10 @@ module Hr
 
       def user_employee
         @user_employee ||= ::Hr::Employee.for_user(user)
+      end
+
+      def employee_mode?
+        Thread.current[:employee_mode] == true
       end
     end
 
