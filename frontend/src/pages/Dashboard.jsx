@@ -261,7 +261,7 @@ function ContractCard({ contract }) {
 }
 
 export default function Dashboard() {
-  const { user, isHR, isSupervisor, hasAdminAccess: isAdmin, hasPermission } = useAuth()
+  const { user, isHR, isSupervisor, isFounder, hasAdminAccess: isAdmin, hasPermission, employeeMode } = useAuth()
   const navigate = useNavigate()
   const [previewDocument, setPreviewDocument] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -284,7 +284,7 @@ export default function Dashboard() {
   const { data: approvalsData } = useQuery({
     queryKey: ['approvals'],
     queryFn: () => approvalService.list(),
-    enabled: isHR || isSupervisor,
+    enabled: isHR || isSupervisor || isFounder,
   })
 
   const { data: pendingSignaturesData } = useQuery({
@@ -301,7 +301,13 @@ export default function Dashboard() {
   const vacations = vacationsData?.data?.data || []
   const certifications = certificationsData?.data?.data || []
   const approvals = approvalsData?.data?.data || { vacation_requests: [], certification_requests: [] }
-  const pendingSignatures = pendingSignaturesData?.data?.data || []
+  const allPendingSignatures = pendingSignaturesData?.data?.data || []
+  // In employee mode, only show documents where the user's pending signature is for "employee" role
+  const pendingSignatures = employeeMode
+    ? allPendingSignatures.filter(doc =>
+        doc.signatures?.some(s => s.status === 'pending' && s.signatory_type_code === 'employee')
+      )
+    : allPendingSignatures
   const contracts = contractsData?.data?.data || []
   const pendingApprovalCount = (approvals.vacation_requests?.length || 0) + (approvals.certification_requests?.length || 0)
 
@@ -553,7 +559,7 @@ export default function Dashboard() {
           color="yellow"
           href="/hr/my-requests/vacations"
         />
-        {(isHR || isSupervisor) && (
+        {(isHR || isSupervisor || isFounder) && (
           <StatCard
             title="Por aprobar"
             value={pendingApprovalCount}
@@ -631,7 +637,7 @@ export default function Dashboard() {
                 color="indigo"
               />
             )}
-            {(isHR || isSupervisor) && (
+            {(isHR || isSupervisor || isFounder) && (
               <QuickAction
                 title="Aprobar Solicitudes"
                 description={`${pendingApprovalCount} pendientes`}
@@ -719,7 +725,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Pending Approvals (for supervisors/HR) OR Recent Certifications */}
-        {(isHR || isSupervisor) ? (
+        {(isHR || isSupervisor || isFounder) ? (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Pendientes de Aprobación</CardTitle>
