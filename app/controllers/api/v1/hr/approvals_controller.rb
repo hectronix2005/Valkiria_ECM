@@ -202,6 +202,11 @@ module Api
             return
           end
 
+          unless current_employee
+            render json: { error: "Access denied. No employee record found." }, status: :forbidden
+            return
+          end
+
           return if current_employee.hr_staff? || current_employee.hr_manager? || current_employee.supervisor? || current_employee.founder?
 
           render json: { error: "Access denied. Approver privileges required." }, status: :forbidden

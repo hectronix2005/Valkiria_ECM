@@ -156,10 +156,14 @@ class NotificationService
       status_label = status_label_for(new_status)
 
       actor_user_id = (actor&.user_id || actor&.user&.id)&.to_s
+      # Skip the request's own employee (they already receive specific notifications like vacation_approved)
+      employee_user_id = request.employee&.user_id&.to_s
 
       signer_users.each do |signer_user|
         # Don't notify the actor who triggered the change
         next if signer_user.id.to_s == actor_user_id
+        # Don't double-notify the request's employee (they get dedicated notifications)
+        next if signer_user.id.to_s == employee_user_id
 
         create_notification(
           recipient: signer_user,

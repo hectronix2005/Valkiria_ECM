@@ -13,7 +13,7 @@ module Api
             .order(created_at: :desc)
 
           # In employee mode, force scope to only own requests
-          @certifications = @certifications.where(employee_id: current_employee.id) if employee_mode?
+          @certifications = @certifications.where(employee_id: current_employee.id) if employee_mode? && current_employee
 
           @certifications = apply_filters(@certifications)
           @certifications = paginate(@certifications)
@@ -41,7 +41,7 @@ module Api
         # POST /api/v1/hr/certifications
         def create
           @certification = ::Hr::EmploymentCertificationRequest.new(certification_params)
-          @certification.employee = current_employee
+          @certification.employee = current_employee || ::Hr::Employee.find_or_create_for_user!(current_user)
           @certification.organization = current_organization
 
           authorize @certification

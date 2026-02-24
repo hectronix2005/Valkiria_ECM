@@ -9,14 +9,15 @@ module Api
 
         # GET /api/v1/hr/vacations
         def index
-          # Apply legal cap adjustments if employee exceeds 30-day limit
-          current_employee.apply_legal_cap_adjustments!
+          # Apply legal cap adjustments and auto-mark enjoyed (only if employee exists)
+          if current_employee
+            current_employee.apply_legal_cap_adjustments!
 
-          # Auto-marcar vacaciones pasadas como disfrutadas (incluye end_date == hoy después de las 6 PM)
-          current_employee.vacation_requests.approved.where(:end_date.lte => Date.current).each do |v|
-            v.mark_as_enjoyed! # should_mark_as_enjoyed? checks vacation_period_ended? (6 PM rule)
-          rescue ::Hr::VacationRequest::InvalidStateError
-            next
+            current_employee.vacation_requests.approved.where(:end_date.lte => Date.current).each do |v|
+              v.mark_as_enjoyed!
+            rescue ::Hr::VacationRequest::InvalidStateError
+              next
+            end
           end
 
           @vacations = policy_scope(::Hr::VacationRequest)
@@ -49,7 +50,7 @@ module Api
         # POST /api/v1/hr/vacations
         def create
           @vacation = ::Hr::VacationRequest.new(vacation_params)
-          @vacation.employee = current_employee
+          @vacation.employee = current_employee || ::Hr::Employee.find_or_create_for_user!(current_user)
           @vacation.organization = current_organization
 
           authorize @vacation

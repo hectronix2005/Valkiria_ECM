@@ -82,7 +82,7 @@ Rails.application.configure do
   # Enable DNS rebinding protection and other `Host` header attacks.
   config.hosts = [
     ENV["APP_HOST"],                # e.g. "api.valkyria-ecm.com"
-    /.*\.github\.io/,              # GitHub Pages frontend
+    "hectronix2005.github.io",     # GitHub Pages frontend (exact domain)
     "localhost"
   ].compact
   # Skip DNS rebinding protection for health checks

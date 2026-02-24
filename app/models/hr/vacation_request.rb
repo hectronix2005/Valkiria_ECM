@@ -360,13 +360,14 @@ module Hr
       # Must be in same organization
       return false unless actor.organization_id == organization_id
 
-      # No self-approval unless actor is admin
-      return false if actor.id == employee.id && !actor.user&.admin?
+      # Admin can always approve (including their own requests)
+      return true if actor.user&.admin?
+
+      # No self-approval for non-admins
+      return false if actor.id == employee.id
 
       # Founders can only be approved by another founder
-      if employee.founder?
-        return actor.founder? && actor.id != employee.id
-      end
+      return actor.founder? if employee.founder?
 
       # HR Manager or HR Staff can approve after all document signatures are complete
       if actor.hr_manager? || actor.hr_staff?
@@ -486,10 +487,15 @@ module Hr
     end
 
     def find_hr_manager
-      Hr::Employee
+      # Exclude the requesting employee to prevent self-approval loops
+      candidates = Hr::Employee
         .where(organization_id: organization_id)
+        .where(:id.ne => employee_id)
         .active
-        .detect(&:hr_manager?)
+
+      # Prefer HR manager, then fall back to any admin user
+      candidates.detect(&:hr_manager?) ||
+        candidates.detect { |e| e.user&.admin? }
     end
 
     def generate_request_number

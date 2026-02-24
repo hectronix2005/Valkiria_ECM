@@ -55,18 +55,11 @@ module Api
         current_user&.try(:is_supervisor)
       end
 
-      # Get current employee record, auto-creating if none exists.
-      # Centralised here so every HR controller shares the same logic.
+      # Get current employee record (read-only lookup, no auto-creation).
+      # Controllers that need auto-creation should override this or use
+      # find_or_create_for_user! explicitly in create actions.
       def current_employee
-        @current_employee ||= ::Hr::Employee.for_user(current_user) ||
-          ::Hr::Employee.create!(
-            user: current_user,
-            organization: current_organization,
-            job_title: current_user.title,
-            department: current_user.department,
-            hire_date: Date.current,
-            vacation_balance_days: 15.0
-          )
+        @current_employee ||= ::Hr::Employee.for_user(current_user)
       end
 
       def authenticate_user!
