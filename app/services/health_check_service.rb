@@ -43,7 +43,9 @@ class HealthCheckService < BaseService
     return false unless defined?(Redis)
 
     redis_url = ENV.fetch("REDIS_URL", "redis://localhost:6379/1")
-    Redis.new(url: redis_url).ping == "PONG"
+    opts = { url: redis_url }
+    opts[:ssl_params] = { verify_mode: OpenSSL::SSL::VERIFY_NONE } if redis_url.start_with?("rediss://")
+    Redis.new(**opts).ping == "PONG"
   rescue StandardError
     false
   end
