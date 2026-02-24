@@ -69,7 +69,7 @@ module Templates
         pdf.save(output_pdf.path)
 
         # Store in GridFS
-        store_final_pdf(File.read(output_pdf.path))
+        store_final_pdf(File.binread(output_pdf.path))
       ensure
         input_pdf.close
         input_pdf.unlink

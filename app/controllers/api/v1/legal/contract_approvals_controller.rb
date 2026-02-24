@@ -5,6 +5,7 @@ module Api
     module Legal
       class ContractApprovalsController < BaseController
         before_action :set_contract, only: %i[show approve reject sign]
+        before_action :ensure_legal_or_manager_access, only: [:index]
 
         # GET /api/v1/legal/contract_approvals
         def index
@@ -72,6 +73,7 @@ module Api
 
         # GET /api/v1/legal/contract_approvals/:id
         def show
+          authorize @contract, :show?
           render json: { data: approval_json(@contract, detailed: true) }
         end
 
@@ -175,6 +177,14 @@ module Api
         def set_contract
           @contract = ::Legal::Contract.find_by(uuid: params[:id])
           render json: { error: "Contrato no encontrado" }, status: :not_found unless @contract
+        end
+
+        def ensure_legal_or_manager_access
+          return if admin?
+          return if current_user.has_role?("legal")
+          return if current_user.has_role?("manager") || current_user.has_role?("general_manager") || current_user.has_role?("ceo")
+
+          render json: { error: "No tienes acceso a aprobaciones de contratos" }, status: :forbidden
         end
 
         def determine_user_role

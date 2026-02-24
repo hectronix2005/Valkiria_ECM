@@ -13,7 +13,7 @@ module Api
           types: search_types,
           filters: search_filters,
           page: params[:page]&.to_i || 1,
-          per_page: params[:per_page]&.to_i || 20
+          per_page: [params[:per_page]&.to_i || 20, 100].min
         )
 
         render json: {

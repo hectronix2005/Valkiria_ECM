@@ -11,7 +11,7 @@ module SoftDeletable
 
     scope :active, -> { where(deleted_at: nil) }
     scope :deleted, -> { where(:deleted_at.ne => nil) }
-    scope :with_deleted, -> { unscoped }
+    scope :with_deleted, -> { unscope(where: :deleted_at) }
 
     default_scope -> { active }
   end

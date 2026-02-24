@@ -26,14 +26,17 @@ end
 puts "Employee role: #{employee_role.name}"
 
 # Create admin user
-user = Identity::User.find_or_initialize_by(email: "hectorneira2005@hotmail.com")
-user.first_name = "Hector"
-user.last_name = "Neira"
-user.password = "Admin123"
+admin_email = ENV.fetch("ADMIN_EMAIL", "admin@valkyria.com")
+admin_password = ENV.fetch("ADMIN_PASSWORD") { SecureRandom.hex(16) }
+user = Identity::User.find_or_initialize_by(email: admin_email)
+user.first_name = ENV.fetch("ADMIN_FIRST_NAME", "Admin")
+user.last_name = ENV.fetch("ADMIN_LAST_NAME", "User")
+user.password = admin_password
 user.organization = org
 user.active = true
-user.must_change_password = false
+user.must_change_password = true
 user.save!
+puts "Admin password: #{admin_password}" if user.previously_new_record?
 
 # Assign roles
 user.roles = [admin_role, hr_role]

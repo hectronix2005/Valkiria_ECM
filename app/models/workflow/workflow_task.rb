@@ -224,8 +224,12 @@ module Workflow
     def eligible_users
       return Identity::User.none if assigned_role.blank?
 
-      organization.users.joins(:roles).where(
-        identity_roles: { name: assigned_role }
+      role = ::Identity::Role.where(name: assigned_role).first
+      return Identity::User.none unless role
+
+      Identity::User.where(
+        organization_id: organization_id,
+        :role_ids.in => [role.id]
       )
     end
 

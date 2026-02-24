@@ -149,7 +149,7 @@ module Hr
 
     # Delegate user attributes (when user exists)
     delegate :email, to: :user, allow_nil: true
-    delegate :has_role?, :has_permission?, :admin?, to: :user
+    delegate :has_role?, :has_permission?, :admin?, to: :user, allow_nil: true
 
     # Name methods - use local fields first, fallback to user
     def display_first_name

@@ -32,3 +32,13 @@
 # Ignore master key for decrypting credentials and more.
 /config/master.key
 .idea/
+
+# Frontend dependencies
+frontend/node_modules/
+
+# Cookie jar files (curl)
+cookies.txt
+cookies_local.txt
+
+# Diagnostic scripts
+bin/diagnose

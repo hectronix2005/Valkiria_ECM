@@ -5,123 +5,15 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { FileText, AlertCircle, Users, Eye, EyeOff, Clock, Star, TrendingUp, Shield, UserCheck, Briefcase } from 'lucide-react'
 
-// Test credentials — only included in development builds (tree-shaken in production)
+// Dev-only quick access — credentials must match your local seed data
+// WARNING: Never include real passwords or personal emails here
 const ALL_USERS = import.meta.env.DEV ? [
-  // Administradores
-  {
-    email: 'admin@valkyria.com',
-    password: 'Admin123',
-    role: 'Admin',
-    color: 'bg-red-100 text-red-700',
-    description: 'Carlos - Acceso total al sistema',
-    category: 'admin'
-  },
-  {
-    email: 'hectorneira2005@hotmail.com',
-    password: 'Admin123',
-    role: 'Admin',
-    color: 'bg-red-100 text-red-700',
-    description: 'Hector Neira - Admin principal',
-    category: 'admin'
-  },
-
-  // Recursos Humanos
-  {
-    email: 'hr.manager@valkyria.com',
-    password: 'HrManager123',
-    role: 'Gerente RRHH',
-    color: 'bg-purple-100 text-purple-700',
-    description: 'María García - Gestiona empleados',
-    category: 'hr'
-  },
-  {
-    email: 'hr.staff@valkyria.com',
-    password: 'HrStaff123',
-    role: 'Staff RRHH',
-    color: 'bg-indigo-100 text-indigo-700',
-    description: 'Monica Beltran - Operaciones RRHH',
-    category: 'hr'
-  },
-
-  // Legal
-  {
-    email: 'legal@valkyria.com',
-    password: 'Admin123',
-    role: 'Legal',
-    color: 'bg-amber-100 text-amber-700',
-    description: 'Nathalia Mendoza - Contratos y legal',
-    category: 'legal'
-  },
-
-  // Supervisores
-  {
-    email: 'supervisor@valkyria.com',
-    password: 'Supervisor123',
-    role: 'Supervisor',
-    color: 'bg-blue-100 text-blue-700',
-    description: 'Roberto Martínez - Aprueba solicitudes',
-    category: 'supervisor'
-  },
-
-  // Empleados
-  {
-    email: 'employee1@valkyria.com',
-    password: 'Employee123',
-    role: 'Empleado',
-    color: 'bg-green-100 text-green-700',
-    description: 'Juan Pérez - Software Developer',
-    category: 'employee'
-  },
-  {
-    email: 'employee2@valkyria.com',
-    password: 'Employee123',
-    role: 'Empleado',
-    color: 'bg-green-100 text-green-700',
-    description: 'Laura Sánchez - QA Engineer',
-    category: 'employee'
-  },
-  {
-    email: 'employee3@valkyria.com',
-    password: 'Employee123',
-    role: 'Empleado',
-    color: 'bg-green-100 text-green-700',
-    description: 'Pedro Ramírez - DevOps Engineer',
-    category: 'employee'
-  },
-  {
-    email: 'paulacarrillo1007@gmail.com',
-    password: 'Employee123',
-    role: 'Empleado',
-    color: 'bg-green-100 text-green-700',
-    description: 'Paula Carrillo - Empleada',
-    category: 'employee'
-  },
-  {
-    email: 'hector.prueba@valkyria.com',
-    password: 'Employee123',
-    role: 'Empleado',
-    color: 'bg-green-100 text-green-700',
-    description: 'Empleado Prueba H',
-    category: 'employee'
-  },
-  {
-    email: 'empleado.prueba@valkyria.com',
-    password: 'Employee123',
-    role: 'Empleado',
-    color: 'bg-green-100 text-green-700',
-    description: 'Empleado Prueba N',
-    category: 'employee'
-  },
-
-  // Viewer
-  {
-    email: 'viewer@valkyria.com',
-    password: 'Viewer123',
-    role: 'Viewer',
-    color: 'bg-gray-100 text-gray-700',
-    description: 'Visitante Externo - Solo lectura',
-    category: 'viewer'
-  },
+  { email: 'admin@valkyria.com', password: '', role: 'Admin', color: 'bg-red-100 text-red-700', description: 'Administrador', category: 'admin' },
+  { email: 'hr.manager@valkyria.com', password: '', role: 'Gerente RRHH', color: 'bg-purple-100 text-purple-700', description: 'Gerente de RRHH', category: 'hr' },
+  { email: 'hr.staff@valkyria.com', password: '', role: 'Staff RRHH', color: 'bg-indigo-100 text-indigo-700', description: 'Staff de RRHH', category: 'hr' },
+  { email: 'legal@valkyria.com', password: '', role: 'Legal', color: 'bg-amber-100 text-amber-700', description: 'Legal', category: 'legal' },
+  { email: 'supervisor@valkyria.com', password: '', role: 'Supervisor', color: 'bg-blue-100 text-blue-700', description: 'Supervisor', category: 'supervisor' },
+  { email: 'employee1@valkyria.com', password: '', role: 'Empleado', color: 'bg-green-100 text-green-700', description: 'Empleado', category: 'employee' },
 ] : []
 
 const STORAGE_KEY = 'valkyria_login_history'

@@ -230,10 +230,8 @@ module Hr
     private
 
     def find_or_create_employee(user)
-      Hr::Employee.find_or_create_for_user!(
-        user.respond_to?(:user) ? user.user : user,
-        vacation_balance_days: 15.0 # Default balance for new employees
-      )
+      actual_user = user.respond_to?(:user) ? user.user : user
+      Hr::Employee.for_user(actual_user) || Hr::Employee.find_or_create_for_user!(actual_user)
     end
 
     def calculate_business_days(start_date, end_date)

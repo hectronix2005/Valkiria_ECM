@@ -135,6 +135,16 @@ VALKYRIA_ECM/
 
 ## Troubleshooting
 
+### Diagnóstico rápido
+
+Si algo no funciona, ejecuta el diagnóstico de servicios:
+
+```bash
+bin/diagnose        # o: bundle exec rake diagnose
+```
+
+Verifica MongoDB, Redis, Rails/Puma, Vite y Gotenberg en paralelo, muestra el estado con colores y sugiere comandos para corregir cada fallo.
+
 ### Error 404 en login
 
 El servidor Rails puede tener rutas no cargadas (proceso zombie):

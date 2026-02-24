@@ -130,7 +130,7 @@ module Api
         private
 
         def ensure_admin_or_hr
-          return if current_user.admin_access? || current_user.has_role?("hr")
+          return if admin? || current_user.has_role?("hr")
 
           render json: {
             error: "Acceso denegado. Se requieren privilegios de administrador o HR."
@@ -138,7 +138,10 @@ module Api
         end
 
         def set_signatory_type
-          @signatory_type = ::Templates::SignatoryType.find_by(uuid: params[:id])
+          @signatory_type = ::Templates::SignatoryType.find_by(
+            uuid: params[:id],
+            organization_id: current_organization.id
+          )
 
           return if @signatory_type
 

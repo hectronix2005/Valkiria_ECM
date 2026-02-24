@@ -279,7 +279,7 @@ module Api
         # POST /api/v1/admin/variable_mappings/:id/add_alias
         # Add an alias to an existing variable
         def add_alias
-          mapping = ::Templates::VariableMapping.find_by(uuid: params[:id])
+          mapping = ::Templates::VariableMapping.find_by(uuid: params[:id], organization_id: current_organization.id)
           return render json: { error: "Variable no encontrada" }, status: :not_found unless mapping
 
           alias_name = params[:alias_name]
@@ -310,7 +310,7 @@ module Api
         # DELETE /api/v1/admin/variable_mappings/:id/remove_alias
         # Remove an alias from a variable
         def remove_alias
-          mapping = ::Templates::VariableMapping.find_by(uuid: params[:id])
+          mapping = ::Templates::VariableMapping.find_by(uuid: params[:id], organization_id: current_organization.id)
           return render json: { error: "Variable no encontrada" }, status: :not_found unless mapping
 
           alias_name = params[:alias_name]
@@ -458,7 +458,7 @@ module Api
         end
 
         def ensure_admin_or_hr
-          return if current_user.admin_access? || current_user.has_role?("hr")
+          return if admin? || current_user.has_role?("hr")
 
           render json: {
             error: "Acceso denegado. Se requieren privilegios de administrador o HR."
@@ -466,7 +466,7 @@ module Api
         end
 
         def set_mapping
-          @mapping = ::Templates::VariableMapping.find_by(uuid: params[:id])
+          @mapping = ::Templates::VariableMapping.find_by(uuid: params[:id], organization_id: current_organization.id)
 
           return if @mapping
 

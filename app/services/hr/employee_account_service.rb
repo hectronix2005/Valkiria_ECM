@@ -82,10 +82,11 @@ module Hr
     end
 
     def build_user
+      temp_password = SecureRandom.hex(12)
       Identity::User.new(
         email: employee.personal_email,
-        password: employee.identification_number,
-        password_confirmation: employee.identification_number,
+        password: temp_password,
+        password_confirmation: temp_password,
         first_name: extract_first_name,
         last_name: extract_last_name,
         organization: employee.organization,

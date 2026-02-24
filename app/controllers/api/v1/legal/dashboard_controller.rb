@@ -4,6 +4,8 @@ module Api
   module V1
     module Legal
       class DashboardController < BaseController
+        before_action :ensure_legal_access
+
         # GET /api/v1/legal/dashboard
         def show
           render json: {
@@ -17,6 +19,14 @@ module Api
         end
 
         private
+
+        def ensure_legal_access
+          return if admin?
+          return if current_user.has_role?("legal")
+          return if current_user.has_role?("manager") || current_user.has_role?("general_manager") || current_user.has_role?("ceo")
+
+          render json: { error: "Legal access required" }, status: :forbidden
+        end
 
         def third_party_stats
           base = ::Legal::ThirdParty.where(organization_id: current_organization.id)

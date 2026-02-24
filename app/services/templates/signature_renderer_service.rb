@@ -77,6 +77,7 @@ module Templates
 
     def transparent_base_image
       # Create a transparent 400x150 PNG base using tempfile
+      @base_tempfile&.close
       @base_tempfile = Tempfile.new(["base", ".png"])
       MiniMagick::Tool::Convert.new do |convert|
         convert << "-size" << "400x150"
@@ -84,6 +85,8 @@ module Templates
         convert << @base_tempfile.path
       end
       @base_tempfile.path
+    ensure
+      # Ensure cleanup when method finishes — caller should also clean up
     end
 
     def font_path(font_name)

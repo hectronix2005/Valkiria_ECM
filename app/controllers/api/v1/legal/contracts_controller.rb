@@ -29,7 +29,7 @@ module Api
 
           # Pagination
           page = (params[:page] || 1).to_i
-          per_page = (params[:per_page] || 20).to_i
+          per_page = [(params[:per_page] || 20).to_i, 100].min
           total = contracts.count
           contracts = contracts.skip((page - 1) * per_page).limit(per_page)
 

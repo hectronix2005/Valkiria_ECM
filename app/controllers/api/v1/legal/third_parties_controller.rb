@@ -21,7 +21,7 @@ module Api
 
           # Pagination
           page = (params[:page] || 1).to_i
-          per_page = (params[:per_page] || 20).to_i
+          per_page = [(params[:per_page] || 20).to_i, 100].min
           total = third_parties.count
           third_parties = third_parties.skip((page - 1) * per_page).limit(per_page)
 
@@ -115,7 +115,7 @@ module Api
 
         def third_party_params
           params.require(:third_party).permit(
-            :third_party_type, :person_type, :status,
+            :third_party_type, :person_type,
             :identification_type, :identification_number, :verification_digit,
             :business_name, :trade_name, :first_name, :last_name,
             :email, :phone, :mobile, :website,

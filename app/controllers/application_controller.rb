@@ -101,10 +101,11 @@ class ApplicationController < ActionController::API
     @_error_already_logged = true
     log_error(exception, severity: "error")
     Rails.logger.error("#{exception.class}: #{exception.message}\n#{exception.backtrace&.first(10)&.join("\n")}")
+    error_details = Rails.env.local? ? [exception.message] : ["An unexpected error occurred"]
     render_error(
       "Internal server error",
       status: :internal_server_error,
-      errors: [exception.message]
+      errors: error_details
     )
   end
 

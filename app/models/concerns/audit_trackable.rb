@@ -22,11 +22,11 @@ module AuditTrackable
     end
 
     def without_audit
-      original_value = audit_enabled
-      self.audit_enabled = false
+      thread_key = :"#{name}_audit_disabled"
+      Thread.current[thread_key] = true
       yield
     ensure
-      self.audit_enabled = original_value
+      Thread.current[thread_key] = nil
     end
   end
 
@@ -52,6 +52,8 @@ module AuditTrackable
   end
 
   def audit_enabled?
+    return false if Thread.current[:"#{self.class.name}_audit_disabled"]
+
     self.class.audit_enabled
   end
 

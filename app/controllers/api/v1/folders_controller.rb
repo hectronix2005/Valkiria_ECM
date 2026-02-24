@@ -4,6 +4,7 @@ module Api
   module V1
     class FoldersController < BaseController
       before_action :set_folder, only: [:show, :update, :destroy, :add_document, :remove_document]
+      before_action :ensure_folder_access, only: [:create, :update, :destroy, :add_document, :remove_document]
 
       # GET /api/v1/folders
       def index
@@ -133,6 +134,12 @@ module Api
       end
 
       private
+
+      def ensure_folder_access
+        return if hr_or_admin?
+
+        render json: { error: "No autorizado para gestionar carpetas" }, status: :forbidden
+      end
 
       def set_folder
         @folder = ::Documents::Folder.find_by(

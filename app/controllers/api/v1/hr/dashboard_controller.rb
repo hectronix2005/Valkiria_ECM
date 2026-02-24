@@ -22,13 +22,13 @@ module Api
         private
 
         def ensure_hr_access
-          return if current_employee.hr_staff? || current_employee.hr_manager?
+          return if !employee_mode? && (current_employee&.hr_staff? || current_employee&.hr_manager?)
 
           render json: { error: "HR access required" }, status: :forbidden
         end
 
         def current_employee
-          @current_employee ||= ::Hr::Employee.find_or_create_for_user!(current_user)
+          @current_employee ||= ::Hr::Employee.for_user(current_user)
         end
       end
     end

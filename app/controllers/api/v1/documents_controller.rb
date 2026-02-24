@@ -8,7 +8,7 @@ module Api
       # GET /api/v1/documents
       def index
         page = (params[:page] || 1).to_i
-        per_page = (params[:per_page] || 20).to_i
+        per_page = [(params[:per_page] || 20).to_i, 100].min
         skip_count = (page - 1) * per_page
 
         base_scope = policy_scope(::Templates::GeneratedDocument).order(created_at: :desc)

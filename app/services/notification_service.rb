@@ -219,7 +219,7 @@ class NotificationService
       end
 
       Notification.create!(attrs)
-    rescue StandardError => e
+    rescue Mongoid::Errors::Validations, Mongoid::Errors::MongoidError => e
       Rails.logger.error("NotificationService error: #{e.message}")
       ErrorLoggingService.capture_service_error(e,
         service: "NotificationService",

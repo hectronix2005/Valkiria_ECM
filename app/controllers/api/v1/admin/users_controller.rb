@@ -13,7 +13,7 @@ module Api
 
           # Filter by search
           if params[:search].present?
-            search = params[:search].downcase
+            search = Regexp.escape(params[:search].downcase)
             users = users.or(
               { first_name: /#{search}/i },
               { last_name: /#{search}/i },

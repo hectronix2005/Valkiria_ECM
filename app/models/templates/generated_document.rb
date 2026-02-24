@@ -99,8 +99,15 @@ module Templates
       status == CANCELLED
     end
 
+    ALLOWED_SOURCE_TYPES = %w[
+      Hr::EmploymentCertificationRequest
+      Hr::VacationRequest
+      Legal::Contract
+    ].freeze
+
     def source
       return nil unless source_type && source_id
+      return nil unless ALLOWED_SOURCE_TYPES.include?(source_type)
 
       source_type.constantize.find(source_id)
     rescue Mongoid::Errors::DocumentNotFound

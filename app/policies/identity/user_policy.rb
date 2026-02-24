@@ -25,7 +25,8 @@ module Identity
     class Scope < ApplicationPolicy::Scope
       def resolve
         if admin?
-          scope.all
+          # Admin sees only their own organization's users, not cross-tenant
+          scope.where(organization_id: user.organization_id)
         elsif user&.has_permission?("users.read")
           scope.where(organization_id: user.organization_id)
         else

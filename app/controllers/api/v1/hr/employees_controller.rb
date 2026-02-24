@@ -478,15 +478,7 @@ module Api
         end
 
         def current_employee
-          @current_employee ||= ::Hr::Employee.for_user(current_user) ||
-            ::Hr::Employee.create!(
-              user_id: current_user.id,
-              organization_id: current_user.organization_id,
-              first_name: current_user.first_name,
-              last_name: current_user.last_name,
-              email: current_user.email,
-              employee_number: "EMP-#{current_user.id.to_s[-6..]}"
-            )
+          @current_employee ||= ::Hr::Employee.for_user(current_user)
         end
       end
     end
