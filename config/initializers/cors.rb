@@ -10,8 +10,7 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
     origins(
       "localhost:5173",
       "127.0.0.1:5173",
-      "hectronix2005.github.io",
-      /\Ahttps:\/\/.*\.github\.io\z/
+      "https://hectronix2005.github.io"
     )
 
     resource "*",

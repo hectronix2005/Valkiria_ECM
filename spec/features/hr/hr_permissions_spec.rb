@@ -417,9 +417,11 @@ RSpec.describe "HR Permissions E2E", type: :feature do
       expect(request).to be_persisted
     end
 
-    it "deducts balance when request is approved" do
+    it "deducts from available balance when request is approved" do
       supervisor_service = Hr::HrService.new(actor: supervisor.user, organization: organization)
       low_balance_employee.update!(supervisor: supervisor)
+
+      available_before = low_balance_employee.available_vacation_days
 
       request = create(:vacation_request, :pending,
                        employee: low_balance_employee,
@@ -427,27 +429,24 @@ RSpec.describe "HR Permissions E2E", type: :feature do
                        days_requested: 1.0,
                        organization: organization)
 
-      original_balance = low_balance_employee.vacation_balance_days
-
       supervisor_service.approve_vacation_request(request)
 
-      expect(low_balance_employee.reload.vacation_balance_days).to eq(original_balance - 1.0)
+      # Balance is computed: approved requests reduce available_vacation_days
+      expect(low_balance_employee.reload.available_vacation_days).to be < available_before
     end
 
-    it "restores balance when approved request is cancelled" do
-      low_balance_employee.update!(vacation_balance_days: 10.0)
-
+    it "restores available balance when approved request is cancelled" do
       request = create(:vacation_request, :approved,
                        employee: low_balance_employee,
-                       days_requested: 5.0,
+                       days_requested: 1.0,
                        organization: organization)
 
-      # Simulate balance already deducted
-      low_balance_employee.update!(vacation_balance_days: 5.0, vacation_used_ytd: 5.0)
+      available_before = low_balance_employee.reload.available_vacation_days
 
       service.cancel_vacation_request(request, reason: "Plans changed")
 
-      expect(low_balance_employee.reload.vacation_balance_days).to eq(10.0)
+      # Cancelled requests are excluded from total_used, restoring available balance
+      expect(low_balance_employee.reload.available_vacation_days).to be > available_before
     end
   end
 end

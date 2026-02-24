@@ -1185,6 +1185,11 @@ export default function TemplateEdit() {
       return
     }
 
+    if (file.size > 10 * 1024 * 1024) {
+      alert('El archivo no puede superar 10MB')
+      return
+    }
+
     uploadMutation.mutate(file)
   }
 

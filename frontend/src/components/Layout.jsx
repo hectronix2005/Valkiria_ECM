@@ -104,6 +104,8 @@ export default function Layout({ children }) {
   const handleToggleEmployeeMode = () => {
     const newMode = !employeeMode
     toggleEmployeeMode()
+    // Invalidate all cached queries so data reloads with the new mode context
+    queryClient.invalidateQueries()
 
     // If switching TO employee mode from an admin/elevated page, redirect
     if (newMode) {

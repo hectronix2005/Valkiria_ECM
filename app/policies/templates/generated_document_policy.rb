@@ -29,14 +29,14 @@ module Templates
 
     class Scope < ApplicationPolicy::Scope
       def resolve
-        if user.admin_access? || hr_staff?
+        if !employee_mode? && (user.admin_access? || hr_staff?)
           # HR and Admin can see all documents in the organization
           scope.where(organization_id: user.organization_id)
         else
-          # Regular users see documents they:
-          # 1. Requested
-          # 2. Are the employee on
-          # 3. Have a signature on (pending or signed)
+          # Employee mode or regular users: only see their own documents
+          # 1. Requested by them
+          # 2. They are the employee on the document
+          # 3. They have a signature on it (pending or signed)
           employee = ::Hr::Employee.for_user(user)
           employee_id = employee&.id
 
@@ -49,6 +49,10 @@ module Templates
       end
 
       private
+
+      def employee_mode?
+        Thread.current[:employee_mode] == true
+      end
 
       def hr_staff?
         employee = ::Hr::Employee.for_user(user)

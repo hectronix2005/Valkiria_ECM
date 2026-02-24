@@ -178,7 +178,7 @@ Devise.setup do |config|
 
   # ==> Configuration for :validatable
   # Range for password length.
-  config.password_length = 6..128
+  config.password_length = 8..128
 
   # Email regex used to validate email formats. It simply asserts that
   # one (and only one) @ exists in the given string. This is mainly
@@ -316,7 +316,7 @@ Devise.setup do |config|
   config.jwt do |jwt|
     jwt.secret = Rails.application.credentials.devise_jwt_secret_key ||
                  ENV.fetch("DEVISE_JWT_SECRET_KEY", Rails.application.secret_key_base)
-    jwt.expiration_time = 24.hours.to_i
+    jwt.expiration_time = 8.hours.to_i
     jwt.dispatch_requests = [
       ["POST", %r{^/api/v1/auth/login$}]
     ]

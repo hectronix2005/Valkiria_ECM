@@ -4,6 +4,7 @@ class ApplicationController < ActionController::API
   include Pundit::Authorization
 
   before_action :set_request_context
+  after_action :set_security_headers
   after_action :log_error_response
 
   rescue_from StandardError, with: :handle_internal_error
@@ -39,6 +40,13 @@ class ApplicationController < ActionController::API
   end
 
   private
+
+  def set_security_headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+  end
 
   # Automatically log ALL non-2xx responses — catches every controller error
   # without needing to modify each controller individually

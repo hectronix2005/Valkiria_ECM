@@ -234,6 +234,7 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
     trial_period_days: '60',
     // Compensation fields
     salary: '',
+    salary_type: 'ordinario',
     food_allowance: '',
     transport_allowance: '',
     payment_frequency: 'monthly',
@@ -278,6 +279,7 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
         trial_period_days: employee.trial_period_days || '60',
         // Compensation fields
         salary: employee.salary || '',
+        salary_type: employee.salary_type || 'ordinario',
         food_allowance: employee.food_allowance || '',
         transport_allowance: employee.transport_allowance || '',
         payment_frequency: employee.payment_frequency || 'monthly',
@@ -573,6 +575,15 @@ function EmployeeEditForm({ employee, employees, contractTemplates = [], departm
                 <p className="text-xs text-gray-500 mt-1 italic">{numberToWords(formData.salary)}</p>
               )}
             </div>
+            <Select
+              label="Tipo de Salario"
+              options={[
+                { value: 'ordinario', label: 'Ordinario' },
+                { value: 'integral', label: 'Integral' },
+              ]}
+              value={formData.salary_type}
+              onChange={(e) => setFormData({ ...formData, salary_type: e.target.value })}
+            />
             <div>
               <Input
                 label="Auxilio de Alimentacion"
@@ -770,6 +781,7 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
     trial_period_days: '60',
     // Compensación
     salary: '',
+    salary_type: 'ordinario',
     food_allowance: '',
     transport_allowance: '',
     payment_frequency: 'monthly',
@@ -1143,6 +1155,15 @@ function EmployeeCreateForm({ employees = [], contractTemplates = [], department
                 <p className="text-xs text-gray-500 mt-1 italic">{numberToWords(formData.salary)}</p>
               )}
             </div>
+            <Select
+              label="Tipo de Salario"
+              options={[
+                { value: 'ordinario', label: 'Ordinario' },
+                { value: 'integral', label: 'Integral' },
+              ]}
+              value={formData.salary_type}
+              onChange={(e) => setFormData({ ...formData, salary_type: e.target.value })}
+            />
             <div>
               <Input
                 label="Auxilio de Alimentación"

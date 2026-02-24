@@ -74,6 +74,7 @@ module Api
           authorize @certification, :cancel?
 
           @certification.cancel!(actor: current_employee)
+          NotificationService.notify_document_signers(@certification, @certification.status, actor: current_employee)
 
           render json: {
             data: certification_json(@certification),
@@ -358,18 +359,6 @@ module Api
             name: employee.full_name,
             email: employee.user&.email
           }
-        end
-
-        def current_employee
-          @current_employee ||= ::Hr::Employee.for_user(current_user) ||
-            ::Hr::Employee.create!(
-              user: current_user,
-              organization: current_organization,
-              job_title: current_user.title,
-              department: current_user.department,
-              hire_date: Date.current,
-              vacation_balance_days: 15.0
-            )
         end
 
         def find_template_for_certification

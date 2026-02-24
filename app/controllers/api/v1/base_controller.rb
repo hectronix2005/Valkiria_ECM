@@ -6,8 +6,7 @@ module Api
       include Pundit::Authorization
 
       before_action :authenticate_user!
-      before_action :set_employee_mode_thread_local
-      after_action :clear_employee_mode_thread_local
+      around_action :with_employee_mode_thread_local
 
       rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
 
@@ -56,9 +55,18 @@ module Api
         current_user&.try(:is_supervisor)
       end
 
-      # Get current employee record
+      # Get current employee record, auto-creating if none exists.
+      # Centralised here so every HR controller shares the same logic.
       def current_employee
-        @current_employee ||= current_user&.employee
+        @current_employee ||= ::Hr::Employee.for_user(current_user) ||
+          ::Hr::Employee.create!(
+            user: current_user,
+            organization: current_organization,
+            job_title: current_user.title,
+            department: current_user.department,
+            hire_date: Date.current,
+            vacation_balance_days: 15.0
+          )
       end
 
       def authenticate_user!
@@ -107,12 +115,13 @@ module Api
         render json: { error: "You are not authorized to perform this action" }, status: :forbidden
       end
 
-      # Share employee_mode? with Pundit policies via thread-local
-      def set_employee_mode_thread_local
+      # Share employee_mode? with Pundit policies via thread-local.
+      # Uses around_action + ensure so the thread-local is always cleaned up,
+      # even when an unrescued exception occurs.
+      def with_employee_mode_thread_local
         Thread.current[:employee_mode] = employee_mode?
-      end
-
-      def clear_employee_mode_thread_local
+        yield
+      ensure
         Thread.current[:employee_mode] = nil
       end
     end

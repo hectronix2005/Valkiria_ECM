@@ -59,12 +59,20 @@ module Api
             auto_sign_certification_document(@approvable)
             NotificationService.certification_completed(@approvable)
           end
+          NotificationService.notify_document_signers(@approvable, @approvable.status, actor: current_employee)
 
           render json: {
             data: approvable_json(@approvable),
             message: "Request approved successfully"
           }
-        rescue StandardError => e
+        rescue ::Hr::VacationRequest::InvalidStateError,
+               ::Hr::VacationRequest::ValidationError,
+               ::Hr::VacationRequest::AuthorizationError,
+               ::Hr::EmploymentCertificationRequest::InvalidStateError,
+               ::Hr::EmploymentCertificationRequest::ValidationError,
+               ::Hr::EmploymentCertificationRequest::AuthorizationError,
+               ::Hr::Employee::InsufficientBalanceError,
+               Mongoid::Errors::Validations => e
           handle_approval_error(e)
         end
 
@@ -80,12 +88,19 @@ module Api
           when ::Hr::EmploymentCertificationRequest
             NotificationService.certification_rejected(@approvable)
           end
+          NotificationService.notify_document_signers(@approvable, @approvable.status, actor: current_employee)
 
           render json: {
             data: approvable_json(@approvable),
             message: "Request rejected"
           }
-        rescue StandardError => e
+        rescue ::Hr::VacationRequest::InvalidStateError,
+               ::Hr::VacationRequest::ValidationError,
+               ::Hr::VacationRequest::AuthorizationError,
+               ::Hr::EmploymentCertificationRequest::InvalidStateError,
+               ::Hr::EmploymentCertificationRequest::ValidationError,
+               ::Hr::EmploymentCertificationRequest::AuthorizationError,
+               Mongoid::Errors::Validations => e
           handle_approval_error(e)
         end
 
@@ -163,6 +178,8 @@ module Api
           if @approvable.is_a?(::Hr::EmploymentCertificationRequest) &&
              @approvable.processing? && generated_doc.reload.all_required_signed?
             @approvable.complete!(actor: current_employee, document_uuid: @approvable.document_uuid)
+            NotificationService.certification_completed(@approvable)
+            NotificationService.notify_document_signers(@approvable, @approvable.status, actor: current_employee)
           end
 
           @approvable.reload
@@ -171,12 +188,9 @@ module Api
             data: approvable_json(@approvable, detailed: true),
             message: "Documento firmado exitosamente como #{sig_slot['label']}"
           }
-        rescue ::Templates::GeneratedDocument::SignatureError => e
+        rescue ::Templates::GeneratedDocument::SignatureError,
+               Mongoid::Errors::Validations => e
           render json: { error: e.message }, status: :unprocessable_content
-        rescue StandardError => e
-          Rails.logger.error("Error signing approval document: #{e.message}")
-          Rails.logger.error(e.backtrace.first(5).join("\n"))
-          render json: { error: "Error al firmar: #{e.message}" }, status: :unprocessable_content
         end
 
         private
@@ -262,7 +276,10 @@ module Api
 
         def base_scope(klass)
           if current_employee.hr_staff? || current_employee.hr_manager?
-            klass.where(organization_id: current_organization.id)
+            scope = klass.where(organization_id: current_organization.id)
+            # Only admins can see (and self-approve) their own requests
+            scope = scope.where(:employee_id.ne => current_employee.id) unless current_user.admin?
+            scope
           elsif current_employee.founder?
             founder_ids = ::Hr::Employee.where(
               organization_id: current_organization.id,
@@ -405,18 +422,6 @@ module Api
             job_title: employee.job_title,
             available_vacation_days: employee.available_vacation_days
           }
-        end
-
-        def current_employee
-          @current_employee ||= ::Hr::Employee.for_user(current_user) ||
-            ::Hr::Employee.create!(
-              user: current_user,
-              organization: current_organization,
-              job_title: current_user.title,
-              department: current_user.department,
-              hire_date: Date.current,
-              vacation_balance_days: 15.0
-            )
         end
 
         # When HR approves a certification, auto-sign the document's HR signature slot.

@@ -14,7 +14,7 @@ import { renderAsync } from 'docx-preview'
 import {
   Calendar, Plus, Send, X, Eye, Filter, CalendarCheck, CalendarClock,
   CalendarDays, FileDown, FileText, PenTool, Users, CheckCircle, Clock,
-  AlertCircle, Loader2, ExternalLink, Trash2, Ban
+  AlertCircle, Loader2, ExternalLink, Trash2, Ban, Search
 } from 'lucide-react'
 
 const vacationTypes = [
@@ -1004,8 +1004,12 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [detailData, setDetailData] = useState(null)
   const [documentInfo, setDocumentInfo] = useState(null)
+  const documentInfoRef = useRef(null)
   const [signError, setSignError] = useState('')
   const queryClient = useQueryClient()
+
+  // Keep ref in sync so async callbacks always access latest documentInfo
+  useEffect(() => { documentInfoRef.current = documentInfo }, [documentInfo])
 
   const typeLabels = {
     vacation: 'Vacaciones',
@@ -1026,9 +1030,69 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
     }
   }
 
+  // Load detail and document in parallel to avoid race conditions
   useEffect(() => {
-    fetchDetail()
-  }, [vacation.id])
+    let cancelled = false
+    const loadAll = async () => {
+      setPdfLoading(true)
+      try {
+        const promises = [vacationService.get(vacation.id)]
+        if (vacation.pdf_ready && vacation.id) {
+          promises.push(vacationService.downloadDocument(vacation.id))
+        }
+        const results = await Promise.all(promises)
+        if (cancelled) return
+
+        // Set documentInfo first so it's available when DOCX rendering effect fires
+        setDetailData(results[0].data?.data)
+        setDocumentInfo(results[0].data?.document)
+
+        // Set document blob if available
+        if (results[1]) {
+          const blob = results[1].data
+          const ct = blob.type || ''
+          if (ct.includes('wordprocessingml') || ct.includes('officedocument')) {
+            setDocxBlob(blob)
+            setPdfUrl(null)
+          } else {
+            setPdfUrl(URL.createObjectURL(blob))
+            setDocxBlob(null)
+          }
+        }
+      } catch (err) {
+        console.error('Error loading vacation data:', err)
+      } finally {
+        if (!cancelled) setPdfLoading(false)
+      }
+    }
+    loadAll()
+    return () => {
+      cancelled = true
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl)
+    }
+  }, [vacation.id, vacation.pdf_ready])
+
+  // Reload document after signing
+  const reloadDocument = async () => {
+    setPdfLoading(true)
+    try {
+      const response = await vacationService.downloadDocument(vacation.id)
+      const blob = response.data
+      const ct = blob.type || ''
+      if (ct.includes('wordprocessingml') || ct.includes('officedocument')) {
+        setDocxBlob(blob)
+        if (pdfUrl) { URL.revokeObjectURL(pdfUrl); setPdfUrl(null) }
+      } else {
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl)
+        setPdfUrl(URL.createObjectURL(blob))
+        setDocxBlob(null)
+      }
+    } catch (err) {
+      console.error('Error reloading document:', err)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   // Sign mutation
   const signMutation = useMutation({
@@ -1037,12 +1101,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
       setDocumentInfo(response.data?.document)
       setSignError('')
       queryClient.invalidateQueries(['vacations'])
-      // Reload PDF to show signature
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl)
-        setPdfUrl(null)
-      }
-      loadPdf()
+      reloadDocument()
       fetchDetail()
     },
     onError: (err) => {
@@ -1055,39 +1114,25 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
     signMutation.mutate(vacation.id)
   }
 
-  // Load PDF if available
-  useEffect(() => {
-    if (vacation.pdf_ready && vacation.id) {
-      loadPdf()
-    }
-    return () => {
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl)
-    }
-  }, [vacation.id, vacation.pdf_ready])
-
-  const loadPdf = async () => {
-    setPdfLoading(true)
-    try {
-      const response = await vacationService.downloadDocument(vacation.id)
-      const blob = response.data
-      const ct = blob.type || ''
-      if (ct.includes('wordprocessingml') || ct.includes('officedocument')) {
-        setDocxBlob(blob)
-        setPdfUrl(null)
-      } else {
-        setPdfUrl(URL.createObjectURL(blob))
-        setDocxBlob(null)
-      }
-    } catch (err) {
-      console.error('Error loading document:', err)
-    } finally {
-      setPdfLoading(false)
+  // Helper to calculate DOCX overlay metrics
+  const calcDocxMetrics = () => {
+    const section = docxDetailRef.current?.querySelector('section.docx')
+    if (!section) return null
+    const container = docxDetailRef.current
+    const sectionRect = section.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
+    const pdfW = documentInfoRef.current?.pdf_width || 612
+    return {
+      offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
+      offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
+      scale: sectionRect.width / pdfW,
     }
   }
 
-  // Render DOCX with docx-preview
+  // Render DOCX with docx-preview (only re-render when blob changes)
   useEffect(() => {
     if (!docxBlob || !docxDetailRef.current) return
+    let cancelled = false
     docxDetailRef.current.innerHTML = ''
     setDocxDetailMetrics(null)
     renderAsync(docxBlob, docxDetailRef.current, null, {
@@ -1101,19 +1146,12 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
       trimXmlDeclaration: true,
       useBase64URL: true,
     }).then(() => {
-      const section = docxDetailRef.current?.querySelector('section.docx')
-      if (section) {
-        const container = docxDetailRef.current
-        const sectionRect = section.getBoundingClientRect()
-        const containerRect = container.getBoundingClientRect()
-        const offsetLeft = sectionRect.left - containerRect.left + container.scrollLeft
-        const offsetTop = sectionRect.top - containerRect.top + container.scrollTop
-        const pdfW = documentInfo?.pdf_width || 612
-        const scale = sectionRect.width / pdfW
-        setDocxDetailMetrics({ offsetLeft, offsetTop, scale })
-      }
-    }).catch(e => console.error('Error rendering DOCX:', e))
-  }, [docxBlob, documentInfo?.pdf_width])
+      if (cancelled) return
+      const metrics = calcDocxMetrics()
+      if (metrics) setDocxDetailMetrics(metrics)
+    }).catch(e => { if (!cancelled) console.error('Error rendering DOCX:', e) })
+    return () => { cancelled = true }
+  }, [docxBlob])
 
   const openPdfInNewTab = () => {
     if (pdfUrl) {
@@ -1333,6 +1371,8 @@ export default function Vacations() {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedVacation, setSelectedVacation] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelTargetId, setCancelTargetId] = useState(null)
   const [cancelReason, setCancelReason] = useState('')
@@ -1341,6 +1381,12 @@ export default function Vacations() {
   const navigate = useNavigate()
 
   const isHR = !employeeMode && user?.roles?.some(r => ['hr', 'hr_manager', 'admin'].includes(r))
+
+  // Debounce search input (400ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchInput.trim()), 400)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   // Auto-open modal if navigated with openNew state (from Dashboard quick action)
   useEffect(() => {
@@ -1352,8 +1398,11 @@ export default function Vacations() {
   }, [location.state, location.pathname, navigate])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['vacations', { status: statusFilter, employeeMode }],
-    queryFn: () => vacationService.list({ status: statusFilter || undefined }),
+    queryKey: ['vacations', { status: statusFilter, search: searchQuery, employeeMode }],
+    queryFn: () => vacationService.list({
+      status: statusFilter || undefined,
+      search: searchQuery || undefined,
+    }),
   })
 
   const submitMutation = useMutation({
@@ -1529,8 +1578,18 @@ export default function Vacations() {
       {/* Filters */}
       <Card>
         <CardContent className="py-3">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <Filter className="w-4 h-4 text-gray-400" />
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre o cédula..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-64"
+              />
+            </div>
             <Select
               options={statusFilters}
               value={statusFilter}

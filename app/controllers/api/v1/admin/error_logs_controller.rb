@@ -35,11 +35,13 @@ module Api
           end
 
           if params[:date_from].present?
-            logs = logs.where(:created_at.gte => Time.parse(params[:date_from]).beginning_of_day)
+            date_from = Time.zone.parse(params[:date_from]) rescue nil
+            logs = logs.where(:created_at.gte => date_from.beginning_of_day) if date_from
           end
 
           if params[:date_to].present?
-            logs = logs.where(:created_at.lte => Time.parse(params[:date_to]).end_of_day)
+            date_to = Time.zone.parse(params[:date_to]) rescue nil
+            logs = logs.where(:created_at.lte => date_to.end_of_day) if date_to
           end
 
           # Pagination

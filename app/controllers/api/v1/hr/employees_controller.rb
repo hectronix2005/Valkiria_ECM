@@ -222,6 +222,7 @@ module Api
             :trial_period_days,
             # Compensation fields
             :salary,
+            :salary_type,
             :food_allowance,
             :transport_allowance,
             :payment_frequency,
@@ -279,6 +280,7 @@ module Api
             :trial_period_days,
             # Compensation fields
             :salary,
+            :salary_type,
             :food_allowance,
             :transport_allowance,
             :payment_frequency,
@@ -397,6 +399,7 @@ module Api
               trial_period_days: employee.trial_period_days,
               # Compensation fields
               salary: employee.salary&.to_f,
+              salary_type: employee.salary_type,
               food_allowance: employee.food_allowance&.to_f,
               transport_allowance: employee.transport_allowance&.to_f,
               payment_frequency: employee.payment_frequency,

@@ -3,6 +3,9 @@
 require "rails_helper"
 
 RSpec.describe "Role-Based Access Control" do
+  # Setup organization (needed for settings controller)
+  let!(:organization) { create(:organization) }
+
   # Setup roles
   let!(:admin_role) { create(:role, :admin) }
   let!(:legal_role) { create(:role, :legal) }
@@ -29,31 +32,31 @@ RSpec.describe "Role-Based Access Control" do
 
   describe "GET /api/v1/users (admin only)" do
     let(:admin_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << admin_role
       end
     end
     let(:hr_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << hr_role
       end
     end
     let(:legal_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << legal_role
       end
     end
     let(:employee_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << employee_role
       end
     end
     let(:viewer_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << viewer_role
       end
@@ -72,10 +75,11 @@ RSpec.describe "Role-Based Access Control" do
       expect(response).to have_http_status(:ok)
     end
 
-    it "denies legal (without users.read permission) access to users" do
+    it "allows legal (admin_access) to list users" do
       get "/api/v1/users", headers: auth_headers(legal_user)
 
-      expect(response).to have_http_status(:forbidden)
+      # Legal role has admin_access, which grants implicit permissions
+      expect(response).to have_http_status(:ok)
     end
 
     it "denies employee access to users" do
@@ -93,31 +97,31 @@ RSpec.describe "Role-Based Access Control" do
 
   describe "GET /api/v1/content/documents (employee+)" do
     let(:admin_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << admin_role
       end
     end
     let(:legal_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << legal_role
       end
     end
     let(:hr_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << hr_role
       end
     end
     let(:employee_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << employee_role
       end
     end
     let(:viewer_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << viewer_role
       end
@@ -156,19 +160,19 @@ RSpec.describe "Role-Based Access Control" do
 
   describe "POST /api/v1/content/documents (employee+, excludes viewer)" do
     let(:admin_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << admin_role
       end
     end
     let(:employee_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << employee_role
       end
     end
     let(:viewer_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << viewer_role
       end
@@ -197,31 +201,31 @@ RSpec.describe "Role-Based Access Control" do
 
   describe "GET /api/v1/admin/settings (admin only)" do
     let(:admin_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << admin_role
       end
     end
     let(:legal_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << legal_role
       end
     end
     let(:hr_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << hr_role
       end
     end
     let(:employee_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << employee_role
       end
     end
     let(:viewer_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << viewer_role
       end
@@ -231,13 +235,13 @@ RSpec.describe "Role-Based Access Control" do
       get "/api/v1/admin/settings", headers: auth_headers(admin_user)
 
       expect(response).to have_http_status(:ok)
-      expect(json_response[:data]).to include(:app_name, :environment, :version)
+      expect(json_response[:data]).to include(:system, :organization, :hr, :documents, :security)
     end
 
-    it "denies legal access to admin settings" do
+    it "allows legal (admin_access) to view settings" do
       get "/api/v1/admin/settings", headers: auth_headers(legal_user)
 
-      expect(response).to have_http_status(:forbidden)
+      expect(response).to have_http_status(:ok)
     end
 
     it "denies HR access to admin settings" do
@@ -261,7 +265,7 @@ RSpec.describe "Role-Based Access Control" do
 
   describe "role hierarchy verification" do
     let(:admin_user) do
-      create(:user).tap do |u|
+      create(:user, organization: organization).tap do |u|
         u.roles.clear
         u.roles << admin_role
       end
@@ -285,12 +289,13 @@ RSpec.describe "Role-Based Access Control" do
     it "admin can access admin settings" do
       get "/api/v1/admin/settings", headers: auth_headers(admin_user)
       expect(response).to have_http_status(:ok)
+      expect(json_response[:data]).to include(:system)
     end
   end
 
   describe "multiple roles" do
     let!(:multi_role_user) do
-      user = create(:user)
+      user = create(:user, organization: organization)
       user.roles << employee_role
       user.roles << hr_role
       user

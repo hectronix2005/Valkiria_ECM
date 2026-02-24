@@ -27,8 +27,9 @@ RSpec.describe "Access Denied" do
   end
 
   describe "unauthorized access (wrong role)" do
+    let!(:organization) { create(:organization) }
     let!(:viewer_role) { create(:role, :viewer) }
-    let!(:viewer_user) { create(:user).tap { |u| u.roles << viewer_role } }
+    let!(:viewer_user) { create(:user, organization: organization).tap { |u| u.roles << viewer_role } }
 
     before do
       # Give viewer only documents.read permission
@@ -58,8 +59,9 @@ RSpec.describe "Access Denied" do
   end
 
   describe "employee access restrictions" do
+    let!(:organization) { create(:organization) }
     let!(:employee_role) { create(:role, :employee) }
-    let!(:employee_user) { create(:user).tap { |u| u.roles << employee_role } }
+    let!(:employee_user) { create(:user, organization: organization).tap { |u| u.roles << employee_role } }
 
     before do
       # Give employee documents.read and documents.create permissions

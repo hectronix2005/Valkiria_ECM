@@ -71,10 +71,15 @@ module Hr
 
     # Compensation fields
     field :salary, type: BigDecimal  # Monthly salary
+    field :salary_type, type: String, default: "ordinario"  # ordinario, integral
     field :food_allowance, type: BigDecimal, default: 0  # Auxilio de alimentacion
     field :transport_allowance, type: BigDecimal, default: 0  # Auxilio de transporte
     field :payment_frequency, type: String, default: "monthly"  # weekly, biweekly, monthly
     field :work_city, type: String  # Ciudad donde labora
+
+    SALARY_TYPE_ORDINARIO = "ordinario"
+    SALARY_TYPE_INTEGRAL = "integral"
+    SALARY_TYPES = [SALARY_TYPE_ORDINARIO, SALARY_TYPE_INTEGRAL].freeze
 
     # Personal identification
     field :identification_type, type: String, default: "CC"  # CC, CE, PA, etc.

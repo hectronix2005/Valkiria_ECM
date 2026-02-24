@@ -50,9 +50,11 @@ RSpec.describe Hr::HrService, type: :service do
       end
 
       it "allows specifying vacation type" do
+        # Use next Monday to ensure it's a weekday (business_days > 0)
+        monday = Date.current.beginning_of_week + 1.week
         request = service.create_vacation_request(
-          start_date: 1.week.from_now.to_date,
-          end_date: 1.week.from_now.to_date,
+          start_date: monday,
+          end_date: monday,
           vacation_type: Hr::VacationRequest::TYPE_SICK
         )
 
@@ -102,8 +104,10 @@ RSpec.describe Hr::HrService, type: :service do
 
     describe "#my_vacation_requests" do
       it "returns current employee's requests" do
-        request1 = create(:vacation_request, employee: employee, organization: organization)
-        request2 = create(:vacation_request, employee: employee, organization: organization)
+        request1 = create(:vacation_request, employee: employee, organization: organization,
+                          start_date: 1.week.from_now.to_date, end_date: 1.week.from_now.to_date + 4.days)
+        request2 = create(:vacation_request, employee: employee, organization: organization,
+                          start_date: 3.weeks.from_now.to_date, end_date: 3.weeks.from_now.to_date + 4.days)
         other_request = create(:vacation_request, organization: organization)
 
         results = service.my_vacation_requests

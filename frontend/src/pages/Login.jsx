@@ -5,8 +5,8 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { FileText, AlertCircle, Users, Eye, EyeOff, Clock, Star, TrendingUp, Shield, UserCheck, Briefcase } from 'lucide-react'
 
-// Todas las credenciales del sistema organizadas por categoría
-const ALL_USERS = [
+// Test credentials — only included in development builds (tree-shaken in production)
+const ALL_USERS = import.meta.env.DEV ? [
   // Administradores
   {
     email: 'admin@valkyria.com',
@@ -122,7 +122,7 @@ const ALL_USERS = [
     description: 'Visitante Externo - Solo lectura',
     category: 'viewer'
   },
-]
+] : []
 
 const STORAGE_KEY = 'valkyria_login_history'
 
@@ -314,7 +314,7 @@ export default function Login() {
     }
   }
 
-  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  const isDev = import.meta.env.DEV
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center p-4">

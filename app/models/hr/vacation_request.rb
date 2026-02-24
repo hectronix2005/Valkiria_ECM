@@ -360,6 +360,9 @@ module Hr
       # Must be in same organization
       return false unless actor.organization_id == organization_id
 
+      # No self-approval unless actor is admin
+      return false if actor.id == employee.id && !actor.user&.admin?
+
       # Founders can only be approved by another founder
       if employee.founder?
         return actor.founder? && actor.id != employee.id

@@ -72,10 +72,12 @@ FactoryBot.define do
 
     trait :low_balance do
       vacation_balance_days { 2.0 }
+      hire_date { 45.days.ago.to_date } # ~1.85 accrued days (45/365.25*15)
     end
 
     trait :no_balance do
       vacation_balance_days { 0.0 }
+      hire_date { Date.current } # 0 accrued days
     end
 
     trait :high_balance do

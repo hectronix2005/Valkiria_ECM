@@ -17,7 +17,7 @@ Rails.application.configure do
 
   # Ensures that a master key has been made available in ENV["RAILS_MASTER_KEY"], config/master.key, or an environment
   # key such as config/credentials/production.key. This key is used to decrypt credentials (and other encrypted files).
-  # config.require_master_key = true
+  config.require_master_key = true
 
   # Disable serving static files from `public/`, relying on NGINX/Apache to do so instead.
   # config.public_file_server.enabled = false
@@ -80,10 +80,11 @@ Rails.application.configure do
   config.active_support.report_deprecations = false
 
   # Enable DNS rebinding protection and other `Host` header attacks.
-  # config.hosts = [
-  #   "example.com",     # Allow requests from example.com
-  #   /.*\.example\.com/ # Allow requests from subdomains like `www.example.com`
-  # ]
-  # Skip DNS rebinding protection for the default health check endpoint.
-  # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+  config.hosts = [
+    ENV["APP_HOST"],                # e.g. "api.valkyria-ecm.com"
+    /.*\.github\.io/,              # GitHub Pages frontend
+    "localhost"
+  ].compact
+  # Skip DNS rebinding protection for health checks
+  config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
 end

@@ -12,10 +12,9 @@ RSpec.describe Hr::Employee, type: :model do
       expect(employee).to be_valid
     end
 
-    it "requires user" do
+    it "allows employee without user (optional association)" do
       employee = build(:hr_employee, user: nil, organization: organization)
-      expect(employee).not_to be_valid
-      expect(employee.errors[:user]).to include("can't be blank")
+      expect(employee).to be_valid
     end
 
     it "requires organization" do

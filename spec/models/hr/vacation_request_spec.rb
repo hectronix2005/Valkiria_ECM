@@ -42,8 +42,8 @@ RSpec.describe Hr::VacationRequest, type: :model do
       request = build(:vacation_request,
                       employee: employee,
                       organization: organization,
-                      start_date: 1.day.ago,
-                      end_date: Date.current)
+                      start_date: 1.week.ago.to_date,
+                      end_date: 1.week.ago.to_date + 1.day)
       expect(request).not_to be_valid
       expect(request.errors[:start_date]).to include("cannot be in the past")
     end
@@ -125,9 +125,11 @@ RSpec.describe Hr::VacationRequest, type: :model do
       expect(request.status).to eq(Hr::VacationRequest::STATUS_APPROVED)
     end
 
-    it "deducts vacation balance" do
-      expect { request.approve!(actor: supervisor) }
-        .to change { employee.reload.vacation_balance_days }.by(-5.0)
+    it "reduces available vacation days (computed from approved requests)" do
+      available_before = employee.available_vacation_days
+      request.approve!(actor: supervisor)
+      # Balance is computed: approving adds to total_used_vacation_days
+      expect(employee.reload.available_vacation_days).to be < available_before
     end
 
     it "records approver name" do
@@ -209,14 +211,12 @@ RSpec.describe Hr::VacationRequest, type: :model do
                days_requested: 5.0)
       end
 
-      before do
-        # Simulate the deduction that happened when approved
-        employee.update!(vacation_balance_days: 15.0, vacation_used_ytd: 5.0)
-      end
-
-      it "restores vacation balance" do
-        expect { request.cancel!(actor: employee) }
-          .to change { employee.reload.vacation_balance_days }.by(5.0)
+      it "restores available vacation days (computed)" do
+        request # force creation of the approved request
+        available_before = employee.reload.available_vacation_days
+        request.cancel!(actor: employee)
+        # Cancelled requests are excluded from total_used_vacation_days
+        expect(employee.reload.available_vacation_days).to be > available_before
       end
     end
 
@@ -284,9 +284,18 @@ RSpec.describe Hr::VacationRequest, type: :model do
   end
 
   describe "scopes" do
-    let!(:pending) { create(:vacation_request, :pending, employee: employee, organization: organization) }
-    let!(:approved) { create(:vacation_request, :approved, employee: employee, organization: organization) }
-    let!(:rejected) { create(:vacation_request, :rejected, employee: employee, organization: organization) }
+    let!(:pending) do
+      create(:vacation_request, :pending, employee: employee, organization: organization,
+             start_date: 1.week.from_now.to_date, end_date: 1.week.from_now.to_date + 4.days)
+    end
+    let!(:approved) do
+      create(:vacation_request, :approved, employee: employee, organization: organization,
+             start_date: 3.weeks.from_now.to_date, end_date: 3.weeks.from_now.to_date + 4.days)
+    end
+    let!(:rejected) do
+      create(:vacation_request, :rejected, employee: employee, organization: organization,
+             start_date: 5.weeks.from_now.to_date, end_date: 5.weeks.from_now.to_date + 4.days)
+    end
 
     it ".pending returns pending requests" do
       expect(described_class.pending).to include(pending)

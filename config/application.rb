@@ -50,15 +50,6 @@ module ValkyriaEcm
       Rails.root.join("lib/ecm")
     ]
 
-    # CORS configuration (for API)
-    config.middleware.insert_before 0, Rack::Cors do
-      allow do
-        origins "*"
-        resource "*",
-          headers: :any,
-          methods: [:get, :post, :put, :patch, :delete, :options, :head],
-          expose: ["Authorization"]
-      end
-    end
+    # CORS configuration is handled in config/initializers/cors.rb
   end
 end

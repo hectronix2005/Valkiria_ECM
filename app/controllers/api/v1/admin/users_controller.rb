@@ -40,9 +40,10 @@ module Api
             users = params[:status] == 'active' ? users.enabled : users.disabled
           end
 
-          # Sorting
-          sort_by = params[:sort_by] || 'created_at'
-          sort_dir = params[:sort_direction] == 'asc' ? 1 : -1
+          # Sorting (whitelist allowed columns to prevent injection)
+          allowed_sorts = %w[created_at email first_name last_name].freeze
+          sort_by = allowed_sorts.include?(params[:sort_by]) ? params[:sort_by] : "created_at"
+          sort_dir = params[:sort_direction] == "asc" ? 1 : -1
           users = users.order(sort_by => sort_dir)
 
           # Pagination

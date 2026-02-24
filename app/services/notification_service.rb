@@ -124,7 +124,73 @@ class NotificationService
       )
     end
 
+    # Notify all users who signed a document when the associated request changes status
+    def notify_document_signers(request, new_status, actor:) # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
+      document_uuid = request.document_uuid
+      return unless document_uuid.present?
+
+      doc = ::Templates::GeneratedDocument.where(uuid: document_uuid).first
+      return unless doc
+
+      signed_entries = (doc.signatures || []).select { |s| s["status"] == "signed" && s["user_id"].present? }
+      return if signed_entries.empty?
+
+      signer_user_ids = signed_entries.map { |s| s["user_id"] }.uniq
+      signer_users = ::Identity::User.where(:id.in => signer_user_ids)
+
+      # Determine request type info for notification text
+      case request
+      when ::Hr::VacationRequest
+        category = "vacation"
+        request_label = "vacaciones #{request.request_number}"
+        link = "/hr/my-requests/vacations?id=#{request.uuid}"
+      when ::Hr::EmploymentCertificationRequest
+        type_label = certification_type_label(request.certification_type)
+        category = "certification"
+        request_label = "#{type_label.downcase} #{request.request_number}"
+        link = "/hr/my-requests/certifications?id=#{request.uuid}"
+      else
+        return
+      end
+
+      status_label = status_label_for(new_status)
+
+      actor_user_id = (actor&.user_id || actor&.user&.id)&.to_s
+
+      signer_users.each do |signer_user|
+        # Don't notify the actor who triggered the change
+        next if signer_user.id.to_s == actor_user_id
+
+        create_notification(
+          recipient: signer_user,
+          organization: request.organization,
+          category: category,
+          action: "document_signer_#{new_status}",
+          title: "Documento firmado: solicitud #{status_label}",
+          body: "La solicitud de #{request_label} que firmaste cambió a #{status_label}",
+          actor_name: actor&.full_name,
+          source_type: request.class.name,
+          source_uuid: request.uuid,
+          link: link
+        )
+      end
+    end
+
     private
+
+    STATUS_LABELS = {
+      "pending" => "solicitada",
+      "approved" => "aprobada",
+      "rejected" => "rechazada",
+      "cancelled" => "cancelada",
+      "enjoyed" => "disfrutada",
+      "processing" => "en proceso",
+      "completed" => "completada"
+    }.freeze
+
+    def status_label_for(status)
+      STATUS_LABELS[status] || status
+    end
 
     CERTIFICATION_TYPE_LABELS = {
       "employment" => "Certificaci\u00F3n Laboral",

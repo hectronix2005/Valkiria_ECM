@@ -96,13 +96,10 @@ module Api
             errors: @vacation.errors.full_messages,
             details: @vacation.errors.messages
           }, status: :unprocessable_content
-        rescue StandardError => e
-          Rails.logger.error("Vacation create unexpected error for user #{current_user&.id}: #{e.class} - #{e.message}")
-          Rails.logger.error(e.backtrace.first(10).join("\n"))
-          render json: {
-            error: "Error inesperado al crear la solicitud: #{e.message}",
-            error_type: e.class.name
-          }, status: :internal_server_error
+        rescue ::Hr::VacationRequest::InvalidStateError,
+               ::Hr::VacationRequest::ValidationError,
+               ::Hr::Employee::InsufficientBalanceError => e
+          render json: { error: e.message }, status: :unprocessable_content
         end
 
         # PATCH /api/v1/hr/vacations/:id
@@ -138,6 +135,7 @@ module Api
 
           @vacation.submit!(actor: current_employee)
           NotificationService.vacation_submitted(@vacation)
+          NotificationService.notify_document_signers(@vacation, @vacation.status, actor: current_employee)
 
           render json: {
             data: vacation_json(@vacation, detailed: true),
@@ -193,7 +191,8 @@ module Api
             document: document_info,
             message: "Documento firmado exitosamente"
           }
-        rescue StandardError => e
+        rescue ::Templates::GeneratedDocument::SignatureError,
+               Mongoid::Errors::Validations => e
           Rails.logger.error("Error signing vacation document: #{e.message}")
           render json: { error: "Error al firmar: #{e.message}" }, status: :unprocessable_content
         end
@@ -203,6 +202,7 @@ module Api
           authorize @vacation, :cancel?
 
           @vacation.cancel!(actor: current_employee, reason: params[:reason])
+          NotificationService.notify_document_signers(@vacation, @vacation.status, actor: current_employee)
 
           render json: {
             data: vacation_json(@vacation),
@@ -267,7 +267,10 @@ module Api
             document: generated_document_json(generated_doc),
             message: "Documento generado exitosamente"
           }
-        rescue StandardError => e
+        rescue ::Templates::RobustDocumentGeneratorService::GenerationError,
+               ::Templates::RobustDocumentGeneratorService::MissingVariablesError,
+               ::Templates::DocumentGeneratorService::GenerationError,
+               Mongoid::Errors::Validations => e
           Rails.logger.error("Error generating vacation document: #{e.message}")
           render json: { error: "Error al generar documento: #{e.message}" }, status: :unprocessable_content
         end
@@ -324,11 +327,22 @@ module Api
           )
         end
 
-        def apply_filters(scope) # rubocop:disable Metrics/AbcSize
+        def apply_filters(scope) # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
           scope = scope.where(status: params[:status]) if params[:status].present?
           scope = scope.where(vacation_type: params[:type]) if params[:type].present?
           scope = scope.where(:start_date.gte => params[:from]) if params[:from].present?
           scope = scope.where(:end_date.lte => params[:to]) if params[:to].present?
+
+          if params[:search].present?
+            term = params[:search].strip
+            employee_ids = ::Hr::Employee.where(organization: current_organization).any_of(
+              { first_name: /#{Regexp.escape(term)}/i },
+              { last_name: /#{Regexp.escape(term)}/i },
+              { identification_number: /#{Regexp.escape(term)}/i }
+            ).pluck(:id)
+            scope = scope.in(employee_id: employee_ids)
+          end
+
           scope
         end
 
@@ -405,18 +419,6 @@ module Api
             .where(:status.nin => %w[cancelled rejected])
             .pluck(:start_date, :end_date, :request_number)
             .map { |s, e, rn| { start_date: s&.iso8601, end_date: e&.iso8601, request_number: rn } }
-        end
-
-        def current_employee
-          @current_employee ||= ::Hr::Employee.for_user(current_user) ||
-            ::Hr::Employee.create!(
-              user: current_user,
-              organization: current_organization,
-              job_title: current_user.title,
-              department: current_user.department,
-              hire_date: Date.current,
-              vacation_balance_days: 15.0
-            )
         end
 
         # Save with retry on duplicate request_number (race condition with unique index)
