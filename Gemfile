@@ -24,7 +24,7 @@ gem "sidekiq", "~> 7.3"
 
 # API & Serialization
 gem "jsonapi-serializer", "~> 2.2"
-gem "rack-cors", "~> 2.0"
+gem "rack-cors", "~> 3.0"
 
 # API Documentation
 gem "rswag-api", "~> 2.14"
