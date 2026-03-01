@@ -10,7 +10,8 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3000',
+        // See ~/.claude/PORT_REGISTRY.md — VALKYRIA_ECM backend = 3100
+        target: 'http://127.0.0.1:3100',
         changeOrigin: true,
       },
     },

@@ -319,7 +319,7 @@ function SignatureSection() {
   const createMutation = useMutation({
     mutationFn: (data) => signatureService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['signatures'])
+      queryClient.invalidateQueries({ queryKey: ['signatures'] })
       handleCloseModal()
     },
     onError: (err) => {
@@ -330,7 +330,7 @@ function SignatureSection() {
   const deleteMutation = useMutation({
     mutationFn: (id) => signatureService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['signatures'])
+      queryClient.invalidateQueries({ queryKey: ['signatures'] })
     },
     onError: (err) => {
       const data = err.response?.data
@@ -345,7 +345,7 @@ function SignatureSection() {
   const toggleActiveMutation = useMutation({
     mutationFn: (id) => signatureService.toggleActive(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['signatures'])
+      queryClient.invalidateQueries({ queryKey: ['signatures'] })
     },
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al cambiar estado de la firma')
@@ -355,7 +355,7 @@ function SignatureSection() {
   const setDefaultMutation = useMutation({
     mutationFn: (id) => signatureService.setDefault(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['signatures'])
+      queryClient.invalidateQueries({ queryKey: ['signatures'] })
     }
   })
 

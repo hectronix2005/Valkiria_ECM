@@ -94,7 +94,7 @@ function VariableFormModal({ mapping, isOpen, onClose, onSuccess }) {
       ? variableMappingService.update(mapping.id, data)
       : variableMappingService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings-legal'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings-legal'] })
       onSuccess?.()
       onClose()
     },
@@ -189,14 +189,14 @@ function LegalVariablesPanel({ isOpen, onClose }) {
   const toggleMutation = useMutation({
     mutationFn: (id) => variableMappingService.toggle(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings-legal'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings-legal'] })
     }
   })
 
   const seedMutation = useMutation({
     mutationFn: () => variableMappingService.seedSystem(),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings-legal'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings-legal'] })
     }
   })
 
@@ -1798,7 +1798,7 @@ export default function Contracts() {
         try {
           await contractService.generateDocument(contract.id, data.template_id)
         } catch (genError) {
-          console.warn('Auto-generate failed:', genError)
+          // Silent fail - document can be generated later
           // Don't fail the whole operation, document can be generated later
         }
       }
@@ -1806,7 +1806,7 @@ export default function Contracts() {
       return createResponse
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['contracts'])
+      queryClient.invalidateQueries({ queryKey: ['contracts'] })
       handleCloseCreateModal()
     },
     onError: (error) => {
@@ -1818,14 +1818,14 @@ export default function Contracts() {
   const submitMutation = useMutation({
     mutationFn: (id) => contractService.submit(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contracts'])
+      queryClient.invalidateQueries({ queryKey: ['contracts'] })
     },
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => contractService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contracts'])
+      queryClient.invalidateQueries({ queryKey: ['contracts'] })
       alert('Contrato eliminado correctamente')
     },
     onError: (error) => {
@@ -1836,7 +1836,7 @@ export default function Contracts() {
   const archiveMutation = useMutation({
     mutationFn: (id) => contractService.archive(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contracts'])
+      queryClient.invalidateQueries({ queryKey: ['contracts'] })
     },
     onError: (error) => {
       alert(error.response?.data?.error || 'Error al archivar contrato')
@@ -1846,7 +1846,7 @@ export default function Contracts() {
   const unarchiveMutation = useMutation({
     mutationFn: (id) => contractService.unarchive(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contracts'])
+      queryClient.invalidateQueries({ queryKey: ['contracts'] })
     },
     onError: (error) => {
       alert(error.response?.data?.error || 'Error al restaurar contrato')
@@ -1856,7 +1856,7 @@ export default function Contracts() {
   const generateMutation = useMutation({
     mutationFn: ({ contractId, templateId }) => contractService.generateDocument(contractId, templateId),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contracts'])
+      queryClient.invalidateQueries({ queryKey: ['contracts'] })
       setShowGenerateModal(false)
       setSelectedContract(null)
       setGenerateTemplateId('')
@@ -1869,7 +1869,7 @@ export default function Contracts() {
   const updateThirdPartyMutation = useMutation({
     mutationFn: ({ id, data }) => thirdPartyService.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-parties-active'])
+      queryClient.invalidateQueries({ queryKey: ['third-parties-active'] })
       setEditingThirdParty(null)
       setMissingFields([])
       setThirdPartyVersion(v => v + 1)
@@ -1882,7 +1882,7 @@ export default function Contracts() {
   const createThirdPartyMutation = useMutation({
     mutationFn: (data) => thirdPartyService.create(data),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['third-parties-active'])
+      queryClient.invalidateQueries({ queryKey: ['third-parties-active'] })
       return response.data?.data // Return the created third party
     },
     onError: (error) => {

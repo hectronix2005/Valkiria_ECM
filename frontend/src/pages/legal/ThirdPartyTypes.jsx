@@ -259,7 +259,7 @@ export default function ThirdPartyTypes() {
   const createMutation = useMutation({
     mutationFn: (data) => thirdPartyTypeService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-party-types'])
+      queryClient.invalidateQueries({ queryKey: ['third-party-types'] })
       setShowModal(false)
     },
   })
@@ -267,7 +267,7 @@ export default function ThirdPartyTypes() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => thirdPartyTypeService.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-party-types'])
+      queryClient.invalidateQueries({ queryKey: ['third-party-types'] })
       setShowModal(false)
       setEditingType(null)
     },
@@ -276,14 +276,14 @@ export default function ThirdPartyTypes() {
   const deleteMutation = useMutation({
     mutationFn: (id) => thirdPartyTypeService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-party-types'])
+      queryClient.invalidateQueries({ queryKey: ['third-party-types'] })
     },
   })
 
   const toggleMutation = useMutation({
     mutationFn: (id) => thirdPartyTypeService.toggleActive(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-party-types'])
+      queryClient.invalidateQueries({ queryKey: ['third-party-types'] })
     },
   })
 

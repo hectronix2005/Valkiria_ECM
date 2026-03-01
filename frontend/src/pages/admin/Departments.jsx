@@ -27,7 +27,7 @@ export default function Departments() {
   const createMutation = useMutation({
     mutationFn: (name) => departmentService.create({ name }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['departments'])
+      queryClient.invalidateQueries({ queryKey: ['departments'] })
       setShowCreateModal(false)
       setNewDepartmentName('')
       setCreateError('')
@@ -40,7 +40,7 @@ export default function Departments() {
   const updateMutation = useMutation({
     mutationFn: ({ id, name }) => departmentService.update(id, { name }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['departments'])
+      queryClient.invalidateQueries({ queryKey: ['departments'] })
       setEditingDepartment(null)
     },
     onError: (error) => {
@@ -51,7 +51,7 @@ export default function Departments() {
   const deleteMutation = useMutation({
     mutationFn: (id) => departmentService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['departments'])
+      queryClient.invalidateQueries({ queryKey: ['departments'] })
     },
     onError: (error) => {
       alert(error.response?.data?.error || 'Error al eliminar departamento')

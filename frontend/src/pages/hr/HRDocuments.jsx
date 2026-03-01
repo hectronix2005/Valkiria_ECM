@@ -149,7 +149,7 @@ function MappingFormModal({ mapping, isOpen, onClose, onSuccess }) {
   const createMutation = useMutation({
     mutationFn: (data) => variableMappingService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
       onSuccess?.()
       onClose()
     },
@@ -161,7 +161,7 @@ function MappingFormModal({ mapping, isOpen, onClose, onSuccess }) {
   const updateMutation = useMutation({
     mutationFn: (data) => variableMappingService.update(mapping.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
       onSuccess?.()
       onClose()
     },
@@ -290,17 +290,17 @@ function VariablesPanel({ isOpen, onClose }) {
 
   const toggleMutation = useMutation({
     mutationFn: (id) => variableMappingService.toggleActive(id),
-    onSuccess: () => queryClient.invalidateQueries(['variable-mappings'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => variableMappingService.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['variable-mappings'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
   })
 
   const seedMutation = useMutation({
     mutationFn: () => variableMappingService.seedSystem(),
-    onSuccess: () => queryClient.invalidateQueries(['variable-mappings'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
   })
 
   const handleEdit = (mapping) => {
@@ -527,7 +527,7 @@ export default function HRDocuments() {
   const deleteMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hr-documents'])
+      queryClient.invalidateQueries({ queryKey: ['hr-documents'] })
       setShowDeleteConfirm(false)
       setDocumentToDelete(null)
       setShowDetailModal(false)
@@ -541,7 +541,7 @@ export default function HRDocuments() {
   const signMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.sign(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hr-documents'])
+      queryClient.invalidateQueries({ queryKey: ['hr-documents'] })
       if (selectedDocument) {
         generatedDocumentService.get(selectedDocument.id).then(res => {
           setSelectedDocument(res.data.data)

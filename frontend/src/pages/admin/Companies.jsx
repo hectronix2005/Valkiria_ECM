@@ -30,7 +30,7 @@ function CompanyModal({ company, isOpen, onClose }) {
   const createMutation = useMutation({
     mutationFn: (data) => companyService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['companies'])
+      queryClient.invalidateQueries({ queryKey: ['companies'] })
       onClose()
     },
     onError: (err) => {
@@ -41,7 +41,7 @@ function CompanyModal({ company, isOpen, onClose }) {
   const updateMutation = useMutation({
     mutationFn: (data) => companyService.update(company.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['companies'])
+      queryClient.invalidateQueries({ queryKey: ['companies'] })
       onClose()
     },
     onError: (err) => {
@@ -133,7 +133,7 @@ export default function Companies() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => companyService.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['companies']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companies'] }),
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al eliminar')
     }
@@ -141,7 +141,7 @@ export default function Companies() {
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }) => companyService.update(id, { active }),
-    onSuccess: () => queryClient.invalidateQueries(['companies'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companies'] })
   })
 
   const handleEdit = (company) => {

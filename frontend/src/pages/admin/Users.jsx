@@ -553,8 +553,8 @@ export default function AdminUsers() {
   const createMutation = useMutation({
     mutationFn: (data) => userService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['admin-users'])
-      queryClient.invalidateQueries(['admin-users-stats'])
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-users-stats'] })
       setShowCreateModal(false)
       resetForm()
     },
@@ -566,7 +566,7 @@ export default function AdminUsers() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => userService.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['admin-users'])
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       setEditingUser(null)
       resetForm()
     },
@@ -578,8 +578,8 @@ export default function AdminUsers() {
   const toggleActiveMutation = useMutation({
     mutationFn: (id) => userService.toggleActive(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['admin-users'])
-      queryClient.invalidateQueries(['admin-users-stats'])
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-users-stats'] })
     },
     onError: (error) => {
       alert(error.response?.data?.error || 'Error al cambiar estado')
@@ -589,7 +589,7 @@ export default function AdminUsers() {
   const assignRolesMutation = useMutation({
     mutationFn: ({ id, roleNames }) => userService.assignRoles(id, roleNames),
     onSuccess: () => {
-      queryClient.invalidateQueries(['admin-users'])
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       setShowRolesModal(null)
     },
     onError: (error) => {
@@ -600,8 +600,8 @@ export default function AdminUsers() {
   const deleteMutation = useMutation({
     mutationFn: (id) => userService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['admin-users'])
-      queryClient.invalidateQueries(['admin-users-stats'])
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-users-stats'] })
     },
     onError: (error) => {
       alert(error.response?.data?.error || 'Error al eliminar usuario')
@@ -676,8 +676,6 @@ export default function AdminUsers() {
   }
 
   const handleSavePermissions = () => {
-    // Here you would save to backend
-    console.log('Saving permissions:', systemPermissions)
     setShowPermissionsModal(false)
     alert('Permisos guardados correctamente')
   }

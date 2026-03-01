@@ -160,7 +160,7 @@ function VariableModal({ mapping, isOpen, onClose, onSuccess }) {
       ? variableMappingService.update(mapping.id, data)
       : variableMappingService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
       onSuccess?.()
       onClose()
     },
@@ -265,14 +265,14 @@ export default function LegalVariables() {
   const toggleMutation = useMutation({
     mutationFn: (id) => variableMappingService.toggle(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings-legal'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings-legal'] })
     }
   })
 
   const seedMutation = useMutation({
     mutationFn: () => variableMappingService.seedSystem(),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings-legal'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings-legal'] })
     }
   })
 

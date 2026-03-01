@@ -252,7 +252,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
   const signMutation = useMutation({
     mutationFn: (id) => approvalService.signDocument(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['approvals'])
+      queryClient.invalidateQueries({ queryKey: ['approvals'] })
       setSignError('')
       if (pdfUrl) { URL.revokeObjectURL(pdfUrl); setPdfUrl(null) }
       setDocxBlob(null)
@@ -590,7 +590,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
   const signMutation = useMutation({
     mutationFn: (id) => approvalService.signDocument(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['approvals'])
+      queryClient.invalidateQueries({ queryKey: ['approvals'] })
       setSignError('')
       if (pdfUrl) { URL.revokeObjectURL(pdfUrl); setPdfUrl(null) }
       setDocxBlob(null)
@@ -883,8 +883,8 @@ export default function Approvals() {
   const approveMutation = useMutation({
     mutationFn: ({ id }) => approvalService.approve(id, {}),
     onSuccess: () => {
-      queryClient.invalidateQueries(['approvals'])
-      queryClient.invalidateQueries(['approvals-count'])
+      queryClient.invalidateQueries({ queryKey: ['approvals'] })
+      queryClient.invalidateQueries({ queryKey: ['approvals-count'] })
       setShowDetailModal(false)
     },
     onError: (err) => {
@@ -895,8 +895,8 @@ export default function Approvals() {
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }) => approvalService.reject(id, reason),
     onSuccess: () => {
-      queryClient.invalidateQueries(['approvals'])
-      queryClient.invalidateQueries(['approvals-count'])
+      queryClient.invalidateQueries({ queryKey: ['approvals'] })
+      queryClient.invalidateQueries({ queryKey: ['approvals-count'] })
       setShowRejectModal(false)
       setRejectReason('')
     },
@@ -910,7 +910,7 @@ export default function Approvals() {
   const signMutation = useMutation({
     mutationFn: (id) => approvalService.signDocument(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['approvals'])
+      queryClient.invalidateQueries({ queryKey: ['approvals'] })
       setSigningId(null)
     },
     onError: (err) => {
@@ -922,8 +922,8 @@ export default function Approvals() {
   const generateDocMutation = useMutation({
     mutationFn: (id) => certificationService.generateDocument(id),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['approvals'])
-      queryClient.invalidateQueries(['approval-detail'])
+      queryClient.invalidateQueries({ queryKey: ['approvals'] })
+      queryClient.invalidateQueries({ queryKey: ['approval-detail'] })
       if (response.data?.data?.certification) {
         setSelectedRequest(prev => ({
           ...prev,

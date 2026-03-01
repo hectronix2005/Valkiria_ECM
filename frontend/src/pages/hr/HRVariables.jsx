@@ -121,7 +121,7 @@ function MappingModal({ mapping, isOpen, onClose, onSuccess }) {
   const createMutation = useMutation({
     mutationFn: (data) => variableMappingService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
       onSuccess?.()
       onClose()
     },
@@ -133,7 +133,7 @@ function MappingModal({ mapping, isOpen, onClose, onSuccess }) {
   const updateMutation = useMutation({
     mutationFn: (data) => variableMappingService.update(mapping.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
       onSuccess?.()
       onClose()
     },
@@ -345,9 +345,9 @@ function PendingVariablesModal({ isOpen, onClose }) {
   const autoAssignMutation = useMutation({
     mutationFn: (data) => variableMappingService.autoAssign(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['pending-variables'])
-      queryClient.invalidateQueries(['variable-mappings'])
-      queryClient.invalidateQueries(['template'])
+      queryClient.invalidateQueries({ queryKey: ['pending-variables'] })
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
+      queryClient.invalidateQueries({ queryKey: ['template'] })
       setError('')
     },
     onError: (err) => {
@@ -358,9 +358,9 @@ function PendingVariablesModal({ isOpen, onClose }) {
   const createAndAssignMutation = useMutation({
     mutationFn: (data) => variableMappingService.createAndAssign(data),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['pending-variables'])
-      queryClient.invalidateQueries(['variable-mappings'])
-      queryClient.invalidateQueries(['template'])
+      queryClient.invalidateQueries({ queryKey: ['pending-variables'] })
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
+      queryClient.invalidateQueries({ queryKey: ['template'] })
       setCreatingNew({})
       setNewMappingData({})
       setError('')
@@ -899,18 +899,18 @@ export default function VariableMappings() {
 
   const toggleMutation = useMutation({
     mutationFn: (id) => variableMappingService.toggleActive(id),
-    onSuccess: () => queryClient.invalidateQueries(['variable-mappings'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => variableMappingService.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['variable-mappings'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
   })
 
   const seedMutation = useMutation({
     mutationFn: () => variableMappingService.seedSystem(),
     onSuccess: () => {
-      queryClient.invalidateQueries(['variable-mappings'])
+      queryClient.invalidateQueries({ queryKey: ['variable-mappings'] })
     }
   })
 

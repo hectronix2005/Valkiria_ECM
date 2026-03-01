@@ -315,8 +315,8 @@ function CertificationTypeConfig({ onClose, onNavigateToTemplate }) {
         }
       }
 
-      queryClient.invalidateQueries(['certification-available-types'])
-      queryClient.invalidateQueries(['admin-certification-templates'])
+      queryClient.invalidateQueries({ queryKey: ['certification-available-types'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-certification-templates'] })
       alert('Configuración guardada exitosamente')
       onClose()
     } catch (error) {
@@ -554,7 +554,7 @@ export default function Certifications() {
   const createMutation = useMutation({
     mutationFn: (data) => certificationService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['certifications'])
+      queryClient.invalidateQueries({ queryKey: ['certifications'] })
       setShowNewModal(false)
     },
   })
@@ -562,14 +562,14 @@ export default function Certifications() {
   const cancelMutation = useMutation({
     mutationFn: (id) => certificationService.cancel(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['certifications'])
+      queryClient.invalidateQueries({ queryKey: ['certifications'] })
     },
   })
 
   const generateMutation = useMutation({
     mutationFn: (id) => certificationService.generateDocument(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['certifications'])
+      queryClient.invalidateQueries({ queryKey: ['certifications'] })
       setGeneratingId(null)
     },
     onError: (error) => {
@@ -593,7 +593,7 @@ export default function Certifications() {
   const deleteMutation = useMutation({
     mutationFn: (id) => certificationService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['certifications'])
+      queryClient.invalidateQueries({ queryKey: ['certifications'] })
       setDeleteConfirm(null)
     },
     onError: (error) => {
@@ -605,7 +605,7 @@ export default function Certifications() {
   const signMutation = useMutation({
     mutationFn: (id) => certificationService.signDocument(id),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['certifications'])
+      queryClient.invalidateQueries({ queryKey: ['certifications'] })
       setSigningId(null)
       const doc = response.data.document
       if (doc.all_signed) {
@@ -1465,7 +1465,7 @@ export default function Certifications() {
         <CertificationTypeConfig
           onClose={() => {
             setShowConfigModal(false)
-            queryClient.invalidateQueries(['certification-available-types'])
+            queryClient.invalidateQueries({ queryKey: ['certification-available-types'] })
           }}
           onNavigateToTemplate={(templateId) => {
             setShowConfigModal(false)

@@ -80,12 +80,14 @@ Rails.application.configure do
   config.active_support.report_deprecations = false
 
   # Enable DNS rebinding protection and other `Host` header attacks.
-  config.hosts = [
-    ENV["APP_HOST"],                        # e.g. "api.valkyria-ecm.com"
-    "valkyria-776bbe51369f.herokuapp.com",  # Heroku app domain
-    "hectronix2005.github.io",              # GitHub Pages frontend
+  allowed_hosts = [
+    ENV["APP_HOST"],
     "localhost"
-  ].compact
+  ]
+  if ENV["ALLOWED_HOSTS"].present?
+    allowed_hosts += ENV["ALLOWED_HOSTS"].split(",").map(&:strip)
+  end
+  config.hosts = allowed_hosts.compact
   # Skip DNS rebinding protection for health checks
   config.host_authorization = { exclude: ->(request) { request.path == "/up" || request.path == "/api/v1/health" } }
 end

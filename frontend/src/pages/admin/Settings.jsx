@@ -75,7 +75,7 @@ export default function Settings() {
   const updateMutation = useMutation({
     mutationFn: (data) => settingsService.update(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['settings'])
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     }

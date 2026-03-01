@@ -1490,8 +1490,8 @@ export default function Employees() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => employeeService.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['employees'])
-      queryClient.invalidateQueries(['employee', selectedEmployee?.id])
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      queryClient.invalidateQueries({ queryKey: ['employee', selectedEmployee?.id] })
       setShowEditModal(false)
       setUpdateError('')
     },
@@ -1503,7 +1503,7 @@ export default function Employees() {
   const createMutation = useMutation({
     mutationFn: (data) => employeeService.create(data),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['employees'])
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
       setShowCreateModal(false)
       setCreateError('')
       // Mostrar el empleado creado
@@ -1521,8 +1521,8 @@ export default function Employees() {
   const createAccountMutation = useMutation({
     mutationFn: (id) => employeeService.createAccount(id),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['employees'])
-      queryClient.invalidateQueries(['employee', selectedEmployee?.id])
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      queryClient.invalidateQueries({ queryKey: ['employee', selectedEmployee?.id] })
       alert(response.data.message || 'Cuenta creada exitosamente. La contraseña inicial es el número de cédula.')
     },
     onError: (error) => {

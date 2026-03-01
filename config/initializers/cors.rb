@@ -5,13 +5,18 @@
 
 # Read more: https://github.com/cyu/rack-cors
 
+cors_origins = [
+  "localhost:5173",
+  "127.0.0.1:5173"
+]
+
+if ENV["CORS_ORIGINS"].present?
+  cors_origins += ENV["CORS_ORIGINS"].split(",").map(&:strip)
+end
+
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    origins(
-      "localhost:5173",
-      "127.0.0.1:5173",
-      "https://hectronix2005.github.io"
-    )
+    origins(*cors_origins)
 
     resource "*",
       headers: :any,

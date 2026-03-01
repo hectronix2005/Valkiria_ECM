@@ -62,7 +62,7 @@ function FolderModal({ isOpen, onClose, folder = null, parentId = null }) {
   const createMutation = useMutation({
     mutationFn: (data) => folderService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['folders'])
+      queryClient.invalidateQueries({ queryKey: ['folders'] })
       handleClose()
     },
     onError: (err) => setError(err.response?.data?.error || 'Error al crear carpeta')
@@ -71,7 +71,7 @@ function FolderModal({ isOpen, onClose, folder = null, parentId = null }) {
   const updateMutation = useMutation({
     mutationFn: (data) => folderService.update(folder.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['folders'])
+      queryClient.invalidateQueries({ queryKey: ['folders'] })
       handleClose()
     },
     onError: (err) => setError(err.response?.data?.error || 'Error al actualizar carpeta')
@@ -195,8 +195,8 @@ function AddDocumentModal({ isOpen, onClose, folder }) {
   const addMutation = useMutation({
     mutationFn: (documentId) => folderService.addDocument(folder.id, documentId),
     onSuccess: () => {
-      queryClient.invalidateQueries(['folders'])
-      queryClient.invalidateQueries(['folder', folder.id])
+      queryClient.invalidateQueries({ queryKey: ['folders'] })
+      queryClient.invalidateQueries({ queryKey: ['folder', folder.id] })
     },
     onError: (err) => setError(err.response?.data?.error || 'Error al agregar documento')
   })
@@ -309,7 +309,7 @@ export default function Folders() {
   const deleteMutation = useMutation({
     mutationFn: (id) => folderService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['folders'])
+      queryClient.invalidateQueries({ queryKey: ['folders'] })
       setMenuOpen(null)
     }
   })
@@ -317,8 +317,8 @@ export default function Folders() {
   const removeDocMutation = useMutation({
     mutationFn: ({ folderId, documentId }) => folderService.removeDocument(folderId, documentId),
     onSuccess: () => {
-      queryClient.invalidateQueries(['folders'])
-      queryClient.invalidateQueries(['folder', currentFolderId])
+      queryClient.invalidateQueries({ queryKey: ['folders'] })
+      queryClient.invalidateQueries({ queryKey: ['folder', currentFolderId] })
     }
   })
 

@@ -448,7 +448,7 @@ function EditSignatoryModal({ isOpen, onClose, templateId, signatory, numPages =
   const updateMutation = useMutation({
     mutationFn: (data) => templateService.updateSignatory(templateId, signatory?.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['template', templateId])
+      queryClient.invalidateQueries({ queryKey: ['template', templateId] })
       onSuccess?.()
       onClose()
     },
@@ -749,8 +749,8 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
   const createMutation = useMutation({
     mutationFn: (data) => templateService.createSignatory(templateId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['template', templateId])
-      queryClient.invalidateQueries(['template-signatories', templateId])
+      queryClient.invalidateQueries({ queryKey: ['template', templateId] })
+      queryClient.invalidateQueries({ queryKey: ['template-signatories', templateId] })
       onSuccess()
       handleClose()
     },
@@ -796,7 +796,6 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
       show_label: showLabel,
       show_signer_name: showSignerName
     }
-    console.log('Creating signatory with data:', data)
     createMutation.mutate(data)
   }
 
@@ -1076,7 +1075,7 @@ export default function TemplateEdit() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['template', id])
+      queryClient.invalidateQueries({ queryKey: ['template', id] })
       setHasPositionChanges(false)
     }
   })
@@ -1089,7 +1088,7 @@ export default function TemplateEdit() {
   const uploadMutation = useMutation({
     mutationFn: (file) => templateService.upload(id, file),
     onSuccess: () => {
-      queryClient.invalidateQueries(['template', id])
+      queryClient.invalidateQueries({ queryKey: ['template', id] })
       setFileVersion(v => v + 1)
     }
   })
@@ -1097,28 +1096,28 @@ export default function TemplateEdit() {
   const updateMutation = useMutation({
     mutationFn: (data) => templateService.update(id, { template: data }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['template', id])
+      queryClient.invalidateQueries({ queryKey: ['template', id] })
     }
   })
 
   const activateMutation = useMutation({
     mutationFn: () => templateService.activate(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['template', id])
+      queryClient.invalidateQueries({ queryKey: ['template', id] })
     }
   })
 
   const deleteSignatoryMutation = useMutation({
     mutationFn: (sigId) => templateService.deleteSignatory(id, sigId),
     onSuccess: () => {
-      queryClient.invalidateQueries(['template', id])
+      queryClient.invalidateQueries({ queryKey: ['template', id] })
     }
   })
 
   const reassignMutation = useMutation({
     mutationFn: () => templateService.reassignMappings(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['template', id])
+      queryClient.invalidateQueries({ queryKey: ['template', id] })
       setEditingMappings({})
     }
   })

@@ -71,8 +71,8 @@ export default function Documents() {
   const signMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.sign(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['generated-documents'])
-      queryClient.invalidateQueries(['pending-signatures'])
+      queryClient.invalidateQueries({ queryKey: ['generated-documents'] })
+      queryClient.invalidateQueries({ queryKey: ['pending-signatures'] })
       setShowDetailModal(false)
       setSelectedDocument(null)
       alert('Documento firmado exitosamente')
@@ -86,7 +86,7 @@ export default function Documents() {
   const deleteMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['generated-documents'])
+      queryClient.invalidateQueries({ queryKey: ['generated-documents'] })
       setShowDeleteConfirm(false)
       setDocumentToDelete(null)
       setShowDetailModal(false)

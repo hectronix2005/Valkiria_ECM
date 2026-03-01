@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { thirdPartyService, thirdPartyTypeService } from '../../services/api'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
+import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
@@ -214,7 +214,7 @@ function ThirdPartyTypesPanel({ isOpen, onClose }) {
   const createMutation = useMutation({
     mutationFn: (data) => thirdPartyTypeService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-party-types'])
+      queryClient.invalidateQueries({ queryKey: ['third-party-types'] })
       setShowTypeModal(false)
     },
   })
@@ -222,7 +222,7 @@ function ThirdPartyTypesPanel({ isOpen, onClose }) {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => thirdPartyTypeService.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-party-types'])
+      queryClient.invalidateQueries({ queryKey: ['third-party-types'] })
       setShowTypeModal(false)
       setEditingType(null)
     },
@@ -231,14 +231,14 @@ function ThirdPartyTypesPanel({ isOpen, onClose }) {
   const deleteMutation = useMutation({
     mutationFn: (id) => thirdPartyTypeService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-party-types'])
+      queryClient.invalidateQueries({ queryKey: ['third-party-types'] })
     },
   })
 
   const toggleMutation = useMutation({
     mutationFn: (id) => thirdPartyTypeService.toggleActive(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-party-types'])
+      queryClient.invalidateQueries({ queryKey: ['third-party-types'] })
     },
   })
 
@@ -783,7 +783,7 @@ export default function ThirdParties() {
   const createMutation = useMutation({
     mutationFn: (data) => thirdPartyService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-parties'])
+      queryClient.invalidateQueries({ queryKey: ['third-parties'] })
       setShowModal(false)
     },
   })
@@ -791,7 +791,7 @@ export default function ThirdParties() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => thirdPartyService.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-parties'])
+      queryClient.invalidateQueries({ queryKey: ['third-parties'] })
       setShowModal(false)
       setEditingThirdParty(null)
     },
@@ -800,7 +800,7 @@ export default function ThirdParties() {
   const deleteMutation = useMutation({
     mutationFn: (id) => thirdPartyService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-parties'])
+      queryClient.invalidateQueries({ queryKey: ['third-parties'] })
     },
   })
 
@@ -811,7 +811,7 @@ export default function ThirdParties() {
       if (action === 'block') return thirdPartyService.block(id, 'Bloqueado por usuario')
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['third-parties'])
+      queryClient.invalidateQueries({ queryKey: ['third-parties'] })
     },
   })
 

@@ -6,6 +6,9 @@
 # Run with: bundle exec rails runner db/seeds.rb
 #           or: bundle exec rails db:seed (requires rake task)
 
+# In production, use SEED_ADMIN_PASSWORD env var. In development, use defaults.
+SEED_PASSWORD = ENV.fetch("SEED_PASSWORD") { Rails.env.production? ? SecureRandom.hex(16) : "Admin123!" }
+
 puts "🌱 Seeding VALKYRIA ECM database..."
 
 # Clean existing data (development only)
@@ -85,7 +88,7 @@ puts "  Creating users..."
 admin = create_user_with_employee(
   {
     email: "admin@valkyria.com",
-    password: "Admin123!",
+    password: SEED_PASSWORD,
     first_name: "Carlos",
     last_name: "Administrador",
     department: "IT",
@@ -103,7 +106,7 @@ admin = create_user_with_employee(
 hr_manager = create_user_with_employee(
   {
     email: "hr.manager@valkyria.com",
-    password: "HrManager123!",
+    password: SEED_PASSWORD,
     first_name: "María",
     last_name: "García",
     department: "Human Resources",
@@ -121,7 +124,7 @@ hr_manager = create_user_with_employee(
 hr_staff = create_user_with_employee(
   {
     email: "hr.staff@valkyria.com",
-    password: "HrStaff123!",
+    password: SEED_PASSWORD,
     first_name: "Ana",
     last_name: "López",
     department: "Human Resources",
@@ -140,7 +143,7 @@ hr_staff = create_user_with_employee(
 supervisor = create_user_with_employee(
   {
     email: "supervisor@valkyria.com",
-    password: "Supervisor123!",
+    password: SEED_PASSWORD,
     first_name: "Roberto",
     last_name: "Martínez",
     department: "Engineering",
@@ -158,7 +161,7 @@ supervisor = create_user_with_employee(
 employee1 = create_user_with_employee(
   {
     email: "employee1@valkyria.com",
-    password: "Employee123!",
+    password: SEED_PASSWORD,
     first_name: "Juan",
     last_name: "Pérez",
     department: "Engineering",
@@ -174,7 +177,7 @@ employee1 = create_user_with_employee(
 employee2 = create_user_with_employee(
   {
     email: "employee2@valkyria.com",
-    password: "Employee123!",
+    password: SEED_PASSWORD,
     first_name: "Laura",
     last_name: "Sánchez",
     department: "Engineering",
@@ -190,7 +193,7 @@ employee2 = create_user_with_employee(
 employee3 = create_user_with_employee(
   {
     email: "employee3@valkyria.com",
-    password: "Employee123!",
+    password: SEED_PASSWORD,
     first_name: "Pedro",
     last_name: "Ramírez",
     department: "Engineering",
@@ -209,7 +212,7 @@ employee3 = create_user_with_employee(
 legal = create_user_with_employee(
   {
     email: "legal@valkyria.com",
-    password: "Legal123!",
+    password: SEED_PASSWORD,
     first_name: "Fernando",
     last_name: "Abogado",
     department: "Legal",
@@ -227,7 +230,7 @@ legal = create_user_with_employee(
 viewer = create_user_with_employee(
   {
     email: "viewer@valkyria.com",
-    password: "Viewer123!",
+    password: SEED_PASSWORD,
     first_name: "Visitante",
     last_name: "Externo",
     department: "External",
@@ -425,40 +428,16 @@ puts "=" * 60
 puts ""
 puts "📋 TEST USERS CREDENTIALS:"
 puts "-" * 60
+puts "   Password (all users): #{SEED_PASSWORD}"
 puts ""
-puts "🔑 ADMIN (Full system access):"
-puts "   Email:    admin@valkyria.com"
-puts "   Password: Admin123!"
-puts ""
-puts "👔 HR MANAGER (HR module full access):"
-puts "   Email:    hr.manager@valkyria.com"
-puts "   Password: HrManager123!"
-puts ""
-puts "👥 HR STAFF (HR operations):"
-puts "   Email:    hr.staff@valkyria.com"
-puts "   Password: HrStaff123!"
-puts ""
-puts "🏢 SUPERVISOR (Can approve subordinates requests):"
-puts "   Email:    supervisor@valkyria.com"
-puts "   Password: Supervisor123!"
-puts "   Subordinates: employee1, employee2, employee3"
-puts ""
-puts "👤 EMPLOYEES (Regular users):"
-puts "   Email:    employee1@valkyria.com"
-puts "   Password: Employee123!"
-puts ""
-puts "   Email:    employee2@valkyria.com"
-puts "   Password: Employee123!"
-puts ""
-puts "   Email:    employee3@valkyria.com"
-puts "   Password: Employee123!"
-puts ""
-puts "⚖️  LEGAL (Legal documents access):"
-puts "   Email:    legal@valkyria.com"
-puts "   Password: Legal123!"
-puts ""
-puts "👁️  VIEWER (Read-only access):"
-puts "   Email:    viewer@valkyria.com"
-puts "   Password: Viewer123!"
+puts "🔑 ADMIN:       admin@valkyria.com"
+puts "👔 HR MANAGER:  hr.manager@valkyria.com"
+puts "👥 HR STAFF:    hr.staff@valkyria.com"
+puts "🏢 SUPERVISOR:  supervisor@valkyria.com"
+puts "👤 EMPLOYEE 1:  employee1@valkyria.com"
+puts "👤 EMPLOYEE 2:  employee2@valkyria.com"
+puts "👤 EMPLOYEE 3:  employee3@valkyria.com"
+puts "⚖️  LEGAL:       legal@valkyria.com"
+puts "👁️  VIEWER:      viewer@valkyria.com"
 puts ""
 puts "=" * 60

@@ -5,9 +5,13 @@ redis_config = {
   network_timeout: 5
 }
 
-# Heroku Redis uses self-signed certificates with rediss:// URLs
+# Heroku Redis uses rediss:// URLs requiring SSL
 if redis_config[:url]&.start_with?("rediss://")
-  redis_config[:ssl_params] = { verify_mode: OpenSSL::SSL::VERIFY_NONE }
+  redis_config[:ssl_params] = if ENV["REDIS_SSL_VERIFY"] == "none"
+                                 { verify_mode: OpenSSL::SSL::VERIFY_NONE }
+                               else
+                                 { verify_mode: OpenSSL::SSL::VERIFY_PEER }
+                               end
 end
 
 Sidekiq.configure_server do |config|

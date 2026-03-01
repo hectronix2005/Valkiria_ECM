@@ -63,7 +63,7 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
   const createMutation = useMutation({
     mutationFn: (data) => templateService.create({ template: data }),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['templates'])
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
       onSuccess(response.data.data)
       handleClose()
     },
@@ -287,7 +287,7 @@ function EditTemplateModal({ isOpen, onClose, template }) {
   const updateMutation = useMutation({
     mutationFn: (data) => templateService.update(template?.id, { template: data }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['templates'])
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
       onClose()
     },
     onError: (err) => {
@@ -688,22 +688,22 @@ export default function Templates({ module = 'legal' }) {
 
   const activateMutation = useMutation({
     mutationFn: (id) => templateService.activate(id),
-    onSuccess: () => queryClient.invalidateQueries(['templates'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] })
   })
 
   const archiveMutation = useMutation({
     mutationFn: (id) => templateService.archive(id),
-    onSuccess: () => queryClient.invalidateQueries(['templates'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] })
   })
 
   const duplicateMutation = useMutation({
     mutationFn: (id) => templateService.duplicate(id),
-    onSuccess: () => queryClient.invalidateQueries(['templates'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] })
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => templateService.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['templates']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al eliminar template')
     }

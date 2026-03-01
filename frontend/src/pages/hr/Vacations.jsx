@@ -162,7 +162,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
     onSuccess: (response) => {
       setCreatedVacation(response.data?.data)
       setStep(3)
-      queryClient.invalidateQueries(['vacations'])
+      queryClient.invalidateQueries({ queryKey: ['vacations'] })
     },
     onError: (err) => {
       setSignError(err.response?.data?.error || 'Error al enviar la solicitud')
@@ -1100,7 +1100,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
     onSuccess: (response) => {
       setDocumentInfo(response.data?.document)
       setSignError('')
-      queryClient.invalidateQueries(['vacations'])
+      queryClient.invalidateQueries({ queryKey: ['vacations'] })
       reloadDocument()
       fetchDetail()
     },
@@ -1408,7 +1408,7 @@ export default function Vacations() {
   const submitMutation = useMutation({
     mutationFn: (id) => vacationService.submit(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['vacations'])
+      queryClient.invalidateQueries({ queryKey: ['vacations'] })
     },
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al enviar la solicitud')
@@ -1421,7 +1421,7 @@ export default function Vacations() {
       setShowCancelModal(false)
       setCancelTargetId(null)
       setCancelReason('')
-      queryClient.invalidateQueries(['vacations'])
+      queryClient.invalidateQueries({ queryKey: ['vacations'] })
     },
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al cancelar la solicitud')
@@ -1441,7 +1441,7 @@ export default function Vacations() {
   const signMutation = useMutation({
     mutationFn: (id) => vacationService.signDocument(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['vacations'])
+      queryClient.invalidateQueries({ queryKey: ['vacations'] })
       alert('Documento firmado exitosamente. Ahora puedes enviar la solicitud.')
     },
     onError: (err) => {
@@ -1649,7 +1649,7 @@ export default function Vacations() {
       >
         <VacationRequestWizard
           onClose={() => setShowNewModal(false)}
-          onSuccess={() => queryClient.invalidateQueries(['vacations'])}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['vacations'] })}
           balance={balance}
           bookedRanges={balance?.booked_ranges || []}
         />

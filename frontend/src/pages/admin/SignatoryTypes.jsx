@@ -36,7 +36,7 @@ function TypeModal({ type, isOpen, onClose, onSuccess }) {
   const createMutation = useMutation({
     mutationFn: (data) => signatoryTypeService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['signatory-types'])
+      queryClient.invalidateQueries({ queryKey: ['signatory-types'] })
       onSuccess?.()
       onClose()
     },
@@ -48,7 +48,7 @@ function TypeModal({ type, isOpen, onClose, onSuccess }) {
   const updateMutation = useMutation({
     mutationFn: (data) => signatoryTypeService.update(type.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['signatory-types'])
+      queryClient.invalidateQueries({ queryKey: ['signatory-types'] })
       onSuccess?.()
       onClose()
     },
@@ -292,12 +292,12 @@ export default function SignatoryTypes() {
 
   const toggleMutation = useMutation({
     mutationFn: (id) => signatoryTypeService.toggleActive(id),
-    onSuccess: () => queryClient.invalidateQueries(['signatory-types'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['signatory-types'] })
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => signatoryTypeService.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['signatory-types']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['signatory-types'] }),
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al eliminar')
     }
@@ -306,7 +306,7 @@ export default function SignatoryTypes() {
   const seedMutation = useMutation({
     mutationFn: () => signatoryTypeService.seedSystem(),
     onSuccess: () => {
-      queryClient.invalidateQueries(['signatory-types'])
+      queryClient.invalidateQueries({ queryKey: ['signatory-types'] })
     }
   })
 

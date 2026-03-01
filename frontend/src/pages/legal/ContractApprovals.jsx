@@ -789,7 +789,7 @@ export default function ContractApprovals() {
   const approveMutation = useMutation({
     mutationFn: ({ id, notes }) => contractApprovalService.approve(id, notes),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contract-approvals'])
+      queryClient.invalidateQueries({ queryKey: ['contract-approvals'] })
       setApproveContract(null)
     },
   })
@@ -797,7 +797,7 @@ export default function ContractApprovals() {
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }) => contractApprovalService.reject(id, reason),
     onSuccess: () => {
-      queryClient.invalidateQueries(['contract-approvals'])
+      queryClient.invalidateQueries({ queryKey: ['contract-approvals'] })
       setRejectContract(null)
     },
   })
@@ -805,7 +805,7 @@ export default function ContractApprovals() {
   const signMutation = useMutation({
     mutationFn: ({ id, position }) => contractApprovalService.sign(id, position),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['contract-approvals'])
+      queryClient.invalidateQueries({ queryKey: ['contract-approvals'] })
       setSignContract(null)
       if (response.data?.all_signed) {
         alert('Todas las firmas han sido completadas. El contrato ha sido aprobado.')
