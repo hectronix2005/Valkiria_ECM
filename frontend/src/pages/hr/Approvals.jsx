@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import logger from '../../utils/logger'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { renderAsync } from 'docx-preview'
 import { approvalService, certificationService } from '../../services/api'
@@ -9,7 +10,8 @@ import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
 import {
   Calendar, Award, CheckCircle, XCircle, Eye, User, Clock, History,
-  FileText, Download, Loader2, PenTool, ExternalLink, AlertCircle
+  FileText, Download, Loader2, PenTool, ExternalLink, AlertCircle,
+  ChevronDown, ChevronUp
 } from 'lucide-react'
 
 function VacationApprovalsTable({ requests, onApprove, onReject, onView, onSign, signingId, showActions = true }) {
@@ -189,6 +191,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
   const [docxMetrics, setDocxMetrics] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
+  const [expandedSigs, setExpandedSigs] = useState({})
   const queryClient = useQueryClient()
   const documentInfo = request.document
 
@@ -223,7 +226,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
           scale: sectionRect.width / pdfW,
         })
       }
-    }).catch(e => console.error('[VacApprovals] Error rendering DOCX:', e))
+    }).catch(e => logger.error('[VacApprovals] Error rendering DOCX:', e))
   }, [docxBlob, documentInfo?.pdf_width])
 
   const loadDocument = async () => {
@@ -243,7 +246,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
         setDocxBlob(null)
       }
     } catch (err) {
-      console.error('[Approvals] Error loading document:', err)
+      logger.error('[Approvals] Error loading document:', err)
     } finally {
       setPdfLoading(false)
     }
@@ -409,38 +412,59 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
                 Firmas del Documento
               </h4>
               <div className="space-y-3">
-                {documentInfo.signatures.map((sig, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
-                      }`}>
-                        {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{sig.label}</p>
-                        <p className="text-xs text-gray-500">
-                          {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
-                          {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
-                          {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
-                          {!sig.signed && sig.eligible_users?.length > 0 && (
-                            <span className="text-gray-400"> ({sig.eligible_users.join(', ')})</span>
-                          )}
-                        </p>
-                        {sig.signed && (
-                          <p className="text-xs text-green-600 mt-0.5">
-                            Firmado por {sig.signed_by_name} - {new Date(sig.signed_at).toLocaleString('es-ES')}
-                          </p>
+                {documentInfo.signatures.map((sig, idx) => {
+                  const hasPendingUsers = !sig.signed && sig.eligible_users?.length > 0
+                  const isExpanded = expandedSigs[`vac_${idx}`]
+                  return (
+                    <div key={idx} className="bg-gray-50 rounded-lg overflow-hidden">
+                      <div
+                        className={`flex items-center justify-between p-3 ${hasPendingUsers ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''}`}
+                        onClick={() => hasPendingUsers && setExpandedSigs(prev => ({ ...prev, [`vac_${idx}`]: !prev[`vac_${idx}`] }))}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                            sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                          }`}>
+                            {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {sig.label}
+                              {hasPendingUsers && (
+                                isExpanded
+                                  ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                                  : <ChevronDown className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                              )}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
+                              {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
+                              {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
+                            </p>
+                            {sig.signed && (
+                              <p className="text-xs text-green-600 mt-0.5">
+                                Firmado por {sig.signed_by_name} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {!sig.signed && (
+                          <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                            Pendiente
+                          </span>
                         )}
                       </div>
+                      {hasPendingUsers && isExpanded && (
+                        <div className="px-3 pb-3">
+                          <div className="ml-11 p-2 bg-white rounded border border-gray-200 text-xs text-gray-600">
+                            <span className="font-medium text-gray-500">Pueden firmar: </span>
+                            {sig.eligible_users.join(', ')}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    {!sig.signed && (
-                      <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
-                        Pendiente
-                      </span>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Sign Button for Approvers */}
@@ -522,6 +546,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
   const [docxMetrics, setDocxMetrics] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
+  const [expandedSigs, setExpandedSigs] = useState({})
   const [autoGenTriggered, setAutoGenTriggered] = useState(false)
   const queryClient = useQueryClient()
   const documentInfo = request.document
@@ -565,7 +590,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
           scale: sectionRect.width / pdfW,
         })
       }
-    }).catch(e => console.error('Error rendering DOCX:', e))
+    }).catch(e => logger.error('Error rendering DOCX:', e))
   }, [docxBlob, documentInfo?.pdf_width])
 
   const loadDocument = async () => {
@@ -584,7 +609,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
         setDocxBlob(null)
       }
     } catch (err) {
-      console.error('Error loading document:', err)
+      logger.error('Error loading document:', err)
     } finally {
       setPdfLoading(false)
     }
@@ -729,38 +754,59 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
                 Firmas del Documento
               </h4>
               <div className="space-y-3">
-                {documentInfo.signatures.map((sig, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
-                      }`}>
-                        {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{sig.label}</p>
-                        <p className="text-xs text-gray-500">
-                          {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
-                          {sig.signatory_type_code === 'supervisor' && 'Supervisor'}
-                          {sig.signatory_type_code === 'legal' && 'Legal'}
-                          {!sig.signed && sig.eligible_users?.length > 0 && (
-                            <span className="text-gray-400"> ({sig.eligible_users.join(', ')})</span>
-                          )}
-                        </p>
-                        {sig.signed && (
-                          <p className="text-xs text-green-600 mt-0.5">
-                            Firmado por {sig.signed_by_name} - {new Date(sig.signed_at).toLocaleString('es-ES')}
-                          </p>
+                {documentInfo.signatures.map((sig, idx) => {
+                  const hasPendingUsers = !sig.signed && sig.eligible_users?.length > 0
+                  const isExpanded = expandedSigs[`cert_${idx}`]
+                  return (
+                    <div key={idx} className="bg-gray-50 rounded-lg overflow-hidden">
+                      <div
+                        className={`flex items-center justify-between p-3 ${hasPendingUsers ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''}`}
+                        onClick={() => hasPendingUsers && setExpandedSigs(prev => ({ ...prev, [`cert_${idx}`]: !prev[`cert_${idx}`] }))}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                            sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                          }`}>
+                            {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {sig.label}
+                              {hasPendingUsers && (
+                                isExpanded
+                                  ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                                  : <ChevronDown className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                              )}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
+                              {sig.signatory_type_code === 'supervisor' && 'Supervisor'}
+                              {sig.signatory_type_code === 'legal' && 'Legal'}
+                            </p>
+                            {sig.signed && (
+                              <p className="text-xs text-green-600 mt-0.5">
+                                Firmado por {sig.signed_by_name} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {!sig.signed && (
+                          <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                            Pendiente
+                          </span>
                         )}
                       </div>
+                      {hasPendingUsers && isExpanded && (
+                        <div className="px-3 pb-3">
+                          <div className="ml-11 p-2 bg-white rounded border border-gray-200 text-xs text-gray-600">
+                            <span className="font-medium text-gray-500">Pueden firmar: </span>
+                            {sig.eligible_users.join(', ')}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    {!sig.signed && (
-                      <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
-                        Pendiente
-                      </span>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Sign Button */}

@@ -62,6 +62,10 @@ module Templates
     index({ requested_by_id: 1 })
     index({ employee_id: 1 })
     index({ created_at: -1 })
+    # Compound indexes for common query patterns
+    index({ organization_id: 1, status: 1, created_at: -1 })
+    index({ employee_id: 1, status: 1, created_at: -1 })
+    index({ template_id: 1, employee_id: 1 })
 
     # Validations
     validates :name, presence: true, length: { maximum: 255 }

@@ -267,6 +267,8 @@ GEM
       activesupport (>= 3.0.0)
     racc (1.8.1)
     rack (3.2.4)
+    rack-attack (6.8.0)
+      rack (>= 1.0, < 4)
     rack-cors (2.0.2)
       rack (>= 2.0.0)
     rack-session (2.1.1)
@@ -443,7 +445,7 @@ PLATFORMS
 
 DEPENDENCIES
   bcrypt (~> 3.1.7)
-  bootsnap
+  bootsnap (~> 1.18)
   brakeman
   combine_pdf (~> 1.0)
   database_cleaner-mongoid (~> 2.0)
@@ -466,6 +468,7 @@ DEPENDENCIES
   prawn-table (~> 0.2)
   puma (>= 5.0)
   pundit (~> 2.4)
+  rack-attack (~> 6.7)
   rack-cors (~> 2.0)
   rails (~> 7.2.3)
   redis (>= 4.0.1)

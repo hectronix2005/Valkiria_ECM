@@ -91,13 +91,12 @@ module Legal
         if admin? || legal_staff?
           scope.where(organization_id: user.organization_id)
         elsif manager?
-          # Managers see contracts they created or need to approve/sign at their level
+          # Managers see contracts they created or that are pending approval/signatures
           scope.where(organization_id: user.organization_id).any_of(
             { requested_by_id: user.id },
-            { :status.in => %w[pending_approval pending_signatures], requested_by_id: user.id },
             { :status => "pending_approval" },
             { :status => "pending_signatures" }
-          ).select { |c| c.requested_by_id == user.id || c.can_approve?(user) || can_sign?(c) }
+          )
         else
           # Other users only see contracts where they are signatories
           scope.where(organization_id: user.organization_id, status: "pending_signatures")

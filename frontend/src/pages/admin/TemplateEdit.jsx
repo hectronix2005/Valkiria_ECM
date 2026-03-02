@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import logger from '../../utils/logger'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { renderAsync } from 'docx-preview'
 import { templateService, variableMappingService, signatoryTypeService } from '../../services/api'
@@ -113,7 +114,7 @@ function SignaturePreview({ templateId, hasFile, signatories, selectedId, onSele
       })
       .catch(err => {
         if (!isMounted) return
-        console.error('Error rendering DOCX preview:', err)
+        logger.error('Error rendering DOCX preview:', err)
         setDocxLoading(false)
       })
 
@@ -1168,7 +1169,7 @@ export default function TemplateEdit() {
       })
       .catch(err => {
         if (!isMounted) return
-        console.error('Error rendering file preview:', err)
+        logger.error('Error rendering file preview:', err)
         setFilePreviewLoading(false)
       })
 
@@ -1309,7 +1310,7 @@ export default function TemplateEdit() {
                             document.body.removeChild(a)
                             URL.revokeObjectURL(url)
                           } catch (err) {
-                            console.error('Error downloading template:', err)
+                            logger.error('Error downloading template:', err)
                           }
                         }}
                       >

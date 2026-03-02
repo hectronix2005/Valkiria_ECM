@@ -5,7 +5,7 @@ source "https://rubygems.org"
 ruby "~> 3.4.0"
 
 # Core Framework
-gem "bootsnap", require: false
+gem "bootsnap", "~> 1.18", require: false
 gem "puma", ">= 5.0"
 gem "rails", "~> 7.2.3"
 
@@ -32,6 +32,7 @@ gem "rswag-ui", "~> 2.14"
 
 # Security
 gem "bcrypt", "~> 3.1.7"
+gem "rack-attack", "~> 6.7"
 
 # Utilities
 gem "oj", "~> 3.16" # Fast JSON parsing

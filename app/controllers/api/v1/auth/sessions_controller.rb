@@ -17,6 +17,8 @@ module Api
           user = Identity::User.where(email: email).first
 
           if user.nil?
+            # Prevent timing attacks — always perform bcrypt work even for non-existent users
+            Devise::Encryptor.digest(Identity::User, login_params[:password].to_s)
             log_auth_failure(email, "user_not_found", "El email no existe en el sistema")
             render_error("Invalid email or password", status: :unauthorized)
           elsif user.respond_to?(:access_locked?) && user.access_locked?

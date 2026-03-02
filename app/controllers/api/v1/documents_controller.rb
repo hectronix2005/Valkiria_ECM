@@ -11,7 +11,9 @@ module Api
         per_page = [(params[:per_page] || 20).to_i, 100].min
         skip_count = (page - 1) * per_page
 
-        base_scope = policy_scope(::Templates::GeneratedDocument).order(created_at: :desc)
+        base_scope = policy_scope(::Templates::GeneratedDocument)
+          .includes(:template, :employee)
+          .order(created_at: :desc)
 
         # Apply filters
         base_scope = apply_document_filters(base_scope)
@@ -166,8 +168,8 @@ module Api
         end
 
         # Filter by search query
-        if params[:q].present?
-          query = /#{Regexp.escape(params[:q])}/i
+        if (search_term = sanitized_search(:q))
+          query = /#{Regexp.escape(search_term)}/i
           scope = scope.or({ name: query })
         end
 

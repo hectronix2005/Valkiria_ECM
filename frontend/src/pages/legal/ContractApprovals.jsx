@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import logger from '../../utils/logger'
 import { contractApprovalService, contractService } from '../../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import Badge from '../../components/ui/Badge'
-import { CheckCircle, XCircle, Clock, FileText, Building2, User, AlertCircle, Download, Eye, FileWarning, PenTool, FileCheck } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, FileText, Building2, User, AlertCircle, Download, Eye, FileWarning, PenTool, FileCheck, ChevronDown, ChevronUp } from 'lucide-react'
 
 const STATUS_COLORS = {
   pending: 'yellow',
@@ -80,15 +81,20 @@ function ApprovalTimeline({ approvals }) {
 }
 
 function SignatureTimeline({ signatures }) {
+  const [expandedSigs, setExpandedSigs] = useState({})
+
   if (!signatures || signatures.length === 0) return null
 
   return (
     <div className="relative">
       <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
       <div className="space-y-3">
-        {signatures.map((sig, index) => (
-          <div key={index} className="relative flex items-start gap-4 pl-10">
-            <div className={`absolute left-2 w-4 h-4 rounded-full flex items-center justify-center ${
+        {signatures.map((sig, index) => {
+          const hasPendingUsers = sig.status !== 'signed' && sig.eligible_users?.length > 0
+          const isExpanded = expandedSigs[index]
+          return (
+          <div key={index} className="relative pl-10">
+            <div className={`absolute left-2 top-1 w-4 h-4 rounded-full flex items-center justify-center ${
               sig.status === 'signed' ? 'bg-green-500' : 'bg-gray-300'
             }`}>
               {sig.status === 'signed' && (
@@ -96,11 +102,15 @@ function SignatureTimeline({ signatures }) {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
+              <div className={`flex items-center gap-2 ${hasPendingUsers ? 'cursor-pointer' : ''}`}
+                onClick={() => { if (hasPendingUsers) setExpandedSigs(prev => ({ ...prev, [index]: !prev[index] })) }}
+              >
                 <span className="font-medium text-sm">
                   {sig.signatory_label}
-                  {sig.status !== 'signed' && sig.eligible_users?.length > 0 && (
-                    <span className="text-xs text-gray-400 font-normal"> ({sig.eligible_users.join(', ')})</span>
+                  {hasPendingUsers && (
+                    isExpanded
+                      ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                      : <ChevronDown className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
                   )}
                 </span>
                 <Badge status={sig.status === 'signed' ? 'green' : 'gray'}>
@@ -117,9 +127,16 @@ function SignatureTimeline({ signatures }) {
                   {new Date(sig.signed_at).toLocaleString()}
                 </p>
               )}
+              {hasPendingUsers && isExpanded && (
+                <div className="mt-1 p-2 bg-gray-50 rounded border border-gray-200 text-xs text-gray-600">
+                  <span className="font-medium text-gray-500">Pueden firmar: </span>
+                  {sig.eligible_users.join(', ')}
+                </div>
+              )}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -464,7 +481,7 @@ function SignModal({ contract, onConfirm, onCancel, isLoading }) {
           setCurrentPage(totalPages)
         }
       } catch (error) {
-        console.error('Error loading PDF:', error)
+        logger.error('Error loading PDF:', error)
       } finally {
         setPdfLoading(false)
       }
@@ -771,7 +788,7 @@ export default function ContractApprovals() {
       const url = URL.createObjectURL(blob)
       setDocumentUrl(url)
     } catch (error) {
-      console.error('Error loading document:', error)
+      logger.error('Error loading document:', error)
       alert('Error al cargar el documento')
     } finally {
       setDocumentLoading(false)

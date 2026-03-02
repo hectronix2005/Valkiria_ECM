@@ -9,9 +9,9 @@ module Identity
     include AuditTrackable
 
     # Devise modules
-    devise :database_authenticatable, :registerable,
+    devise :database_authenticatable,
            :recoverable, :rememberable, :validatable,
-           :trackable, :lockable,
+           :trackable, :lockable, :timeoutable,
            :jwt_authenticatable, jwt_revocation_strategy: JwtDenylist
 
     # Devise-JWT compatibility for Mongoid (ActiveRecord compatibility)

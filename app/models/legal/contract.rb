@@ -121,6 +121,9 @@ module Legal
     index({ third_party_id: 1 })
     index({ requested_by_id: 1 })
     index({ end_date: 1 })
+    # Compound indexes for approval workflow and filtering
+    index({ organization_id: 1, status: 1, created_at: -1 })
+    index({ organization_id: 1, contract_type: 1, status: 1 })
 
     # Callbacks
     before_create :generate_contract_number

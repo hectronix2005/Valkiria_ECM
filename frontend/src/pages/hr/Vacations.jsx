@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import logger from '../../utils/logger'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { vacationService, publicTemplateService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -14,7 +15,8 @@ import { renderAsync } from 'docx-preview'
 import {
   Calendar, Plus, Send, X, Eye, Filter, CalendarCheck, CalendarClock,
   CalendarDays, FileDown, FileText, PenTool, Users, CheckCircle, Clock,
-  AlertCircle, Loader2, ExternalLink, Trash2, Ban, Search
+  AlertCircle, Loader2, ExternalLink, Trash2, Ban, Search,
+  ChevronDown, ChevronUp
 } from 'lucide-react'
 
 const vacationTypes = [
@@ -55,6 +57,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
   const [docxSectionMetrics, setDocxSectionMetrics] = useState(null) // { offsetLeft, offsetTop, scale }
   const [pdfLoading, setPdfLoading] = useState(false)
   const [signError, setSignError] = useState('')
+  const [expandedSigs, setExpandedSigs] = useState({})
   const [missingFields, setMissingFields] = useState(null)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -110,7 +113,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
             setDocxBlob(null)
           }
         } catch (e) {
-          console.error('Error loading document:', e)
+          logger.error('Error loading document:', e)
           setPdfUrl(null)
           setDocxBlob(null)
         }
@@ -124,7 +127,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
     onError: (err) => {
       const data = err.response?.data
       const status = err.response?.status
-      console.error('Vacation create error:', { status, data, message: err.message })
+      logger.error('Vacation create error:', { status, data, message: err.message })
       // Check if it's a missing fields error
       if (data?.missing_fields && Array.isArray(data.missing_fields)) {
         setMissingFields(data.missing_fields)
@@ -185,7 +188,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
           setDocxBlob(null)
         }
       } catch (e) {
-        console.error('Error reloading document:', e)
+        logger.error('Error reloading document:', e)
       }
     }
   }
@@ -218,7 +221,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
           }
         }
       } catch (e) {
-        console.error('Error polling document status:', e)
+        logger.error('Error polling document status:', e)
       }
     }
 
@@ -257,7 +260,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
         const scale = sectionRect.width / pdfW
         setDocxSectionMetrics({ offsetLeft, offsetTop, scale })
       }
-    }).catch(e => console.error('Error rendering DOCX:', e))
+    }).catch(e => logger.error('Error rendering DOCX:', e))
   }, [docxBlob, documentInfo?.pdf_width])
 
   // Calcular Domingo de Pascua (Algoritmo de Butcher)
@@ -718,59 +721,80 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
               Firmas Requeridas
             </h4>
             <div className="space-y-3">
-              {documentInfo?.signatures?.map((sig, idx) => (
-                <div key={idx} className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
-                      }`}>
-                        {sig.signed ? <CheckCircle className="w-5 h-5" /> : idx + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{sig.label}</p>
-                        {!sig.signed && sig.eligible_users?.length > 0 && (
-                          <p className="text-xs text-gray-400">({sig.eligible_users.join(', ')})</p>
-                        )}
-                        {sig.signed && (
-                          <p className="text-xs text-green-600">
-                            Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {sig.signatory_type_code === 'employee' && !sig.signed && sig.can_sign_now !== false && sig.user_id === user?.id && (
-                      <Button
-                        size="sm"
-                        onClick={handleSign}
-                        loading={signMutation.isPending}
+              {documentInfo?.signatures?.map((sig, idx) => {
+                const hasPendingUsers = !sig.signed && sig.eligible_users?.length > 0
+                const isExpanded = expandedSigs[idx]
+                return (
+                  <div key={idx} className="bg-gray-50 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between p-3">
+                      <div
+                        className={`flex items-center gap-3 flex-1 ${hasPendingUsers ? 'cursor-pointer' : ''}`}
+                        onClick={() => hasPendingUsers && setExpandedSigs(prev => ({ ...prev, [idx]: !prev[idx] }))}
                       >
-                        <PenTool className="w-4 h-4" />
-                        Firmar
-                      </Button>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                          sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                        }`}>
+                          {sig.signed ? <CheckCircle className="w-5 h-5" /> : idx + 1}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {sig.label}
+                            {hasPendingUsers && (
+                              isExpanded
+                                ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                                : <ChevronDown className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                            )}
+                          </p>
+                          {sig.signed && (
+                            <p className="text-xs text-green-600">
+                              Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {sig.signatory_type_code === 'employee' && !sig.signed && sig.can_sign_now !== false && sig.user_id === user?.id && (
+                        <Button
+                          size="sm"
+                          onClick={handleSign}
+                          loading={signMutation.isPending}
+                        >
+                          <PenTool className="w-4 h-4" />
+                          Firmar
+                        </Button>
+                      )}
+                      {!sig.signed && (sig.can_sign_now === false || sig.signatory_type_code !== 'employee' || sig.user_id !== user?.id) && sig.signatory_type_code === 'employee' && (
+                        <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
+                          {sig.can_sign_now === false ? 'Esperando firmas previas' : 'Pendiente'}
+                        </span>
+                      )}
+                      {sig.signatory_type_code !== 'employee' && !sig.signed && (
+                        <span className="text-xs text-gray-500 px-2 py-1 bg-gray-200 rounded">
+                          Pendiente
+                        </span>
+                      )}
+                    </div>
+                    {hasPendingUsers && isExpanded && (
+                      <div className="px-3 pb-3">
+                        <div className="ml-11 p-2 bg-white rounded border border-gray-200 text-xs text-gray-600">
+                          <span className="font-medium text-gray-500">Pueden firmar: </span>
+                          {sig.eligible_users.join(', ')}
+                        </div>
+                      </div>
                     )}
-                    {!sig.signed && (sig.can_sign_now === false || sig.signatory_type_code !== 'employee' || sig.user_id !== user?.id) && sig.signatory_type_code === 'employee' && (
-                      <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
-                        {sig.can_sign_now === false ? 'Esperando firmas previas' : 'Pendiente'}
-                      </span>
-                    )}
-                    {sig.signatory_type_code !== 'employee' && !sig.signed && (
-                      <span className="text-xs text-gray-500 px-2 py-1 bg-gray-200 rounded">
-                        Pendiente
-                      </span>
+                    {sig.signed && sig.signature_image && (
+                      <div className="px-3 pb-3 ml-11">
+                        <div className="p-2 bg-white border border-gray-200 rounded inline-block">
+                          <img
+                            src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                            alt={`Firma de ${sig.signed_by}`}
+                            className="h-12 w-auto"
+                          />
+                        </div>
+                      </div>
                     )}
                   </div>
-                  {sig.signed && sig.signature_image && (
-                    <div className="mt-2 ml-11 p-2 bg-white border border-gray-200 rounded inline-block">
-                      <img
-                        src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
-                        alt={`Firma de ${sig.signed_by}`}
-                        className="h-12 w-auto"
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
@@ -1015,6 +1039,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
   const [documentInfo, setDocumentInfo] = useState(null)
   const documentInfoRef = useRef(null)
   const [signError, setSignError] = useState('')
+  const [expandedSigs2, setExpandedSigs2] = useState({})
   const queryClient = useQueryClient()
 
   // Keep ref in sync so async callbacks always access latest documentInfo
@@ -1035,7 +1060,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
       setDetailData(response.data?.data)
       setDocumentInfo(response.data?.document)
     } catch (err) {
-      console.error('Error fetching vacation detail:', err)
+      logger.error('Error fetching vacation detail:', err)
     }
   }
 
@@ -1069,7 +1094,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
           }
         }
       } catch (err) {
-        console.error('Error loading vacation data:', err)
+        logger.error('Error loading vacation data:', err)
       } finally {
         if (!cancelled) setPdfLoading(false)
       }
@@ -1097,7 +1122,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
         setDocxBlob(null)
       }
     } catch (err) {
-      console.error('Error reloading document:', err)
+      logger.error('Error reloading document:', err)
     } finally {
       setPdfLoading(false)
     }
@@ -1158,7 +1183,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
       if (cancelled) return
       const metrics = calcDocxMetrics()
       if (metrics) setDocxDetailMetrics(metrics)
-    }).catch(e => { if (!cancelled) console.error('Error rendering DOCX:', e) })
+    }).catch(e => { if (!cancelled) logger.error('Error rendering DOCX:', e) })
     return () => { cancelled = true }
   }, [docxBlob])
 
@@ -1290,7 +1315,10 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                 Firmas del Documento
               </h4>
               <div className="space-y-3">
-                {documentInfo.signatures.map((sig, idx) => (
+                {documentInfo.signatures.map((sig, idx) => {
+                  const hasPendingUsers = !sig.signed && sig.eligible_users?.length > 0
+                  const isExpanded = expandedSigs2[idx]
+                  return (
                   <div key={idx} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -1300,14 +1328,20 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                           {sig.signed ? <CheckCircle className="w-5 h-5" /> : sig.position || idx + 1}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{sig.label}</p>
+                          <p className={`font-medium text-gray-900 ${hasPendingUsers ? 'cursor-pointer' : ''}`}
+                            onClick={() => { if (hasPendingUsers) setExpandedSigs2(prev => ({ ...prev, [idx]: !prev[idx] })) }}
+                          >
+                            {sig.label}
+                            {hasPendingUsers && (
+                              isExpanded
+                                ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                                : <ChevronDown className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                            )}
+                          </p>
                           <p className="text-xs text-gray-500">
                             {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
                             {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
                             {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
-                            {!sig.signed && sig.eligible_users?.length > 0 && (
-                              <span className="text-gray-400"> ({sig.eligible_users.join(', ')})</span>
-                            )}
                           </p>
                           {sig.signed && (
                             <p className="text-xs text-green-600 mt-0.5">
@@ -1337,6 +1371,12 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                         </span>
                       )}
                     </div>
+                    {hasPendingUsers && isExpanded && (
+                      <div className="mt-2 ml-11 p-2 bg-white rounded border border-gray-200 text-xs text-gray-600">
+                        <span className="font-medium text-gray-500">Pueden firmar: </span>
+                        {sig.eligible_users.join(', ')}
+                      </div>
+                    )}
                     {sig.signed && sig.signature_image && (
                       <div className="mt-2 ml-11 p-2 bg-white border border-gray-200 rounded inline-block">
                         <img
@@ -1347,7 +1387,8 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               {signError && (
@@ -1518,7 +1559,7 @@ export default function Vacations() {
       const url = window.URL.createObjectURL(blob)
       window.open(url, '_blank')
     } catch (error) {
-      console.error('Error downloading document:', error)
+      logger.error('Error downloading document:', error)
       alert('Error al descargar el documento')
     }
   }

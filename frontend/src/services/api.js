@@ -7,6 +7,12 @@ const api = axios.create({
   },
 })
 
+// Module-level auth error handler (set by AuthProvider via setAuthErrorHandler)
+let _onAuthError = null
+export function setAuthErrorHandler(handler) {
+  _onAuthError = handler
+}
+
 // Request interceptor - add auth token and employee mode header
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
@@ -21,14 +27,24 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Track if a 401 redirect is already in progress to avoid race conditions
+let _authRedirectInProgress = false
+
 // Response interceptor - handle auth errors and report 5xx errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !_authRedirectInProgress) {
+      _authRedirectInProgress = true
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      if (_onAuthError) {
+        _onAuthError()
+      } else {
+        window.location.href = '/login'
+      }
+      // Reset flag after a short delay to allow re-auth
+      setTimeout(() => { _authRedirectInProgress = false }, 2000)
     }
     // Auto-report 5xx server errors
     if (error.response?.status >= 500) {
@@ -66,8 +82,6 @@ export function reportFrontendError({ message, error_class, backtrace, url, comp
     _errorReportState.seen.add(key)
     _errorReportState.count++
 
-    const user = (() => { try { return JSON.parse(localStorage.getItem('user')) } catch { return null } })()
-
     // Use fetch directly to avoid interceptor loops
     fetch('/api/v1/frontend_errors', {
       method: 'POST',
@@ -79,7 +93,6 @@ export function reportFrontendError({ message, error_class, backtrace, url, comp
         url: (url || window.location.href).slice(0, 2000),
         component: (component || '').slice(0, 200),
         action_context: (action_context || '').slice(0, 200),
-        user_email: user?.email || '',
         timestamp: new Date().toISOString(),
       }),
     }).catch(() => {}) // silently ignore reporting failures

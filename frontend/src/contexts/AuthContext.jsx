@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { authService } from '../services/api'
+import { authService, setAuthErrorHandler } from '../services/api'
 
 // Permission levels (1-5 scale)
 export const PERMISSION_LEVELS = {
@@ -34,6 +34,11 @@ export function AuthProvider({ children }) {
   })
 
   useEffect(() => {
+    // Register global auth error handler to avoid window.location race conditions
+    setAuthErrorHandler(() => {
+      setUser(null)
+    })
+
     const storedUser = localStorage.getItem('user')
     const token = localStorage.getItem('token')
 
@@ -54,6 +59,8 @@ export function AuthProvider({ children }) {
     } else {
       setLoading(false)
     }
+
+    return () => setAuthErrorHandler(null)
   }, [])
 
   const login = useCallback(async (email, password) => {

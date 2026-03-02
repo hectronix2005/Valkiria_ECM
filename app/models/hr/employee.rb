@@ -116,6 +116,9 @@ module Hr
     index({ department: 1 })
     index({ organization_id: 1, employment_status: 1 })
     index({ company_id: 1 })
+    # Compound indexes for common query patterns
+    index({ organization_id: 1, employment_status: 1, department: 1 })
+    index({ supervisor_id: 1, employment_status: 1 })
 
     # Associations
     belongs_to :user, class_name: "Identity::User", optional: true  # Optional until account is created

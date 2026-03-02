@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import logger from '../../utils/logger'
 import { generatedDocumentService, variableMappingService, signatureService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
@@ -44,6 +45,7 @@ import {
   Database,
   Wand2,
   ChevronDown,
+  ChevronUp,
   ChevronRight as ChevronRightIcon,
   Link2
 } from 'lucide-react'
@@ -492,6 +494,7 @@ export default function HRDocuments() {
   const [showNoSignatureModal, setShowNoSignatureModal] = useState(false)
   const [signDocument, setSignDocument] = useState(null)
   const [showSignModal, setShowSignModal] = useState(false)
+  const [expandedSigs, setExpandedSigs] = useState({})
   const [signPreviewUrl, setSignPreviewUrl] = useState(null)
   const [loadingSignPreview, setLoadingSignPreview] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -616,12 +619,13 @@ export default function HRDocuments() {
   }
 
   const handleView = async (document) => {
+    setExpandedSigs({})
     try {
       const response = await generatedDocumentService.get(document.id)
       setSelectedDocument(response.data.data)
       setShowDetailModal(true)
     } catch (error) {
-      console.error('Error loading document details:', error)
+      logger.error('Error loading document details:', error)
       setSelectedDocument(document)
       setShowDetailModal(true)
     }
@@ -668,7 +672,7 @@ export default function HRDocuments() {
       const blobUrl = window.URL.createObjectURL(blob)
       setSignPreviewUrl(blobUrl)
     } catch (error) {
-      console.error('Error loading preview:', error)
+      logger.error('Error loading preview:', error)
     } finally {
       setLoadingSignPreview(false)
     }
@@ -711,7 +715,7 @@ export default function HRDocuments() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       alert('Error al descargar el documento')
-      console.error('Download error:', error)
+      logger.error('Download error:', error)
     } finally {
       setDownloading(null)
     }
@@ -734,7 +738,7 @@ export default function HRDocuments() {
       const blobUrl = window.URL.createObjectURL(blob)
       setPreviewDocument({ ...document, blobUrl })
     } catch (error) {
-      console.error('Preview error:', error)
+      logger.error('Preview error:', error)
       alert('Error al cargar la vista previa. El PDF puede no estar disponible.')
       setShowPreviewModal(false)
       setPreviewDocument(null)
@@ -1202,58 +1206,76 @@ export default function HRDocuments() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  {selectedDocument.signatures.map((sig, idx) => (
-                    <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${
+                  {selectedDocument.signatures.map((sig, idx) => {
+                    const hasPendingUsers = sig.status !== 'signed' && sig.eligible_users?.length > 0
+                    const isExpanded = expandedSigs[idx]
+                    return (
+                    <div key={idx} className={`rounded-lg overflow-hidden ${
                       sig.status === 'signed' ? 'bg-green-50' :
                       sig.can_sign_now === false ? 'bg-gray-100 opacity-60' : 'bg-amber-50'
                     }`}>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-xs flex items-center justify-center font-medium">
-                            {idx + 1}
-                          </span>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                            sig.status === 'signed' ? 'bg-green-100' :
-                            sig.can_sign_now === false ? 'bg-gray-200' : 'bg-amber-100'
-                          }`}>
-                            {sig.status === 'signed' ? (
-                              <CheckCircle className="w-4 h-4 text-green-600" />
-                            ) : sig.can_sign_now === false ? (
-                              <Lock className="w-4 h-4 text-gray-400" />
-                            ) : (
-                              <Clock className="w-4 h-4 text-amber-600" />
-                            )}
+                      <div className={`flex items-center justify-between p-3 ${hasPendingUsers ? 'cursor-pointer hover:bg-black/5 transition-colors' : ''}`}
+                        onClick={() => { if (hasPendingUsers) setExpandedSigs(prev => ({ ...prev, [idx]: !prev[idx] })) }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1">
+                            <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-xs flex items-center justify-center font-medium">
+                              {idx + 1}
+                            </span>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                              sig.status === 'signed' ? 'bg-green-100' :
+                              sig.can_sign_now === false ? 'bg-gray-200' : 'bg-amber-100'
+                            }`}>
+                              {sig.status === 'signed' ? (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              ) : sig.can_sign_now === false ? (
+                                <Lock className="w-4 h-4 text-gray-400" />
+                              ) : (
+                                <Clock className="w-4 h-4 text-amber-600" />
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">
+                              {sig.signatory_label}
+                              {hasPendingUsers && (
+                                isExpanded
+                                  ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                                  : <ChevronDown className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                              )}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {sig.status === 'signed'
+                                ? `Firmado por ${sig.signed_by_name} - ${formatDate(sig.signed_at)}`
+                                : sig.can_sign_now === false && sig.waiting_for?.length > 0
+                                ? `Esperando: ${sig.waiting_for.join(', ')}`
+                                : sig.user_name || 'Pendiente'
+                              }
+                            </p>
                           </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium">
-                            {sig.signatory_label}
-                            {sig.status !== 'signed' && sig.eligible_users?.length > 0 && (
-                              <span className="text-xs text-gray-400 font-normal"> ({sig.eligible_users.join(', ')})</span>
-                            )}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {sig.status === 'signed'
-                              ? `Firmado por ${sig.signed_by_name} - ${formatDate(sig.signed_at)}`
-                              : sig.can_sign_now === false && sig.waiting_for?.length > 0
-                              ? `Esperando: ${sig.waiting_for.join(', ')}`
-                              : sig.user_name || 'Pendiente'
-                            }
-                          </p>
+                        <div className="flex items-center gap-2">
+                          {sig.required && (
+                            <Badge variant="secondary" size="sm">Requerida</Badge>
+                          )}
+                          {sig.status !== 'signed' && sig.can_sign_now === false && (
+                            <Badge variant="secondary" size="sm" className="bg-gray-200 text-gray-600">
+                              Bloqueada
+                            </Badge>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {sig.required && (
-                          <Badge variant="secondary" size="sm">Requerida</Badge>
-                        )}
-                        {sig.status !== 'signed' && sig.can_sign_now === false && (
-                          <Badge variant="secondary" size="sm" className="bg-gray-200 text-gray-600">
-                            Bloqueada
-                          </Badge>
-                        )}
-                      </div>
+                      {hasPendingUsers && isExpanded && (
+                        <div className="px-3 pb-3 pt-0">
+                          <div className="ml-14 p-2 bg-white rounded border border-gray-200 text-xs text-gray-600">
+                            <span className="font-medium text-gray-500">Pueden firmar: </span>
+                            {sig.eligible_users.join(', ')}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 <div className="mt-3 text-sm text-gray-600">
                   Progreso: {selectedDocument.completed_signatures_count || 0} de {selectedDocument.total_required_signatures || 0} firmas

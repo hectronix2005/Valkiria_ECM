@@ -51,6 +51,10 @@ module System
     index({ user_id: 1 })
     index({ request_id: 1 })
     index({ error_class: 1, created_at: -1 })
+    # Compound indexes for common dashboard queries
+    index({ resolved: 1, created_at: -1 })
+    index({ severity: 1, created_at: -1 })
+    index({ event_type: 1, created_at: -1 })
 
     # Validations
     validates :message, presence: true

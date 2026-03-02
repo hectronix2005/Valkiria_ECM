@@ -28,8 +28,7 @@ module Api
             component: error_params[:component].to_s.truncate(200),
             action: error_params[:action_context].to_s.truncate(200),
             browser: error_params[:browser].to_s.truncate(200),
-            timestamp: error_params[:timestamp],
-            user_email: error_params[:user_email].to_s.truncate(200)
+            timestamp: error_params[:timestamp]
           }.compact_blank
         )
 
@@ -40,7 +39,7 @@ module Api
 
       def error_params
         params.permit(:message, :error_class, :url, :component, :action_context,
-                       :browser, :timestamp, :user_email, backtrace: [])
+                       :browser, :timestamp, backtrace: [])
       end
 
       def rate_limit_key

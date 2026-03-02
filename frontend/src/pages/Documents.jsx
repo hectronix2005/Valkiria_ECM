@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logger from '../utils/logger'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { generatedDocumentService } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -26,7 +27,9 @@ import {
   ArrowDown,
   Search,
   X,
-  Briefcase
+  Briefcase,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 
 const statusConfig = {
@@ -67,6 +70,7 @@ export default function Documents() {
   const [signing, setSigning] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewing, setPreviewing] = useState(null)
+  const [expandedSigs, setExpandedSigs] = useState({})
 
   const signMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.sign(id),
@@ -113,7 +117,7 @@ export default function Documents() {
       setPreviewUrl(url)
     } catch (error) {
       alert('Error al previsualizar el documento')
-      console.error('Preview error:', error)
+      logger.error('Preview error:', error)
     } finally {
       setPreviewing(null)
     }
@@ -201,12 +205,13 @@ export default function Documents() {
   const handleView = async (document) => {
     setSelectedDocument(document)
     setShowDetailModal(true)
+    setExpandedSigs({})
     // Fetch detailed info with signatures
     try {
       const response = await generatedDocumentService.get(document.id)
       setSelectedDocument(response.data?.data || document)
     } catch (e) {
-      console.error('Error fetching document detail:', e)
+      logger.error('Error fetching document detail:', e)
     }
   }
 
@@ -238,7 +243,7 @@ export default function Documents() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       alert('Error al descargar el documento')
-      console.error('Download error:', error)
+      logger.error('Download error:', error)
     } finally {
       setDownloading(null)
     }
@@ -469,6 +474,12 @@ export default function Documents() {
                             <StatusIcon className="w-3.5 h-3.5" />
                             {status.label}
                           </span>
+                          {doc.status === 'pending_signatures' && doc.has_pending_signature && (
+                            <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                              <PenTool className="w-3 h-3" />
+                              Tu firma pendiente
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-right">
                           <div className="flex items-center justify-end gap-1">
@@ -611,33 +622,78 @@ export default function Documents() {
             </div>
 
             {/* Signatures */}
-            {selectedDocument.status === 'pending_signatures' && (
+            {selectedDocument.signatures?.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-700">Firmas</h4>
+                <h4 className="text-sm font-medium text-gray-700">
+                  Firmas
+                  {selectedDocument.pending_signatures_count > 0 && (
+                    <span className="ml-2 text-xs text-amber-600">
+                      ({selectedDocument.completed_signatures_count || 0}/{selectedDocument.total_required_signatures || 0})
+                    </span>
+                  )}
+                </h4>
                 <div className="space-y-2">
-                  {(selectedDocument.signatures || []).map((sig, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        {sig.status === 'signed' ? (
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                        ) : (
-                          <Clock className="w-4 h-4 text-amber-500" />
-                        )}
-                        <div>
-                          <p className="text-sm font-medium">{sig.signatory_label || sig.label}</p>
-                          <p className="text-xs text-gray-500">
-                            {sig.status === 'signed'
-                              ? `Firmado por ${sig.signed_by_name || '-'}`
-                              : sig.user_name || 'Pendiente'}
-                          </p>
+                  {(selectedDocument.signatures || []).map((sig, idx) => {
+                    const hasPendingUsers = sig.status !== 'signed' && sig.eligible_users?.length > 0
+                    const isExpanded = expandedSigs[idx]
+
+                    return (
+                      <div key={idx} className="bg-gray-50 rounded-lg overflow-hidden">
+                        <div
+                          className={`flex items-center justify-between p-3 ${hasPendingUsers ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''}`}
+                          onClick={() => {
+                            if (hasPendingUsers) {
+                              setExpandedSigs(prev => ({ ...prev, [idx]: !prev[idx] }))
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            {sig.status === 'signed' ? (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            ) : sig.can_sign_now === false ? (
+                              <Clock className="w-4 h-4 text-gray-400" />
+                            ) : (
+                              <Clock className="w-4 h-4 text-amber-500" />
+                            )}
+                            <div>
+                              <p className="text-sm font-medium">
+                                {sig.signatory_label || sig.label}
+                                {hasPendingUsers && (
+                                  isExpanded
+                                    ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                                    : <ChevronDown className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
+                                )}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {sig.status === 'signed'
+                                  ? `Firmado por ${sig.signed_by_name || '-'}`
+                                  : sig.can_sign_now === false && sig.waiting_for?.length > 0
+                                    ? `Esperando: ${sig.waiting_for.join(', ')}`
+                                    : sig.user_name || 'Pendiente'}
+                              </p>
+                            </div>
+                          </div>
+                          {sig.signed_at && (
+                            <span className="text-xs text-gray-400">{formatDate(sig.signed_at)}</span>
+                          )}
                         </div>
+                        {hasPendingUsers && isExpanded && (
+                          <div className="px-3 pb-3 pt-0">
+                            <div className="ml-6 p-2 bg-white rounded border border-gray-200 text-xs text-gray-600">
+                              <span className="font-medium text-gray-500">Pueden firmar: </span>
+                              {sig.eligible_users.join(', ')}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {sig.signed_at && (
-                        <span className="text-xs text-gray-400">{formatDate(sig.signed_at)}</span>
-                      )}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
+                {selectedDocument.next_signatory && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Siguiente firma: {selectedDocument.next_signatory}
+                  </p>
+                )}
               </div>
             )}
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
+import logger from '../../utils/logger'
 import { certificationService, templateService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -320,7 +321,7 @@ function CertificationTypeConfig({ onClose, onNavigateToTemplate }) {
       alert('Configuración guardada exitosamente')
       onClose()
     } catch (error) {
-      console.error('Error saving certification types:', error)
+      logger.error('Error saving certification types:', error)
       alert('Error al guardar: ' + (error.response?.data?.error || error.message))
     } finally {
       setSaving(false)
@@ -573,7 +574,7 @@ export default function Certifications() {
       setGeneratingId(null)
     },
     onError: (error) => {
-      console.error('Error generating document:', error)
+      logger.error('Error generating document:', error)
       setGeneratingId(null)
 
       const responseData = error.response?.data
@@ -597,7 +598,7 @@ export default function Certifications() {
       setDeleteConfirm(null)
     },
     onError: (error) => {
-      console.error('Error deleting certification:', error)
+      logger.error('Error deleting certification:', error)
       alert(error.response?.data?.error || 'Error al eliminar certificación')
     },
   })
@@ -615,7 +616,7 @@ export default function Certifications() {
       }
     },
     onError: (error) => {
-      console.error('Error signing document:', error)
+      logger.error('Error signing document:', error)
       setSigningId(null)
       const errorData = error.response?.data
       if (errorData?.action_required?.type === 'configure_signature') {
@@ -689,7 +690,7 @@ export default function Certifications() {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('Error downloading document:', error)
+      logger.error('Error downloading document:', error)
       const errorData = await parseBlobError(error)
       alert(errorData?.error || errorData?.message || 'Error al descargar documento')
     } finally {
@@ -715,7 +716,7 @@ export default function Certifications() {
         setPreviewUrl(URL.createObjectURL(pdfBlob))
       }
     } catch (error) {
-      console.error('Error previewing document:', error)
+      logger.error('Error previewing document:', error)
       const errorData = await parseBlobError(error)
       alert(errorData?.error || errorData?.message || 'Error al previsualizar documento')
     } finally {
@@ -731,7 +732,7 @@ export default function Certifications() {
       inWrapper: true, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
       breakPages: true, ignoreLastRenderedPageBreak: false, experimental: true,
       trimXmlDeclaration: true, useBase64URL: true,
-    }).catch(err => console.error('Error rendering DOCX:', err))
+    }).catch(err => logger.error('Error rendering DOCX:', err))
   }, [previewDocxBlob])
 
   const handleClosePreview = () => {

@@ -19,9 +19,10 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
     origins(*cors_origins)
 
     resource "*",
-      headers: :any,
+      headers: %w[Authorization Content-Type Accept X-Employee-Mode X-Requested-With],
       methods: [:get, :post, :put, :patch, :delete, :options, :head],
       expose: ["Authorization"],
-      credentials: true
+      credentials: true,
+      max_age: 7200
   end
 end

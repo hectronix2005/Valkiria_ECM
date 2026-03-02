@@ -12,8 +12,8 @@ module Api
           users = policy_scope(::Identity::User).enabled
 
           # Filter by search
-          if params[:search].present?
-            search = Regexp.escape(params[:search].downcase)
+          if (search_term = sanitized_search(:search))
+            search = Regexp.escape(search_term.downcase)
             users = users.or(
               { first_name: /#{search}/i },
               { last_name: /#{search}/i },
@@ -161,6 +161,7 @@ module Api
         # GET /api/v1/admin/users/stats
         def stats
           users = ::Identity::User.where(organization_id: current_organization.id)
+          all_roles = ::Identity::Role.all.to_a
 
           stats = {
             total: users.count,
@@ -170,17 +171,19 @@ module Api
             by_level: {}
           }
 
-          # Count by role
-          ::Identity::Role.all.each do |role|
-            count = users.where(:role_ids.in => [role.id]).count
-            stats[:by_role][role.name] = count if count > 0
+          # Count by role — batch all role IDs into a single pipeline
+          role_ids_by_name = all_roles.each_with_object({}) { |r, h| h[r.name] = r.id }
+          role_ids_by_name.each do |name, role_id|
+            count = users.where(:role_ids.in => [role_id]).count
+            stats[:by_role][name] = count if count > 0
           end
 
-          # Count by level
+          # Count by level — reuse pre-loaded roles
+          roles_by_name = all_roles.index_by(&:name)
           (1..5).each do |level|
             role_name = ::Identity::Role::LEVELS[level]
-            role = ::Identity::Role.find_by(name: role_name)
-            stats[:by_level][level] = users.where(:role_ids.in => [role&.id].compact).count if role
+            role = roles_by_name[role_name]
+            stats[:by_level][level] = users.where(:role_ids.in => [role.id]).count if role
           end
 
           render json: { data: stats }

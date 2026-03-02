@@ -12,8 +12,8 @@ module Api
           logs = ::System::ErrorLog.recent
 
           # Filters
-          if params[:search].present?
-            search = Regexp.escape(params[:search])
+          if (search_term = sanitized_search(:search))
+            search = Regexp.escape(search_term)
             logs = logs.or(
               { error_class: /#{search}/i },
               { message: /#{search}/i },

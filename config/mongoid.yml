@@ -60,6 +60,9 @@ production:
         connect_timeout: 15
         socket_timeout: 30
         server_selection_timeout: 30
+        ssl: <%= ENV.fetch('MONGODB_SSL', 'true') == 'true' %>
+        retry_writes: true
+        retry_reads: true
 
   options:
     belongs_to_required_by_default: true

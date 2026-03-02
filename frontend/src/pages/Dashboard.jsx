@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import logger from '../utils/logger'
 import { useQuery } from '@tanstack/react-query'
 import { renderAsync } from 'docx-preview'
 import { useAuth, PERMISSION_LEVELS } from '../contexts/AuthContext'
@@ -333,7 +334,7 @@ export default function Dashboard() {
         setPreviewUrl(URL.createObjectURL(pdfBlob))
       }
     } catch (error) {
-      console.error('Error loading preview:', error)
+      logger.error('Error loading preview:', error)
     } finally {
       setPreviewLoading(false)
     }
@@ -347,7 +348,7 @@ export default function Dashboard() {
       inWrapper: true, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
       breakPages: true, ignoreLastRenderedPageBreak: false, experimental: true,
       trimXmlDeclaration: true, useBase64URL: true,
-    }).catch(err => console.error('Error rendering DOCX:', err))
+    }).catch(err => logger.error('Error rendering DOCX:', err))
   }, [previewDocxBlob])
 
   const handleClosePreview = () => {
@@ -377,7 +378,7 @@ export default function Dashboard() {
       window.document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('Error downloading:', error)
+      logger.error('Error downloading:', error)
     }
   }
 
@@ -413,7 +414,7 @@ export default function Dashboard() {
         setVacationPreviewUrl(URL.createObjectURL(pdfBlob))
       }
     } catch (error) {
-      console.error('Error loading vacation document:', error)
+      logger.error('Error loading vacation document:', error)
       alert('Error al cargar el documento')
     } finally {
       setVacationPreviewLoading(null)
@@ -442,7 +443,7 @@ export default function Dashboard() {
           scale: sectionRect.width / pdfW,
         })
       }
-    }).catch(err => console.error('Error rendering DOCX:', err))
+    }).catch(err => logger.error('Error rendering DOCX:', err))
   }, [vacationDocxBlob, vacationDocumentInfo?.pdf_width])
 
   const handleCloseVacationPreview = () => {
@@ -489,7 +490,7 @@ export default function Dashboard() {
         setCertPreviewUrl(URL.createObjectURL(pdfBlob))
       }
     } catch (error) {
-      console.error('Error loading certification document:', error)
+      logger.error('Error loading certification document:', error)
       const errMsg = error.response?.data?.error || 'Error al cargar el documento'
       alert(errMsg)
     } finally {
@@ -519,7 +520,7 @@ export default function Dashboard() {
           scale: sectionRect.width / pdfW,
         })
       }
-    }).catch(err => console.error('Error rendering certification DOCX:', err))
+    }).catch(err => logger.error('Error rendering certification DOCX:', err))
   }, [certDocxBlob, certDocumentInfo?.pdf_width])
 
   const handleCloseCertPreview = () => {

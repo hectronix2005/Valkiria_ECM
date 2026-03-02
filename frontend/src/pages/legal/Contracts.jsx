@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import logger from '../../utils/logger'
 import { contractService, thirdPartyService, thirdPartyTypeService, publicTemplateService, variableMappingService } from '../../services/api'
 import { Card, CardContent } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -978,7 +979,7 @@ function ContractForm({ template, thirdParties, thirdPartyTypes, onSubmit, onCan
         })
         setValidation(response.data)
       } catch (error) {
-        console.error('Validation error:', error)
+        logger.error('Validation error:', error)
         setValidation(null)
       } finally {
         setValidating(false)
@@ -1934,7 +1935,7 @@ export default function Contracts() {
       link.click()
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('Error downloading document:', error)
+      logger.error('Error downloading document:', error)
       const errorData = await parseBlobError(error)
       alert(errorData?.error || errorData?.message || 'Error al descargar el documento')
     }
@@ -1950,7 +1951,7 @@ export default function Contracts() {
       const url = URL.createObjectURL(blob)
       setDocumentUrl(url)
     } catch (error) {
-      console.error('Error loading document:', error)
+      logger.error('Error loading document:', error)
       const errorData = await parseBlobError(error)
       alert(errorData?.error || errorData?.message || 'Error al cargar el documento')
       setDocumentContract(null)

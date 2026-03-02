@@ -100,6 +100,14 @@ module Api
         render json: { error: message, errors: Array(errors) }, status: status
       end
 
+      # Sanitize and limit search input to prevent regex DoS
+      def sanitized_search(param_key = :search, max_length: 200)
+        value = params[param_key].to_s.strip
+        return nil if value.blank?
+
+        value.truncate(max_length)
+      end
+
       # Returns the full names of users who can fulfill a signatory type.
       # For supervisor/employee, uses the document's HR hierarchy.
       # For other types, finds users by role in the current organization.
