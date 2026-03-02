@@ -444,7 +444,7 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
   const handleFinish = () => {
     onSuccess?.()
     onClose()
-    window.location.reload()
+    queryClient.invalidateQueries({ queryKey: ['vacations'] })
   }
 
   const openPdfInNewTab = () => {
@@ -1443,7 +1443,7 @@ export default function Vacations() {
   const deleteMutation = useMutation({
     mutationFn: (id) => vacationService.delete(id),
     onSuccess: () => {
-      window.location.reload()
+      queryClient.invalidateQueries({ queryKey: ['vacations'] })
     },
     onError: (err) => {
       alert(err.response?.data?.error || 'Error al eliminar la solicitud')

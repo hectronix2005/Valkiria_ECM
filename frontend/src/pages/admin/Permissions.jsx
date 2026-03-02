@@ -157,7 +157,7 @@ export default function Permissions() {
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(null), 3000)
     } catch (err) {
-      setSaveSuccess(false)
+      setSaveSuccess(false) // Show error indicator to user
     }
   }
 

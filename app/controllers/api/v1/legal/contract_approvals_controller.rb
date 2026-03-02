@@ -243,7 +243,7 @@ module Api
                 signed_at: sig["signed_at"],
                 signed_by_name: sig["signed_by_name"],
                 is_mine: sig["user_id"] == current_user.id.to_s,
-                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"]) : [],
+                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"], doc: doc) : [],
                 # Position info for visual editor
                 x_position: sig_box[:x] || 350,
                 y_position: sig_box[:y] || 700,

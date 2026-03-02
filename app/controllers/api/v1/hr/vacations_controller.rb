@@ -544,7 +544,7 @@ module Api
                 signed_by: sig["signed_by_name"],
                 can_sign_now: order_status[:can_sign_now],
                 waiting_for: order_status[:waiting_for],
-                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"]) : []
+                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"], doc: doc) : []
               }
               # Include signature image and position for signed entries
               if sig["signed_at"].present? && sig["signature_id"].present?

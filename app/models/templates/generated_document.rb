@@ -163,7 +163,11 @@ module Templates
       # Check signature order if sequential signing is enabled
       unless can_sign_at_position?(sig_entry)
         blocking = blocking_signatures_for(sig_entry)
-        waiting_names = blocking.map { |b| b["signatory_label"] || b["label"] }.join(", ")
+        waiting_names = blocking.map do |b|
+          label = b["signatory_label"] || b["label"]
+          users = eligible_user_names_for(b["signatory_type_code"])
+          users.any? ? "#{label} (#{users.join(', ')})" : label
+        end.join(", ")
         raise SignatureError, "Debe esperar las firmas de: #{waiting_names}"
       end
 
@@ -480,7 +484,11 @@ module Templates
 
       {
         can_sign_now: can_sign,
-        waiting_for: blocking.map { |b| b["signatory_label"] || b["label"] },
+        waiting_for: blocking.map do |b|
+          label = b["signatory_label"] || b["label"]
+          users = eligible_user_names_for(b["signatory_type_code"])
+          users.any? ? "#{label} (#{users.join(', ')})" : label
+        end,
         waiting_count: blocking.count
       }
     end
@@ -655,6 +663,50 @@ module Templates
       else
         [signatory_type] # For custom types, require exact role match
       end
+    end
+
+    # Find users in the document's organization who can fulfill a signatory type
+    def eligible_user_names_for(signatory_type_code)
+      return [] if signatory_type_code.blank?
+
+      case signatory_type_code
+      when "employee"
+        # The requesting employee themselves
+        emp = employee || (source.respond_to?(:employee) ? source.employee : nil)
+        emp&.user ? [emp.user.full_name] : []
+      when "supervisor"
+        # The employee's direct supervisor from the HR hierarchy
+        emp = employee || (source.respond_to?(:employee) ? source.employee : nil)
+        sup = emp&.supervisor
+        if sup&.user
+          [sup.user.full_name]
+        else
+          # No direct supervisor assigned — find employees who are supervisors in this org
+          supervisor_names = ::Hr::Employee
+            .where(organization_id: organization_id)
+            .active
+            .select(&:supervisor?)
+            .filter_map { |e| e.user&.full_name }
+          supervisor_names.any? ? supervisor_names : users_with_roles(%w[supervisor manager])
+        end
+      else
+        # For other types, find users by role
+        users_with_roles(roles_for_signatory_type(signatory_type_code))
+      end
+    end
+
+    def users_with_roles(role_names)
+      return [] if organization_id.blank?
+
+      role_ids = ::Identity::Role.where(:name.in => role_names).pluck(:id)
+      return [] if role_ids.empty?
+
+      ::Identity::User
+        .where(organization_id: organization_id)
+        .where(:role_ids.in => role_ids)
+        .pluck(:first_name, :last_name)
+        .map { |fn, ln| [fn, ln].compact.join(" ").strip }
+        .reject(&:blank?)
     end
 
     def find_pending_signature_by_type(signatory_type_code)

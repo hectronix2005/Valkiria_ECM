@@ -77,7 +77,6 @@ module Api
 
         # PATCH /api/v1/admin/departments/:id
         def update
-          old_name = params[:id].gsub("-", " ").titleize
           new_name = params[:department][:name]&.strip
 
           if new_name.blank?

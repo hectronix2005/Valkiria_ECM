@@ -162,7 +162,6 @@ module Templates
       # Find mapping by name or alias (case/accent insensitive)
       def find_by_name_or_alias(search_name, organization = nil)
         mappings = organization ? available_for(organization) : active.ordered
-        normalized_search = VariableNormalizer.comparison_key(search_name)
 
         mappings.find do |m|
           m.matches_name?(search_name)

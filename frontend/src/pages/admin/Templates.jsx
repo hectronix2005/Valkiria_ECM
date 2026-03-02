@@ -1066,8 +1066,7 @@ export default function Templates({ module = 'legal' }) {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSuccess={(template) => {
-          // Navigate to template edit page
-          window.location.href = `/admin/templates/${template.id}`
+          navigate(`/admin/templates/${template.id}`)
         }}
       />
 

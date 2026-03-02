@@ -238,8 +238,6 @@ module Api
             next if alias_mapping.uuid == primary.uuid
             next if alias_mapping.key == primary.key # Already linked
 
-            old_key = alias_mapping.key
-
             # Update the alias mapping to use the primary's key
             alias_mapping.update!(
               key: primary.key,

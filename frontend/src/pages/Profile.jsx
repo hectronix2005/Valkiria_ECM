@@ -640,13 +640,12 @@ function formatYears(years) {
 }
 
 export default function Profile() {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
   const [showEditModal, setShowEditModal] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
 
   const handleProfileUpdate = (updatedUser) => {
-    localStorage.setItem('user', JSON.stringify(updatedUser))
-    window.location.reload()
+    updateUser(updatedUser)
   }
 
   const getRoleBadgeColor = (role) => {

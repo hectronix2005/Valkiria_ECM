@@ -32,7 +32,11 @@ class GotenbergWarmupService
       { available: false, response_time_ms: elapsed_ms, error: "HTTP #{response.code}" }
     end
   rescue StandardError => e
-    elapsed_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time) * 1000).round(1) rescue nil
+    elapsed_ms = begin
+                   ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time) * 1000).round(1)
+                 rescue StandardError
+                   nil
+                 end
     Rails.logger.warn "[GotenbergWarmup] Ping error: #{e.class}: #{e.message}"
     { available: false, response_time_ms: elapsed_ms, error: "#{e.class}: #{e.message}" }
   end

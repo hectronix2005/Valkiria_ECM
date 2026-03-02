@@ -101,7 +101,6 @@ module Api
         end
 
         def user_response(user)
-          employee = ::Hr::Employee.for_user(user)
           {
             id: user.id.to_s,
             email: user.email,

@@ -35,13 +35,21 @@ module Api
           end
 
           if params[:date_from].present?
-            date_from = Time.zone.parse(params[:date_from]) rescue nil
-            logs = logs.where(:created_at.gte => date_from.beginning_of_day) if date_from
+            begin
+              date_from = Time.zone.parse(params[:date_from])
+              logs = logs.where(:created_at.gte => date_from.beginning_of_day)
+            rescue ArgumentError
+              # Invalid date format — ignore filter
+            end
           end
 
           if params[:date_to].present?
-            date_to = Time.zone.parse(params[:date_to]) rescue nil
-            logs = logs.where(:created_at.lte => date_to.end_of_day) if date_to
+            begin
+              date_to = Time.zone.parse(params[:date_to])
+              logs = logs.where(:created_at.lte => date_to.end_of_day)
+            rescue ArgumentError
+              # Invalid date format — ignore filter
+            end
           end
 
           # Pagination

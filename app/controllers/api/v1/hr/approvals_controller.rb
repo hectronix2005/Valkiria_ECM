@@ -360,7 +360,7 @@ module Api
                 signed_by_name: sig["signed_by_name"],
                 signed_by: sig["signed_by_name"],
                 required: sig["required"],
-                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"]) : []
+                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"], doc: doc) : []
               }
               if sig["signed_at"].present? && sig["signature_id"].present?
                 user_sig = ::Identity::UserSignature.where(uuid: sig["signature_id"]).first

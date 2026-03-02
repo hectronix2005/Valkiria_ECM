@@ -521,7 +521,6 @@ module Templates
         affected_nodes[1..].each do |entry|
           node_text = entry[:text_node].text
           node_start = entry[:start]
-          node_end = entry[:end]
 
           # Calculate what part of this node is part of the variable
           clear_start = [var_start - node_start, 0].max

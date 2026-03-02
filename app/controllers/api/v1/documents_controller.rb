@@ -79,10 +79,18 @@ module Api
 
         # Delete associated files from GridFS
         if @document.draft_file_id
-          Mongoid::GridFs.delete(@document.draft_file_id) rescue nil
+          begin
+            Mongoid::GridFs.delete(@document.draft_file_id)
+          rescue Mongoid::Errors::DocumentNotFound
+            # File already deleted or missing from GridFS
+          end
         end
         if @document.final_file_id
-          Mongoid::GridFs.delete(@document.final_file_id) rescue nil
+          begin
+            Mongoid::GridFs.delete(@document.final_file_id)
+          rescue Mongoid::Errors::DocumentNotFound
+            # File already deleted or missing from GridFS
+          end
         end
 
         @document.destroy!
@@ -236,7 +244,7 @@ module Api
                 signed_by_name: sig["signed_by_name"],
                 can_sign_now: order_status[:can_sign_now],
                 waiting_for: order_status[:waiting_for],
-                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"]) : []
+                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"], doc: document) : []
               }
             end,
             pending_signatures_count: document.pending_signatures_count,

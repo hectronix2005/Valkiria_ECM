@@ -52,7 +52,7 @@ module Api
       def supervisor?
         return false if employee_mode?
 
-        current_user&.try(:is_supervisor)
+        current_user&.is_supervisor
       end
 
       # Get current employee record (read-only lookup, no auto-creation).
@@ -100,10 +100,18 @@ module Api
         render json: { error: message, errors: Array(errors) }, status: status
       end
 
-      # Returns the full names of users in the current organization
-      # whose roles match the given signatory type code.
-      def eligible_users_for_signatory_type(signatory_type_code)
-        return [] if signatory_type_code.blank? || current_organization.blank?
+      # Returns the full names of users who can fulfill a signatory type.
+      # For supervisor/employee, uses the document's HR hierarchy.
+      # For other types, finds users by role in the current organization.
+      def eligible_users_for_signatory_type(signatory_type_code, doc: nil)
+        return [] if signatory_type_code.blank?
+
+        # For supervisor/employee, delegate to the document model (HR hierarchy)
+        if doc && %w[employee supervisor].include?(signatory_type_code)
+          return doc.send(:eligible_user_names_for, signatory_type_code)
+        end
+
+        return [] if current_organization.blank?
 
         role_names = case signatory_type_code
                      when "hr" then %w[hr hr_manager admin]
