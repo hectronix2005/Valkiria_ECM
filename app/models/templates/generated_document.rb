@@ -6,6 +6,7 @@ module Templates
     include Mongoid::Timestamps
     include UuidIdentifiable
     include AuditTrackable
+    include IntegrityCheckable
 
     store_in collection: "generated_documents"
 
@@ -195,6 +196,9 @@ module Templates
 
       # Check if all required signatures are complete
       check_completion!
+
+      # Validate document integrity after signature application
+      run_integrity_check!(trigger: "post_signature")
     end
 
     # Apply a single signature to the current PDF

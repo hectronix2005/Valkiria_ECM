@@ -226,25 +226,29 @@ module Templates
         if skip_pdf
           Rails.logger.info "skip_pdf: true — skipping synchronous PDF conversion, enqueuing background job"
           enqueue_pdf_retry(generated_doc)
+          run_integrity_check(generated_doc)
           return generated_doc
         end
 
         # Try to convert to PDF (may be slow due to Gotenberg cold start)
         conversion_result = convert_to_pdf(output_file.path)
 
-        if conversion_result.is_a?(Hash) && conversion_result[:format] == :docx
-          # macOS development: DOCX is already stored, nothing more to do
-          generated_doc
-        elsif conversion_result
-          # PDF conversion successful - upgrade the document from DOCX to PDF
-          upgrade_document_to_pdf!(generated_doc, conversion_result)
-        else
-          # PDF conversion failed - DOCX is already available for viewing.
-          # Enqueue background retry for PDF generation.
-          Rails.logger.warn "PDF conversion failed. DOCX already stored for immediate viewing."
-          enqueue_pdf_retry(generated_doc)
-          generated_doc
-        end
+        result = if conversion_result.is_a?(Hash) && conversion_result[:format] == :docx
+                   # macOS development: DOCX is already stored, nothing more to do
+                   generated_doc
+                 elsif conversion_result
+                   # PDF conversion successful - upgrade the document from DOCX to PDF
+                   upgrade_document_to_pdf!(generated_doc, conversion_result)
+                 else
+                   # PDF conversion failed - DOCX is already available for viewing.
+                   # Enqueue background retry for PDF generation.
+                   Rails.logger.warn "PDF conversion failed. DOCX already stored for immediate viewing."
+                   enqueue_pdf_retry(generated_doc)
+                   generated_doc
+                 end
+
+        run_integrity_check(result)
+        result
       ensure
         input_file.unlink
         output_file.unlink
@@ -283,6 +287,12 @@ module Templates
       Rails.logger.info "Enqueued GotenbergPdfRetryJob for document #{generated_doc.uuid}"
     rescue StandardError => e
       Rails.logger.warn "Could not enqueue GotenbergPdfRetryJob: #{e.class} - #{e.message}"
+    end
+
+    def run_integrity_check(doc)
+      doc&.run_integrity_check!(trigger: "post_generation")
+    rescue StandardError => e
+      Rails.logger.error("[RobustDocumentGenerator] Integrity check failed: #{e.message}")
     end
 
     def process_docx(input_path, output_path)

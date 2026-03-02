@@ -52,7 +52,7 @@ module Api
         if file_content
           send_data file_content,
                     filename: @document.file_name || "#{@document.name}.pdf",
-                    type: "application/pdf",
+                    type: document_content_type,
                     disposition: "attachment"
         else
           render json: { error: "El archivo no está disponible" }, status: :not_found
@@ -68,7 +68,7 @@ module Api
         if file_content
           send_data file_content,
                     filename: @document.file_name || "#{@document.name}.pdf",
-                    type: "application/pdf",
+                    type: document_content_type,
                     disposition: "inline"
         else
           render json: { error: "El archivo no está disponible" }, status: :not_found
@@ -144,6 +144,15 @@ module Api
       end
 
       private
+
+      def document_content_type
+        fname = @document.file_name.to_s
+        if fname.end_with?(".docx")
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else
+          "application/pdf"
+        end
+      end
 
       def set_document
         return render json: { error: "ID de documento requerido" }, status: :bad_request if params[:id].blank?
@@ -233,9 +242,10 @@ module Api
           json.merge!(
             variable_values: document.variable_values,
             sequential_signing: document.sequential_signing?,
+            pdf_width: template&.pdf_width || 612,
             signatures: document.signatures.map do |sig|
               order_status = document.signature_with_order_status(sig)
-              {
+              sig_data = {
                 signatory_label: sig["signatory_label"],
                 signatory_type_code: sig["signatory_type_code"],
                 user_name: sig["user_name"],
@@ -248,6 +258,21 @@ module Api
                 waiting_for: order_status[:waiting_for],
                 eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"], doc: document) : []
               }
+              if sig["signed_at"].present? && sig["signature_id"].present?
+                user_sig = ::Identity::UserSignature.where(uuid: sig["signature_id"]).first
+                sig_data[:signature_image] = user_sig&.to_image_data
+              end
+              if sig["signatory_id"].present?
+                tmpl_sig = template&.signatories&.where(uuid: sig["signatory_id"])&.first
+                if tmpl_sig
+                  sig_data[:position_box] = {
+                    x: tmpl_sig.x_position, y: tmpl_sig.y_position,
+                    width: tmpl_sig.width, height: tmpl_sig.height,
+                    page: tmpl_sig.page_number
+                  }
+                end
+              end
+              sig_data
             end,
             pending_signatures_count: document.pending_signatures_count,
             completed_signatures_count: document.completed_signatures_count,
@@ -255,7 +280,10 @@ module Api
             all_signed: document.all_required_signed?,
             next_signatory: document.next_signatory_to_sign&.dig("signatory_label"),
             completed_at: document.completed_at&.iso8601,
-            can_download: document.draft_file_id.present?
+            can_download: document.draft_file_id.present?,
+            integrity_status: document.integrity_status,
+            last_integrity_check_at: document.last_integrity_check_at&.iso8601,
+            integrity_checks: document.integrity_checks
           )
         end
 
