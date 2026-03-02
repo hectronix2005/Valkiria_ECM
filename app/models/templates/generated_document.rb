@@ -444,9 +444,15 @@ module Templates
     end
 
     def can_be_signed_by?(user)
-      signatures.any? do |s|
+      # Direct user_id match
+      direct = signatures.any? do |s|
         s["user_id"] == user.id.to_s && s["status"] == "pending" && can_sign_at_position?(s)
       end
+      return true if direct
+
+      # Fall back to role-based matching (e.g., any user with supervisor role can sign supervisor slot)
+      sig = find_pending_signature_for(user)
+      sig.present? && can_sign_at_position?(sig)
     end
 
     # Check if sequential signing is enabled for this document's template
@@ -629,19 +635,30 @@ module Templates
       end
       return direct_match if direct_match
 
-      # If no direct match, check if user has a role matching any pending signature slot
-      # This allows any user with the appropriate role to sign (e.g., any HR staff can sign HR slot)
+      # If no direct match, check if user can fulfill any pending signature slot
       user_role_names = user.roles.pluck(:name)
 
       signatures.find do |s|
         next false unless s["status"] == "pending"
 
-        # Use signatory_type_code first, fall back to legacy signatory_role field
         signatory_type = s["signatory_type_code"].presence || s["signatory_role"]
         next false if signatory_type.blank?
 
-        # Check if user has a role that matches the signatory type
-        # Map signatory types to acceptable roles
+        if signatory_type == "supervisor"
+          # Don't let the document's own employee sign as supervisor of their own request
+          doc_emp = employee || (source.respond_to?(:employee) ? source.employee : nil)
+          next false if doc_emp&.user_id == user.id
+
+          # For supervisor slots: check role match OR check if user is a supervisor in HR hierarchy
+          acceptable_roles = roles_for_signatory_type(signatory_type)
+          next true if (user_role_names & acceptable_roles).any?
+
+          # Fall back to HR hierarchy: user's employee has subordinates
+          user_emp = ::Hr::Employee.where(user_id: user.id, organization_id: organization_id).first
+          next(user_emp.present? && ::Hr::Employee.where(supervisor_id: user_emp.id).exists?)
+        end
+
+        # For other types, check role match
         acceptable_roles = roles_for_signatory_type(signatory_type)
         (user_role_names & acceptable_roles).any?
       end
@@ -686,12 +703,13 @@ module Templates
           [sup.user.full_name]
         else
           # No direct supervisor assigned — find employees who are supervisors in this org
+          # (have subordinates) OR have supervisor/manager roles
           supervisor_names = ::Hr::Employee
             .where(organization_id: organization_id)
-            .active
-            .select(&:supervisor?)
-            .filter_map { |e| e.user&.full_name }
-          supervisor_names.any? ? supervisor_names : users_with_roles(%w[supervisor manager])
+            .where(:_id.ne => emp&.id)
+            .filter_map { |e| e.user&.full_name if ::Hr::Employee.where(supervisor_id: e.id).exists? }
+          role_names = users_with_roles(roles_for_signatory_type("supervisor"))
+          (supervisor_names + role_names).uniq
         end
       else
         # For other types, find users by role
