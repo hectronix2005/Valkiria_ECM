@@ -33,7 +33,7 @@ class GotenbergPdfRetryJob < ApplicationJob
 
       if pdf_bytes
         doc.store_pdf_from_sync!(pdf_bytes)
-        doc.run_integrity_check!(trigger: "post_generation")
+        doc.run_integrity_check!(trigger: Templates::DocumentIntegrityService::TRIGGER_POST_GENERATION)
         log_info "PDF generated successfully for document #{document_id} (#{pdf_bytes.bytesize} bytes)"
       else
         raise "Gotenberg conversion returned nil for document #{document_id}"

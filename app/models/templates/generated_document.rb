@@ -198,7 +198,7 @@ module Templates
       check_completion!
 
       # Validate document integrity after signature application
-      run_integrity_check!(trigger: "post_signature")
+      run_integrity_check!(trigger: Templates::DocumentIntegrityService::TRIGGER_POST_SIGNATURE)
     end
 
     # Apply a single signature to the current PDF

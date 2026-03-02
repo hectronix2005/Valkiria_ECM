@@ -290,7 +290,7 @@ module Templates
     end
 
     def run_integrity_check(doc)
-      doc&.run_integrity_check!(trigger: "post_generation")
+      doc&.run_integrity_check!(trigger: DocumentIntegrityService::TRIGGER_POST_GENERATION)
     rescue StandardError => e
       Rails.logger.error("[RobustDocumentGenerator] Integrity check failed: #{e.message}")
     end

@@ -283,7 +283,7 @@ module Api
             can_download: document.draft_file_id.present?,
             integrity_status: document.integrity_status,
             last_integrity_check_at: document.last_integrity_check_at&.iso8601,
-            integrity_checks: document.integrity_checks
+            integrity_checks: document.latest_integrity_checks
           )
         end
 
