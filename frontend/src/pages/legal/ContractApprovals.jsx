@@ -97,7 +97,12 @@ function SignatureTimeline({ signatures }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{sig.signatory_label}</span>
+                <span className="font-medium text-sm">
+                  {sig.signatory_label}
+                  {sig.status !== 'signed' && sig.eligible_users?.length > 0 && (
+                    <span className="text-xs text-gray-400 font-normal"> ({sig.eligible_users.join(', ')})</span>
+                  )}
+                </span>
                 <Badge status={sig.status === 'signed' ? 'green' : 'gray'}>
                   {sig.status === 'signed' ? 'Firmado' : 'Pendiente'}
                 </Badge>

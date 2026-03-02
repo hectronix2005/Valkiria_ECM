@@ -485,7 +485,8 @@ module Api
                 status: sig["status"],
                 required: sig["required"],
                 signed_at: sig["signed_at"],
-                signed_by_name: sig["signed_by_name"]
+                signed_by_name: sig["signed_by_name"],
+                eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"]) : []
               }
             end : []
 

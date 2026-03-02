@@ -648,7 +648,11 @@ export default function HRDocuments() {
     if (!document.can_sign && document.has_pending_signature) {
       const userSig = document.signatures?.find(s => s.status === 'pending' && s.waiting_for?.length > 0)
       if (userSig?.waiting_for?.length > 0) {
-        alert(`Debes esperar las firmas de: ${userSig.waiting_for.join(', ')}`)
+        const waitingDetails = userSig.waiting_for.map(name => {
+          const sig = document.signatures?.find(s => s.signatory_label === name)
+          return sig?.eligible_users?.length > 0 ? `${name} (${sig.eligible_users.join(', ')})` : name
+        }).join(', ')
+        alert(`Debes esperar las firmas de: ${waitingDetails}`)
         return
       }
     }
@@ -1222,7 +1226,12 @@ export default function HRDocuments() {
                           </div>
                         </div>
                         <div>
-                          <p className="text-sm font-medium">{sig.signatory_label}</p>
+                          <p className="text-sm font-medium">
+                            {sig.signatory_label}
+                            {sig.status !== 'signed' && sig.eligible_users?.length > 0 && (
+                              <span className="text-xs text-gray-400 font-normal"> ({sig.eligible_users.join(', ')})</span>
+                            )}
+                          </p>
                           <p className="text-xs text-gray-500">
                             {sig.status === 'signed'
                               ? `Firmado por ${sig.signed_by_name} - ${formatDate(sig.signed_at)}`

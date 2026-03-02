@@ -729,6 +729,9 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">{sig.label}</p>
+                        {!sig.signed && sig.eligible_users?.length > 0 && (
+                          <p className="text-xs text-gray-400">({sig.eligible_users.join(', ')})</p>
+                        )}
                         {sig.signed && (
                           <p className="text-xs text-green-600">
                             Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
@@ -803,7 +806,13 @@ function VacationRequestWizard({ onClose, onSuccess, balance, bookedRanges = [] 
               <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
               <div className="text-sm text-amber-800">
                 <p className="font-medium">Esperando firmas previas</p>
-                <p className="mt-1">Debe esperar las firmas de: {employeeSig?.waiting_for?.join(', ')} antes de poder firmar.</p>
+                <p className="mt-1">
+                  Debe esperar las firmas de: {employeeSig?.waiting_for?.map((name, i) => {
+                    const sig = documentInfo?.signatures?.find(s => s.label === name || s.signatory_type_code === name)
+                    const users = sig?.eligible_users || employeeSig?.eligible_users
+                    return <span key={i}>{i > 0 ? ', ' : ''}{name}{users?.length > 0 && <span className="text-amber-600"> ({users.join(', ')})</span>}</span>
+                  })} antes de poder firmar.
+                </p>
               </div>
             </div>
           )}
@@ -1296,6 +1305,9 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                             {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
                             {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
                             {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
+                            {!sig.signed && sig.eligible_users?.length > 0 && (
+                              <span className="text-gray-400"> ({sig.eligible_users.join(', ')})</span>
+                            )}
                           </p>
                           {sig.signed && (
                             <p className="text-xs text-green-600 mt-0.5">

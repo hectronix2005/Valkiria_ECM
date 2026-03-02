@@ -423,6 +423,9 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
                           {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
                           {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
                           {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
+                          {!sig.signed && sig.eligible_users?.length > 0 && (
+                            <span className="text-gray-400"> ({sig.eligible_users.join(', ')})</span>
+                          )}
                         </p>
                         {sig.signed && (
                           <p className="text-xs text-green-600 mt-0.5">
@@ -740,6 +743,9 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
                           {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
                           {sig.signatory_type_code === 'supervisor' && 'Supervisor'}
                           {sig.signatory_type_code === 'legal' && 'Legal'}
+                          {!sig.signed && sig.eligible_users?.length > 0 && (
+                            <span className="text-gray-400"> ({sig.eligible_users.join(', ')})</span>
+                          )}
                         </p>
                         {sig.signed && (
                           <p className="text-xs text-green-600 mt-0.5">

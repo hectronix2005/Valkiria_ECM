@@ -100,6 +100,33 @@ module Api
         render json: { error: message, errors: Array(errors) }, status: status
       end
 
+      # Returns the full names of users in the current organization
+      # whose roles match the given signatory type code.
+      def eligible_users_for_signatory_type(signatory_type_code)
+        return [] if signatory_type_code.blank? || current_organization.blank?
+
+        role_names = case signatory_type_code
+                     when "hr" then %w[hr hr_manager admin]
+                     when "hr_manager" then %w[hr_manager admin]
+                     when "supervisor" then %w[supervisor manager]
+                     when "legal", "legal_representative" then %w[legal legal_representative]
+                     when "admin" then %w[admin]
+                     when "ceo", "general_manager" then %w[ceo general_manager]
+                     when "accountant" then %w[accountant]
+                     else [signatory_type_code]
+                     end
+
+        role_ids = ::Identity::Role.where(:name.in => role_names).pluck(:id)
+        return [] if role_ids.empty?
+
+        ::Identity::User
+          .where(organization_id: current_organization.id)
+          .where(:role_ids.in => role_ids)
+          .pluck(:first_name, :last_name)
+          .map { |fn, ln| [fn, ln].compact.join(" ").strip }
+          .reject(&:blank?)
+      end
+
       private
 
       def user_not_authorized(exception = nil)
