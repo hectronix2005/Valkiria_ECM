@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { renderAsync } from 'docx-preview'
 import logger from '../utils/logger'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { generatedDocumentService } from '../services/api'
@@ -29,7 +30,11 @@ import {
   X,
   Briefcase,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX
 } from 'lucide-react'
 
 const statusConfig = {
@@ -44,6 +49,27 @@ const templateCategories = {
   certification: 'Certificación',
   vacation: 'Vacaciones',
   other: 'Otro'
+}
+
+const integrityConfig = {
+  passed:  { label: 'Verificado',    color: 'bg-green-100 text-green-700',  icon: ShieldCheck },
+  warning: { label: 'Advertencias',  color: 'bg-amber-100 text-amber-700',  icon: ShieldAlert },
+  failed:  { label: 'Fallido',       color: 'bg-red-100 text-red-700',      icon: ShieldX },
+  pending: { label: 'Pendiente',     color: 'bg-gray-100 text-gray-500',    icon: Shield }
+}
+
+const checkLabels = {
+  file_exists: 'Archivo existe',
+  file_not_empty: 'Archivo no vacío',
+  content_type: 'Tipo de contenido',
+  file_size: 'Tamaño de archivo',
+  docx_structure: 'Estructura DOCX',
+  variables_replaced: 'Variables reemplazadas',
+  signatures_init: 'Firmas inicializadas',
+  signature_entries: 'Entradas de firma',
+  sig_positions: 'Posiciones de firma',
+  signing_order: 'Orden de firma',
+  sig_images: 'Imágenes de firma'
 }
 
 export default function Documents() {
@@ -69,8 +95,12 @@ export default function Documents() {
 
   const [signing, setSigning] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewDocxBlob, setPreviewDocxBlob] = useState(null)
   const [previewing, setPreviewing] = useState(null)
   const [expandedSigs, setExpandedSigs] = useState({})
+  const [showIntegrityChecks, setShowIntegrityChecks] = useState(false)
+  const [docxMetrics, setDocxMetrics] = useState(null)
+  const docxPreviewRef = useRef(null)
 
   const signMutation = useMutation({
     mutationFn: (id) => generatedDocumentService.sign(id),
@@ -108,13 +138,25 @@ export default function Documents() {
     }
   }
 
+  const isDocx = (doc, blob) => {
+    const ct = blob?.type || ''
+    if (ct.includes('wordprocessingml') || ct.includes('officedocument')) return true
+    const name = doc.file_name || doc.name || ''
+    return name.endsWith('.docx')
+  }
+
   const handlePreview = async (doc) => {
     try {
       setPreviewing(doc.id)
       const response = await generatedDocumentService.download(doc.id)
-      const blob = new Blob([response.data], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      setPreviewUrl(url)
+      const blob = response.data // Already a Blob (responseType: 'blob')
+      if (isDocx(doc, blob)) {
+        setPreviewDocxBlob(blob)
+        setPreviewUrl(null)
+      } else {
+        setPreviewUrl(URL.createObjectURL(blob))
+        setPreviewDocxBlob(null)
+      }
     } catch (error) {
       alert('Error al previsualizar el documento')
       logger.error('Preview error:', error)
@@ -126,7 +168,39 @@ export default function Documents() {
   const handleClosePreview = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setPreviewUrl(null)
+    setPreviewDocxBlob(null)
   }
+
+  // Render DOCX with docx-preview
+  useEffect(() => {
+    if (!previewDocxBlob || !docxPreviewRef.current) return
+    docxPreviewRef.current.innerHTML = ''
+    setDocxMetrics(null)
+    renderAsync(previewDocxBlob, docxPreviewRef.current, null, {
+      inWrapper: true,
+      ignoreWidth: false,
+      ignoreHeight: false,
+      ignoreFonts: false,
+      breakPages: true,
+      ignoreLastRenderedPageBreak: false,
+      experimental: true,
+      trimXmlDeclaration: true,
+      useBase64URL: true,
+    }).then(() => {
+      const section = docxPreviewRef.current?.querySelector('section.docx')
+      if (section) {
+        const container = docxPreviewRef.current
+        const sectionRect = section.getBoundingClientRect()
+        const containerRect = container.getBoundingClientRect()
+        const pdfW = selectedDocument?.pdf_width || 612
+        setDocxMetrics({
+          offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
+          offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
+          scale: sectionRect.width / pdfW,
+        })
+      }
+    }).catch((err) => logger.error('DOCX render error:', err))
+  }, [previewDocxBlob])
 
   const documentsRaw = data?.data?.data || []
   const meta = data?.data?.meta || {}
@@ -206,6 +280,7 @@ export default function Documents() {
     setSelectedDocument(document)
     setShowDetailModal(true)
     setExpandedSigs({})
+    setShowIntegrityChecks(false)
     // Fetch detailed info with signatures
     try {
       const response = await generatedDocumentService.get(document.id)
@@ -231,8 +306,8 @@ export default function Documents() {
       setDownloading(document.id)
       const response = await generatedDocumentService.download(document.id)
 
-      // Create blob and download
-      const blob = new Blob([response.data], { type: 'application/pdf' })
+      // Download using blob directly from response
+      const blob = response.data // Already a Blob (responseType: 'blob')
       const url = window.URL.createObjectURL(blob)
       const link = window.document.createElement('a')
       link.href = url
@@ -480,6 +555,16 @@ export default function Documents() {
                               Tu firma pendiente
                             </p>
                           )}
+                          {doc.integrity_status === 'warning' && (
+                            <span title="Integridad: Advertencias" className="inline-flex ml-1">
+                              <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+                            </span>
+                          )}
+                          {doc.integrity_status === 'failed' && (
+                            <span title="Integridad: Fallido" className="inline-flex ml-1">
+                              <ShieldX className="w-3.5 h-3.5 text-red-500" />
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-right">
                           <div className="flex items-center justify-end gap-1">
@@ -697,6 +782,69 @@ export default function Documents() {
               </div>
             )}
 
+            {/* Integrity */}
+            {selectedDocument.integrity_status && selectedDocument.integrity_status !== 'pending' && (
+              <div className="space-y-2">
+                <div
+                  className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors"
+                  onClick={() => setShowIntegrityChecks(prev => !prev)}
+                >
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const cfg = integrityConfig[selectedDocument.integrity_status] || integrityConfig.pending
+                      const IntIcon = cfg.icon
+                      return (
+                        <>
+                          <IntIcon className="w-4 h-4" />
+                          <h4 className="text-sm font-medium text-gray-700">Integridad del Documento</h4>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>
+                            {cfg.label}
+                          </span>
+                        </>
+                      )
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {selectedDocument.last_integrity_check_at && (
+                      <span className="text-xs text-gray-400">{formatDate(selectedDocument.last_integrity_check_at)}</span>
+                    )}
+                    {showIntegrityChecks
+                      ? <ChevronUp className="w-4 h-4 text-gray-400" />
+                      : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                  </div>
+                </div>
+                {showIntegrityChecks && selectedDocument.integrity_checks?.length > 0 && (
+                  <div className="space-y-1 ml-1">
+                    {selectedDocument.integrity_checks.map((check, idx) => {
+                      const SeverityIcon = check.severity === 'error'
+                        ? XCircle
+                        : check.severity === 'warning'
+                          ? AlertCircle
+                          : CheckCircle
+                      const severityColor = check.severity === 'error'
+                        ? 'text-red-500'
+                        : check.severity === 'warning'
+                          ? 'text-amber-500'
+                          : 'text-green-500'
+                      return (
+                        <div key={idx} className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg text-sm">
+                          <SeverityIcon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${severityColor}`} />
+                          <div>
+                            <span className="font-medium text-gray-700">
+                              {checkLabels[check.name] || check.name}
+                            </span>
+                            {check.message && (
+                              <p className="text-xs text-gray-500 mt-0.5">{check.message}</p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex justify-between pt-4 border-t">
               <div>
@@ -783,20 +931,62 @@ export default function Documents() {
         </div>
       </Modal>
 
-      {/* PDF Preview Modal */}
+      {/* Document Preview Modal */}
       <Modal
-        isOpen={!!previewUrl}
+        isOpen={!!previewUrl || !!previewDocxBlob}
         onClose={handleClosePreview}
         title="Previsualización de Documento"
         size="full"
       >
-        <div className="flex flex-col h-[80vh]">
+        <div>
           {previewUrl && (
             <iframe
               src={previewUrl}
-              className="w-full flex-1 border rounded-lg bg-gray-100"
+              className="w-full h-[80vh] border rounded-lg bg-gray-100"
               title="Vista previa del documento"
             />
+          )}
+          {previewDocxBlob && (
+            <div className="docx-preview-container border rounded-lg overflow-hidden">
+              <div className="relative max-h-[80vh] overflow-auto bg-white">
+                <div ref={docxPreviewRef} style={{ position: 'relative' }} />
+                {docxMetrics && selectedDocument?.signatures?.filter(s => s.signed_at && s.signature_image && s.position_box).map((sig, idx) => {
+                  const box = sig.position_box
+                  const m = docxMetrics
+                  return (
+                    <div key={idx} style={{
+                      position: 'absolute',
+                      left: m.offsetLeft + box.x * m.scale,
+                      top: m.offsetTop + box.y * m.scale,
+                      width: box.width * m.scale,
+                      height: box.height * m.scale,
+                      zIndex: 10,
+                      pointerEvents: 'none',
+                    }}>
+                      <img
+                        src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                        alt={`Firma de ${sig.signed_by_name}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+              <style>{`
+                .docx-preview-container .docx-wrapper {
+                  background: #f9fafb !important;
+                  padding: 20px !important;
+                  display: flex !important;
+                  flex-direction: column !important;
+                  align-items: center !important;
+                }
+                .docx-preview-container .docx-wrapper > section.docx {
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important;
+                  background: white !important;
+                  margin: 0 auto !important;
+                }
+              `}</style>
+            </div>
           )}
           <div className="flex justify-end gap-3 pt-4 border-t mt-4">
             <Button variant="secondary" onClick={handleClosePreview}>

@@ -235,7 +235,8 @@ module Api
           requested_by: document.requested_by&.full_name,
           can_sign: document.can_be_signed_by?(current_user),
           has_pending_signature: document.signatures.any? { |s| s["user_id"] == current_user.id.to_s && s["status"] == "pending" },
-          user_has_digital_signature: current_user.signatures.active.exists?
+          user_has_digital_signature: current_user.signatures.active.exists?,
+          integrity_status: document.integrity_status
         }
 
         if detailed
