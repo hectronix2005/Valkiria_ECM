@@ -100,6 +100,19 @@ class AgentRule
         description: "Orden jerárquico de firmas para contratos"
       },
 
+      {
+        agent_id: "signature_guardian_agent",
+        document_type: nil,
+        rule_name: "coordinate_drift",
+        rule_config: {
+          "info_threshold" => 20,
+          "warning_threshold" => 50,
+          "critical_threshold" => 80
+        },
+        severity: "warning",
+        description: "Umbrales de desviación de coordenadas de firma (pts). Detecta cuando las coordenadas del template no coinciden con las líneas de firma del PDF generado."
+      },
+
       # RequestTracker
       {
         agent_id: "request_tracker_agent",

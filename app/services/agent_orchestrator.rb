@@ -30,7 +30,7 @@ class AgentOrchestrator
   # Event names are auto-generated from model class: MyModule::MyModel → "my_module/my_model.created"
   AGENT_MAP = {
     # Documentos generados desde templates (Templates::GeneratedDocument)
-    "templates/generated_document.created"        => %w[DocValidatorAgent],
+    "templates/generated_document.created"        => %w[DocValidatorAgent SignatureGuardianAgent],
     "templates/generated_document.updated"        => %w[DocValidatorAgent SignatureGuardianAgent],
     "templates/generated_document.status_changed" => %w[SignatureGuardianAgent],
 

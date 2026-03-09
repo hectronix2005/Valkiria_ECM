@@ -277,7 +277,7 @@ class SignatureGuardianAgent < BaseAgent
     pdf_content = doc.file_content
     return unless pdf_content
 
-    page_height = 841.89 # Standard A4
+    page_height = actual_page_height(pdf_content)
     anchors = doc.send(:find_signature_anchors, pdf_content, page_height, 0)
 
     # Find actual image positions in the PDF
@@ -429,41 +429,47 @@ class SignatureGuardianAgent < BaseAgent
   # -----------------------------------------------------------
   # Check 9: coordinate_drift
   # Detect when template signatory coordinates don't match the
-  # generated PDF's actual signature line positions. This happens
-  # when the template DOCX has a different page count than the
-  # generated PDF (e.g., template=3 pages, generated=1 page).
-  # The anchor-based fix in apply_signature_to_pdf! auto-corrects
-  # placement at signing time, but this check warns about the
-  # underlying coordinate mismatch so admins can recalibrate.
+  # generated PDF's actual signature line positions. Runs on
+  # document creation AND updates to catch misalignment BEFORE
+  # anyone signs.
+  #
+  # Also detects page size mismatches (template says Letter but
+  # PDF is A4) which cause systematic coordinate drift.
   # -----------------------------------------------------------
-  def check_coordinate_drift(doc, sigs)
+  def check_coordinate_drift(doc, _sigs)
     return unless doc.draft_file_id.present?
     return unless doc.file_name&.end_with?(".pdf")
     return unless doc.template&.signatories&.any?
 
+    # Load configurable thresholds
+    rule = load_rule("coordinate_drift")
+    config = rule&.rule_config || {}
+    info_threshold = config.fetch("info_threshold", 20)
+    warning_threshold = config.fetch("warning_threshold", 50)
+    critical_threshold = config.fetch("critical_threshold", 80)
+
     pdf_content = doc.file_content
     return unless pdf_content
 
-    page_height = 841.89
+    page_height = actual_page_height(pdf_content)
+    page_width = actual_page_width(pdf_content)
     anchors = doc.send(:find_signature_anchors, pdf_content, page_height, 0)
     return if anchors.empty?
 
     # Count pages in generated PDF
-    begin
-      tmpf = Tempfile.new(["check", ".pdf"])
-      tmpf.binmode
-      tmpf.write(pdf_content)
-      tmpf.rewind
-      cpdf = CombinePDF.load(tmpf.path)
-      generated_pages = cpdf.pages.count
-      tmpf.close
-      tmpf.unlink
-    rescue StandardError
-      generated_pages = nil
-    end
-
+    generated_pages = pdf_page_count(pdf_content)
     template_pages = doc.template.try(:pdf_page_count)
     page_mismatch = template_pages && generated_pages && template_pages != generated_pages
+
+    # Detect page size mismatch (template dimensions vs actual PDF)
+    tmpl_width = doc.template.pdf_width
+    tmpl_height = doc.template.pdf_height
+    size_mismatch = false
+    if tmpl_width && tmpl_height && page_width && page_height
+      width_diff = (tmpl_width - page_width).abs
+      height_diff = (tmpl_height - page_height).abs
+      size_mismatch = width_diff > 5 || height_diff > 5
+    end
 
     drifted = []
     doc.template.signatories.by_position.each do |sig|
@@ -474,24 +480,27 @@ class SignatureGuardianAgent < BaseAgent
       anchor_y = anchor[:y_from_top]
       drift = (template_y - anchor_y).abs
 
-      if drift > 20
+      if drift > info_threshold
         drifted << {
           label: sig.label,
+          signatory_type: sig.signatory_type_code,
+          template_x: sig.x_position.to_f.round(1),
           template_y: template_y.round(1),
+          anchor_x: anchor[:x],
           anchor_y: anchor_y.round(1),
           drift: drift.round(1)
         }
       end
     end
 
-    # Tiered severity based on max drift:
-    #   >80pts = critical (likely wrong anchor matching or severe miscalibration)
-    #   >50pts = warning  (significant drift, should recalibrate)
-    #   20-50  = info     (normal template-to-actual drift from page reflow)
+    # Tiered severity based on max drift (configurable thresholds):
+    #   >critical_threshold  = critical (severe miscalibration)
+    #   >warning_threshold   = warning  (significant drift — recalibrate)
+    #   info..warning        = info     (normal drift, auto-corrected)
     max_drift = drifted.map { |d| d[:drift] }.max || 0
-    severity = if max_drift > 80
+    severity = if max_drift > critical_threshold
                  :critical
-               elsif max_drift > 50
+               elsif max_drift > warning_threshold || size_mismatch
                  :warning
                else
                  :info
@@ -500,14 +509,28 @@ class SignatureGuardianAgent < BaseAgent
     # Only fail for warning/critical — info-level drift is expected and auto-corrected
     passed = drifted.empty? || severity == :info
 
+    causes = []
+    if size_mismatch
+      causes << "Template espera #{tmpl_width.round(0)}x#{tmpl_height.round(0)}pts pero el PDF es #{page_width.round(0)}x#{page_height.round(0)}pts."
+    end
+    if page_mismatch
+      causes << "Template tiene #{template_pages} página(s) pero el PDF generado tiene #{generated_pages}."
+    end
+    causes << "Coordenadas del template no coinciden con las líneas de firma del PDF." if drifted.any? && causes.empty?
+
     add_check("coordinate_drift", passed, {
       severity: severity,
       drifted_signatories: drifted,
+      max_drift: max_drift.round(1),
+      template_dimensions: tmpl_width && tmpl_height ? "#{tmpl_width.round(0)}x#{tmpl_height.round(0)}" : nil,
+      pdf_dimensions: page_width && page_height ? "#{page_width.round(0)}x#{page_height.round(0)}" : nil,
+      size_mismatch: size_mismatch,
       template_pages: template_pages,
       generated_pages: generated_pages,
       page_mismatch: page_mismatch,
-      cause: page_mismatch ? "Template tiene #{template_pages} página(s) pero el PDF generado tiene #{generated_pages}. Las coordenadas del template no coinciden con el documento generado." : "Coordenadas del template no coinciden con las líneas de firma del PDF generado.",
-      note: "Las firmas se reposicionan automáticamente usando detección de anclas (líneas de subrayado), pero las coordenadas del template deberían recalibrarse."
+      cause: causes.join(" "),
+      recommendation: drifted.any? ? "Recalibre las coordenadas de firma en el editor de template para que coincidan con las líneas de firma del documento generado." : nil,
+      note: "Las firmas se reposicionan automáticamente usando detección de anclas, pero las coordenadas del template deberían recalibrarse para evitar desplazamientos."
     })
   end
 
@@ -547,6 +570,29 @@ class SignatureGuardianAgent < BaseAgent
       all_signatures_complete: true,
       issues: issues
     })
+  end
+
+  # -----------------------------------------------------------
+  # PDF dimension helpers
+  # -----------------------------------------------------------
+  def actual_page_height(pdf_content)
+    cpdf = CombinePDF.parse(pdf_content)
+    cpdf.pages.first&.mediabox&.dig(3)&.to_f || 841.89
+  rescue StandardError
+    841.89
+  end
+
+  def actual_page_width(pdf_content)
+    cpdf = CombinePDF.parse(pdf_content)
+    cpdf.pages.first&.mediabox&.dig(2)&.to_f || 595.28
+  rescue StandardError
+    595.28
+  end
+
+  def pdf_page_count(pdf_content)
+    CombinePDF.parse(pdf_content).pages.count
+  rescue StandardError
+    nil
   end
 
   # -----------------------------------------------------------
@@ -590,9 +636,15 @@ class SignatureGuardianAgent < BaseAgent
       end.join("; ")
     when "coordinate_drift"
       drifted = details[:drifted_signatories] || []
-      cause = details[:cause] || ""
-      drift_desc = drifted.map { |d| "#{d[:label]}: template=#{d[:template_y]} vs actual=#{d[:anchor_y]} (#{d[:drift]}pts)" }.join("; ")
-      "#{cause} #{drift_desc}"
+      parts = []
+      parts << details[:cause] if details[:cause].present?
+      parts << "Máx. desviación: #{details[:max_drift]}pts" if details[:max_drift]
+      if drifted.any?
+        drift_desc = drifted.map { |d| "#{d[:label]}: template(#{d[:template_x]},#{d[:template_y]}) vs ancla(#{d[:anchor_x]},#{d[:anchor_y]}) drift=#{d[:drift]}pts" }.join("; ")
+        parts << drift_desc
+      end
+      parts << details[:recommendation] if details[:recommendation].present?
+      parts.join(" ")
     when "request_status_consistency"
       (details[:issues] || []).join("; ")
     else
