@@ -1,0 +1,24 @@
+# frozen_string_literal: true
+
+namespace :agents do
+  desc "Run service_health_agent checks manually and print results"
+  task health_debug: :environment do
+    agent = ServiceHealthAgent.new("manual_debug")
+
+    %w[check_mongodb check_redis check_sidekiq check_rails_api check_gotenberg check_vite_frontend].each do |method|
+      begin
+        agent.send(method)
+      rescue StandardError => e
+        puts "#{method}: EXCEPTION #{e.class}: #{e.message}"
+      end
+    end
+
+    checks = agent.instance_variable_get(:@checks) || {}
+    checks.each do |name, result|
+      status = result[:passed] ? "PASS" : "FAIL"
+      puts "#{status} | #{name} | #{result[:details].inspect}"
+    end
+
+    puts "\nTotal: #{checks.size} checks, #{checks.count { |_, r| !r[:passed] }} failures"
+  end
+end
