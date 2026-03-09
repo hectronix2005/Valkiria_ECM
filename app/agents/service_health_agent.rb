@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "net/http"
+require "sidekiq/api"
 
 # =============================================================
 # Valkyria ECM — ServiceHealthAgent
@@ -102,8 +103,14 @@ class ServiceHealthAgent < BaseAgent
     rule = load_rule("redis")
     timeout = rule&.rule_config&.fetch("timeout", 5) || 5
 
+    redis_url = ENV.fetch("REDIS_URL", "redis://localhost:6379/0")
+    redis_opts = { url: redis_url, timeout: timeout }
+    if redis_url.start_with?("rediss://")
+      redis_opts[:ssl_params] = { verify_mode: OpenSSL::SSL::VERIFY_NONE }
+    end
+
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    pong = Redis.new(url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0"), timeout: timeout).ping
+    pong = Redis.new(**redis_opts).ping
     latency = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round
 
     add_check("redis", pong == "PONG", { response: pong, latency_ms: latency })
