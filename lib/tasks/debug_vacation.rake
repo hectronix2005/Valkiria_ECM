@@ -75,4 +75,16 @@ namespace :debug do
       end
     end
   end
+
+  desc "Reset signatures on a vacation request document"
+  task :reset_signatures, [:request_number] => :environment do |_t, args|
+    rn = args[:request_number] || "VAC-2026-00013"
+    vac = Hr::VacationRequest.find_by(request_number: rn)
+    doc = Templates::GeneratedDocument.where(uuid: vac.document_uuid).first
+
+    puts "Resetting signatures for #{rn} (doc: #{doc.uuid})"
+    doc.reset_signatures!
+    puts "Done. Status: #{doc.status}"
+    doc.signatures.each { |s| puts "  #{s['label']}: #{s['status']}" }
+  end
 end
