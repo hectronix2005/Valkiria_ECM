@@ -9,6 +9,7 @@ module Hr
     include Mongoid::Document
     include Mongoid::Timestamps
     include UuidIdentifiable
+    include Agentable
 
     store_in collection: "hr_vacation_requests"
 

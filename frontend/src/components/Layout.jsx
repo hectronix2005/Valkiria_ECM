@@ -28,7 +28,8 @@ import {
   Check,
   AlertTriangle,
   Lock,
-  History
+  History,
+  Activity
 } from 'lucide-react'
 
 function formatTimeAgo(dateString) {
@@ -82,6 +83,7 @@ const adminNavigation = [
   { name: 'Permisos', href: '/admin/permissions', icon: Lock },
   { name: 'Auditoría', href: '/admin/audit-logs', icon: History },
   { name: 'Error Logs', href: '/admin/error-logs', icon: AlertTriangle },
+  { name: 'Agentes', href: '/admin/agent-alerts', icon: Activity },
 ]
 
 const legalNavigation = [
@@ -375,7 +377,7 @@ export default function Layout({ children }) {
                 <CollapsibleSection
                   id="system"
                   title="Sistema"
-                  items={isAdmin ? adminNavigation : adminNavigation.filter(item => item.href !== '/admin/error-logs' && item.href !== '/admin/permissions' && item.href !== '/admin/audit-logs')}
+                  items={isAdmin ? adminNavigation : adminNavigation.filter(item => item.href !== '/admin/error-logs' && item.href !== '/admin/permissions' && item.href !== '/admin/audit-logs' && item.href !== '/admin/agent-alerts')}
                   icon={Settings}
                 />
               )}

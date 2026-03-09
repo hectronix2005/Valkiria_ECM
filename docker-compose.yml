@@ -1,0 +1,11 @@
+# Services required for local development (cross-platform: macOS, Windows, Linux)
+# Usage: docker compose up -d
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    ports:
+      - "3200:3000"
+    environment:
+      - GOTENBERG_API_TIMEOUT=60s
+      - GOTENBERG_LIBREOFFICE_RESTART_AFTER=10
+    restart: unless-stopped

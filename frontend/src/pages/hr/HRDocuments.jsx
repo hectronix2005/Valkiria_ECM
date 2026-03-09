@@ -1252,6 +1252,9 @@ export default function HRDocuments() {
                                 : sig.user_name || 'Pendiente'
                               }
                             </p>
+                            {sig.substituted && (
+                              <p className="text-xs text-amber-600">(en sustitución de {sig.original_user_name})</p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

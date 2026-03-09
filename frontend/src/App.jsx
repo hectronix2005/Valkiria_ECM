@@ -107,6 +107,7 @@ const AdminUsers = lazy(() => import('./pages/admin/Users'))
 const ErrorLogs = lazy(() => import('./pages/admin/ErrorLogs'))
 const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'))
 const Permissions = lazy(() => import('./pages/admin/Permissions'))
+const AgentAlerts = lazy(() => import('./pages/admin/AgentAlerts'))
 const Documents = lazy(() => import('./pages/Documents'))
 const Folders = lazy(() => import('./pages/Folders'))
 const ThirdParties = lazy(() => import('./pages/legal/ThirdParties'))
@@ -430,6 +431,16 @@ export default function App() {
         element={
           <ProtectedRoute requireStrictAdmin>
             <ErrorLogs />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Agent Alerts / Guardian (strict admin only) */}
+      <Route
+        path="/admin/agent-alerts"
+        element={
+          <ProtectedRoute requireStrictAdmin>
+            <AgentAlerts />
           </ProtectedRoute>
         }
       />

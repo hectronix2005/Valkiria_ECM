@@ -6,6 +6,7 @@ ruby "~> 3.4.0"
 
 # Core Framework
 gem "bootsnap", "~> 1.18", require: false
+gem "dotenv-rails", "~> 3.1", groups: [:development, :test]
 gem "puma", ">= 5.0"
 gem "rails", "~> 7.2.3"
 
@@ -21,6 +22,7 @@ gem "pundit", "~> 2.4"
 # Background Jobs
 gem "redis", ">= 4.0.1"
 gem "sidekiq", "~> 7.3"
+gem "sidekiq-cron", "~> 1.12"
 
 # API & Serialization
 gem "jsonapi-serializer", "~> 2.2"

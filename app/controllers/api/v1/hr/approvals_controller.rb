@@ -55,8 +55,9 @@ module Api
           when ::Hr::EmploymentCertificationRequest
             # Certifications need to go through processing first
             @approvable.start_processing!(actor: current_employee) if @approvable.pending?
-            @approvable.complete!(actor: current_employee, document_uuid: params[:document_uuid] || @approvable.document_uuid || SecureRandom.uuid)
-            auto_sign_certification_document(@approvable)
+            sign_certification_document!(@approvable)
+            @approvable.complete!(actor: current_employee,
+              document_uuid: params[:document_uuid] || @approvable.document_uuid || SecureRandom.uuid)
             NotificationService.certification_completed(@approvable)
           end
           NotificationService.notify_document_signers(@approvable, @approvable.status, actor: current_employee)
@@ -72,6 +73,7 @@ module Api
                ::Hr::EmploymentCertificationRequest::ValidationError,
                ::Hr::EmploymentCertificationRequest::AuthorizationError,
                ::Hr::Employee::InsufficientBalanceError,
+               ::Templates::GeneratedDocument::SignatureError,
                Mongoid::Errors::Validations => e
           handle_approval_error(e)
         end
@@ -179,6 +181,14 @@ module Api
              @approvable.processing? && generated_doc.reload.all_required_signed?
             @approvable.complete!(actor: current_employee, document_uuid: @approvable.document_uuid)
             NotificationService.certification_completed(@approvable)
+            NotificationService.notify_document_signers(@approvable, @approvable.status, actor: current_employee)
+          end
+
+          # Auto-approve vacation if all signatures are done
+          if @approvable.is_a?(::Hr::VacationRequest) &&
+             @approvable.pending? && generated_doc.reload.all_required_signed?
+            @approvable.approve!(actor: current_employee, reason: "Aprobada automáticamente al completar todas las firmas")
+            NotificationService.vacation_approved(@approvable)
             NotificationService.notify_document_signers(@approvable, @approvable.status, actor: current_employee)
           end
 
@@ -360,6 +370,8 @@ module Api
                 signed_by_name: sig["signed_by_name"],
                 signed_by: sig["signed_by_name"],
                 required: sig["required"],
+                substituted: sig["substituted"] == true,
+                original_user_name: sig["original_user_name"],
                 eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"], doc: doc) : []
               }
               if sig["signed_at"].present? && sig["signature_id"].present?
@@ -430,9 +442,9 @@ module Api
           }
         end
 
-        # When HR approves a certification, auto-sign the document's HR signature slot.
-        # This ensures the document status is consistent with the certification status.
-        def auto_sign_certification_document(certification)
+        # When HR approves a certification, sign the document's HR signature slot.
+        # Requires a digital signature — raises SignatureError if none configured.
+        def sign_certification_document!(certification)
           return unless certification.document_uuid.present?
 
           doc = ::Templates::GeneratedDocument.where(uuid: certification.document_uuid).first
@@ -441,22 +453,13 @@ module Api
           sig_slot = doc.pending_signature_for(current_user)
           return unless sig_slot
 
-          user_signature = current_user.signatures.where(is_default: true).first || current_user.signatures.first
-
-          if user_signature
-            # Sign with the user's digital signature (applies image to PDF)
-            doc.sign!(user: current_user, signature: user_signature)
-          else
-            # No digital signature configured — mark the slot as administratively signed
-            sig_slot["status"] = "signed"
-            sig_slot["signed_at"] = Time.current.iso8601
-            sig_slot["signed_by_name"] = current_user.full_name
-            doc.save!
-            doc.send(:check_completion!)
+          user_signature = current_user.signatures.where(is_default: true).first ||
+                           current_user.signatures.first
+          unless user_signature
+            raise ::Templates::GeneratedDocument::SignatureError,
+                  "Debes configurar tu firma digital antes de aprobar. Ve a tu perfil para crearla."
           end
-        rescue StandardError => e
-          Rails.logger.warn("Auto-sign failed for certification #{certification.request_number}: #{e.message}")
-          # Don't fail the approval if auto-sign fails — certification is already completed
+          doc.sign!(user: current_user, signature: user_signature)
         end
 
         def render_missing_reason
@@ -469,7 +472,12 @@ module Api
 
           status = error_status_for(error)
 
-          if status
+          if error.is_a?(::Templates::GeneratedDocument::SignatureError)
+            render json: {
+              error: error.message,
+              action_required: { type: "configure_signature" }
+            }, status: :unprocessable_content
+          elsif status
             render json: { error: error.message }, status: status
           else
             render json: { error: "Error processing approval: #{error.message}" }, status: :internal_server_error
@@ -483,6 +491,7 @@ module Api
                ::Hr::VacationRequest::ValidationError,
                ::Hr::EmploymentCertificationRequest::ValidationError,
                ::Hr::Employee::InsufficientBalanceError,
+               ::Templates::GeneratedDocument::SignatureError,
                Mongoid::Errors::Validations
             :unprocessable_content
           when ::Hr::VacationRequest::AuthorizationError,

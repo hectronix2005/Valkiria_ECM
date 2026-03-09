@@ -227,7 +227,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
         })
       }
     }).catch(e => logger.error('[VacApprovals] Error rendering DOCX:', e))
-  }, [docxBlob, documentInfo?.pdf_width])
+  }, [docxBlob])
 
   const loadDocument = async () => {
     setPdfLoading(true)
@@ -256,6 +256,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
     mutationFn: (id) => approvalService.signDocument(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approvals'] })
+      queryClient.invalidateQueries({ queryKey: ['approval-detail'] })
       setSignError('')
       if (pdfUrl) { URL.revokeObjectURL(pdfUrl); setPdfUrl(null) }
       setDocxBlob(null)
@@ -381,7 +382,7 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
                       top: m.offsetTop + box.y * m.scale,
                       width: box.width * m.scale,
                       height: box.height * m.scale,
-                      zIndex: 10, pointerEvents: 'none', background: '#fff',
+                      zIndex: 10, pointerEvents: 'none',
                     }}>
                       <img src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
                         alt={`Firma de ${sig.signed_by}`}
@@ -444,6 +445,9 @@ function VacationDetailWithDocument({ request, onClose, onApprove, onReject }) {
                             {sig.signed && (
                               <p className="text-xs text-green-600 mt-0.5">
                                 Firmado por {sig.signed_by_name} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                                {sig.substituted && (
+                                  <span className="text-amber-600"> (en sustitución de {sig.original_user_name})</span>
+                                )}
                               </p>
                             )}
                           </div>
@@ -568,6 +572,57 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
     }
   }, [request.id, request.document_uuid, request.pdf_ready])
 
+  // Detect signature overlay position from rendered DOCX text landmarks
+  const detectSignaturePosition = () => {
+    const section = docxRef.current?.querySelector('section.docx')
+    if (!section) return null
+    const container = docxRef.current
+    const containerRect = container.getBoundingClientRect()
+    const paragraphs = Array.from(section.querySelectorAll('p'))
+    const textBlocks = paragraphs
+      .map(p => ({ text: p.textContent?.trim() || '', rect: p.getBoundingClientRect() }))
+      .filter(b => b.rect.height > 0)
+
+    const closingPhrases = ['atentamente', 'cordialmente', 'sinceramente']
+    let anchorIdx = -1
+    for (let i = 0; i < textBlocks.length; i++) {
+      if (closingPhrases.some(ph => textBlocks[i].text.toLowerCase().includes(ph))) {
+        anchorIdx = i; break
+      }
+    }
+    if (anchorIdx < 0) {
+      for (let i = 0; i < textBlocks.length; i++) {
+        if (/_{5,}/.test(textBlocks[i].text)) {
+          const ulRect = textBlocks[i].rect
+          const sectionRect = section.getBoundingClientRect()
+          const sectionLeft = sectionRect.left - containerRect.left + container.scrollLeft
+          return {
+            x: sectionLeft + (ulRect.left - sectionRect.left),
+            y: ulRect.top - containerRect.top + container.scrollTop - 42,
+            width: ulRect.width, height: 40,
+          }
+        }
+      }
+      return null
+    }
+    let nextTextIdx = -1
+    for (let i = anchorIdx + 1; i < textBlocks.length; i++) {
+      if (textBlocks[i].text.length > 2) { nextTextIdx = i; break }
+    }
+    const gapTop = textBlocks[anchorIdx].rect.bottom - containerRect.top + container.scrollTop + 4
+    const gapBottom = nextTextIdx >= 0
+      ? textBlocks[nextTextIdx].rect.top - containerRect.top + container.scrollTop - 4
+      : gapTop + 50
+    const sectionRect = section.getBoundingClientRect()
+    const sectionLeft = sectionRect.left - containerRect.left + container.scrollLeft
+    return {
+      x: sectionLeft + sectionRect.width * 0.08,
+      y: gapTop,
+      width: sectionRect.width * 0.25,
+      height: Math.max(gapBottom - gapTop, 30),
+    }
+  }
+
   // Render DOCX with docx-preview
   useEffect(() => {
     if (!docxBlob || !docxRef.current) return
@@ -578,20 +633,10 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
       breakPages: true, ignoreLastRenderedPageBreak: false, experimental: true,
       trimXmlDeclaration: true, useBase64URL: true,
     }).then(() => {
-      const section = docxRef.current?.querySelector('section.docx')
-      if (section) {
-        const container = docxRef.current
-        const sectionRect = section.getBoundingClientRect()
-        const containerRect = container.getBoundingClientRect()
-        const pdfW = documentInfo?.pdf_width || 612
-        setDocxMetrics({
-          offsetLeft: sectionRect.left - containerRect.left + container.scrollLeft,
-          offsetTop: sectionRect.top - containerRect.top + container.scrollTop,
-          scale: sectionRect.width / pdfW,
-        })
-      }
+      const metrics = detectSignaturePosition()
+      if (metrics) setDocxMetrics(metrics)
     }).catch(e => logger.error('Error rendering DOCX:', e))
-  }, [docxBlob, documentInfo?.pdf_width])
+  }, [docxBlob])
 
   const loadDocument = async () => {
     setPdfLoading(true)
@@ -619,6 +664,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
     mutationFn: (id) => approvalService.signDocument(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approvals'] })
+      queryClient.invalidateQueries({ queryKey: ['approval-detail'] })
       setSignError('')
       if (pdfUrl) { URL.revokeObjectURL(pdfUrl); setPdfUrl(null) }
       setDocxBlob(null)
@@ -713,24 +759,20 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
               </div>
               <div className="relative max-h-[500px] overflow-auto bg-white">
                 <div ref={docxRef} style={{ position: 'relative' }} />
-                {docxMetrics && documentInfo?.signatures?.filter(s => s.signed && s.signature_image && s.position_box).map((sig, idx) => {
-                  const box = sig.position_box
-                  const m = docxMetrics
-                  return (
+                {docxMetrics && documentInfo?.signatures?.filter(s => s.signed && s.signature_image).map((sig, idx) => (
                     <div key={idx} style={{
                       position: 'absolute',
-                      left: m.offsetLeft + box.x * m.scale,
-                      top: m.offsetTop + box.y * m.scale,
-                      width: box.width * m.scale,
-                      height: box.height * m.scale,
-                      zIndex: 10, pointerEvents: 'none', background: '#fff',
+                      left: docxMetrics.x,
+                      top: docxMetrics.y,
+                      width: docxMetrics.width,
+                      height: docxMetrics.height,
+                      zIndex: 10, pointerEvents: 'none',
                     }}>
                       <img src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
                         alt={`Firma de ${sig.signed_by}`}
                         style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
-                  )
-                })}
+                ))}
               </div>
             </div>
           ) : request.pdf_ready === false ? (
@@ -786,6 +828,9 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
                             {sig.signed && (
                               <p className="text-xs text-green-600 mt-0.5">
                                 Firmado por {sig.signed_by_name} - {new Date(sig.signed_at).toLocaleString('es-ES')}
+                                {sig.substituted && (
+                                  <span className="text-amber-600"> (en sustitución de {sig.original_user_name})</span>
+                                )}
                               </p>
                             )}
                           </div>
@@ -925,11 +970,12 @@ export default function Approvals() {
     enabled: activeTab === 'history',
   })
 
-  // Fetch detailed info when viewing a request
+  // Fetch detailed info when viewing a request (always refetch to show latest signatures)
   const { data: detailData } = useQuery({
     queryKey: ['approval-detail', selectedRequest?.id],
     queryFn: () => approvalService.get(selectedRequest.id),
     enabled: !!selectedRequest?.id && showDetailModal,
+    staleTime: 0,
   })
 
   const approveMutation = useMutation({
@@ -940,7 +986,14 @@ export default function Approvals() {
       setShowDetailModal(false)
     },
     onError: (err) => {
-      alert(err.response?.data?.error || 'Error al aprobar la solicitud')
+      const errorData = err.response?.data
+      if (errorData?.action_required?.type === 'configure_signature') {
+        if (window.confirm(errorData.error + ' ¿Deseas configurarla ahora?')) {
+          navigate('/profile')
+        }
+      } else {
+        alert(errorData?.error || 'Error al aprobar la solicitud')
+      }
     },
   })
 

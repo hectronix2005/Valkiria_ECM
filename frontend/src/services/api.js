@@ -425,4 +425,14 @@ export const errorLogService = {
   patterns: (params) => api.get('/admin/error_logs/patterns', { params }),
 }
 
+// Admin - Agent Alerts (Guardian System)
+export const agentAlertService = {
+  list: (params) => api.get('/admin/agent_alerts', { params }),
+  get: (id) => api.get(`/admin/agent_alerts/${id}`),
+  resolve: (id) => api.post(`/admin/agent_alerts/${id}/resolve`),
+  resolveAll: (params) => api.post('/admin/agent_alerts/resolve_all', params),
+  summary: () => api.get('/admin/agent_alerts/summary'),
+  health: () => api.get('/admin/agent_alerts/health'),
+}
+
 export default api

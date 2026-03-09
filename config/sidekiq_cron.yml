@@ -1,0 +1,69 @@
+# =============================================================
+# config/sidekiq_cron.yml
+# Jobs periódicos para agentes guardian de Valkyria ECM
+#
+# Requiere gem 'sidekiq-cron'
+# Inicializar en config/initializers/sidekiq.rb
+# =============================================================
+
+# Escaneo de solicitudes estancadas (cada 30 minutos)
+request_scan:
+  cron: "*/30 * * * *"
+  class: "AgentScanJob"
+  args: ["RequestTrackerAgent"]
+  queue: agents
+  description: "Detectar solicitudes que exceden SLA"
+
+# Auditoría de certificaciones (diario a las 2am)
+certification_audit:
+  cron: "0 2 * * *"
+  class: "AgentScanJob"
+  args: ["CertificationAuditorAgent"]
+  queue: agents
+  description: "Verificar vigencia y completitud de certificaciones"
+
+# Validación de almacenamiento (cada hora)
+storage_scan:
+  cron: "0 * * * *"
+  class: "AgentScanJob"
+  args: ["StorageSentinelAgent"]
+  queue: agents
+  description: "Detectar archivos huérfanos y rutas incorrectas"
+
+# Validación general de documentos recientes (cada 6 horas)
+doc_validation_scan:
+  cron: "0 */6 * * *"
+  class: "AgentScanJob"
+  args: ["DocValidatorAgent"]
+  queue: agents
+  description: "Re-validar documentos modificados recientemente"
+
+# Escaneo de solicitudes de certificación estancadas (cada 30 minutos)
+certification_request_scan:
+  cron: "*/30 * * * *"
+  class: "AgentScanJob"
+  args: ["RequestTrackerAgent", {"scope": "certifications"}]
+  queue: agents
+  description: "Detectar solicitudes de certificacion que exceden SLA"
+
+# Validación de firmas e integridad de documentos firmados (cada 4 horas)
+signature_guardian_scan:
+  cron: "0 */4 * * *"
+  class: "AgentScanJob"
+  args: ["SignatureGuardianAgent"]
+  queue: agents
+  description: "Validar integridad de firmas digitales, detectar DOCX con firmas, y verificar consistencia"
+
+# Monitoreo de errores del sistema (cada 5 minutos)
+error_monitor_scan:
+  cron: "*/5 * * * *"
+  class: "ErrorMonitorJob"
+  queue: agents
+  description: "Detectar patrones de errores 500, endpoints rotos, picos y clases nuevas"
+
+# Health check de infraestructura (cada 2 minutos)
+service_health_check:
+  cron: "*/2 * * * *"
+  class: "ServiceHealthJob"
+  queue: agents
+  description: "Verificar salud de MongoDB, Redis, Sidekiq, Gotenberg y servicios web"

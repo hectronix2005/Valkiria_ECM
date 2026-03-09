@@ -6,6 +6,7 @@ module Legal
     include Mongoid::Timestamps
     include UuidIdentifiable
     include AuditTrackable
+    include Agentable
 
     # Constants
     TYPES = %w[

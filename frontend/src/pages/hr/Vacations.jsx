@@ -992,7 +992,7 @@ function VacationTable({ vacations, onSubmit, onCancel, onDelete, onView, onDown
                       </Button>
                     )}
 
-                    {vacation.status !== 'system' && vacation.status === 'draft' && vacation.needs_employee_signature && (
+                    {vacation.status !== 'system' && vacation.can_sign && (
                       <Button variant="secondary" size="sm" onClick={() => onSign(vacation)} title="Firmar documento">
                         <PenTool className="w-4 h-4" />
                         Firmar
@@ -1041,6 +1041,7 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
   const [signError, setSignError] = useState('')
   const [expandedSigs2, setExpandedSigs2] = useState({})
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   // Keep ref in sync so async callbacks always access latest documentInfo
   useEffect(() => { documentInfoRef.current = documentInfo }, [documentInfo])
@@ -1139,7 +1140,13 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
       fetchDetail()
     },
     onError: (err) => {
-      setSignError(err.response?.data?.error || 'Error al firmar el documento')
+      const errorData = err.response?.data
+      if (errorData?.action_required?.type === 'configure_signature') {
+        if (window.confirm((errorData.error || 'No tienes firma digital configurada.') + ' ¿Deseas configurarla ahora?')) {
+          navigate('/profile')
+        }
+      }
+      setSignError(errorData?.error || 'Error al firmar el documento')
     }
   })
 
@@ -1148,7 +1155,9 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
     signMutation.mutate(vacation.id)
   }
 
-  // Helper to calculate DOCX overlay metrics
+  // Calculate metrics for positioning signature overlays on rendered DOCX.
+  // Uses template coordinates (position_box) scaled by rendered section width.
+  // This works for vacation forms which have a fixed layout with underscore lines.
   const calcDocxMetrics = () => {
     const section = docxDetailRef.current?.querySelector('section.docx')
     if (!section) return null
@@ -1318,6 +1327,9 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                 {documentInfo.signatures.map((sig, idx) => {
                   const hasPendingUsers = !sig.signed && sig.eligible_users?.length > 0
                   const isExpanded = expandedSigs2[idx]
+                  const typeLabel = { employee: 'Empleado Solicitante', supervisor: 'Supervisor Directo', hr: 'Recursos Humanos' }[sig.signatory_type_code]
+                  const canUserSign = !sig.signed && sig.can_sign_now !== false &&
+                    (sig.user_id === user?.id || sig.eligible_users?.includes(user?.full_name))
                   return (
                   <div key={idx} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between">
@@ -1338,19 +1350,22 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                                 : <ChevronDown className="w-3.5 h-3.5 text-gray-400 inline ml-1" />
                             )}
                           </p>
-                          <p className="text-xs text-gray-500">
-                            {sig.signatory_type_code === 'employee' && 'Empleado Solicitante'}
-                            {sig.signatory_type_code === 'supervisor' && 'Supervisor Directo'}
-                            {sig.signatory_type_code === 'hr' && 'Recursos Humanos'}
-                          </p>
+                          {typeLabel && typeLabel !== sig.label && (
+                            <p className="text-xs text-gray-500">{typeLabel}</p>
+                          )}
                           {sig.signed && (
                             <p className="text-xs text-green-600 mt-0.5">
                               Firmado por {sig.signed_by} - {new Date(sig.signed_at).toLocaleString('es-ES')}
                             </p>
                           )}
+                          {sig.signed && sig.substituted && sig.original_user_name && (
+                            <p className="text-xs text-amber-600 mt-0.5">
+                              (en sustitución de {sig.original_user_name})
+                            </p>
+                          )}
                         </div>
                       </div>
-                      {sig.signatory_type_code === 'employee' && !sig.signed && sig.can_sign_now !== false && sig.user_id === user?.id && (
+                      {canUserSign && (
                         <Button
                           size="sm"
                           onClick={handleSign}
@@ -1360,14 +1375,9 @@ function VacationDetailView({ vacation, onClose, onDownload, onRefresh }) {
                           Firmar
                         </Button>
                       )}
-                      {sig.signatory_type_code === 'employee' && !sig.signed && (sig.can_sign_now === false || sig.user_id !== user?.id) && (
+                      {!sig.signed && !canUserSign && (
                         <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
                           {sig.can_sign_now === false ? 'Esperando firmas previas' : 'Pendiente'}
-                        </span>
-                      )}
-                      {sig.signatory_type_code !== 'employee' && !sig.signed && (
-                        <span className="text-xs text-amber-600 px-2 py-1 bg-amber-100 rounded">
-                          Pendiente
                         </span>
                       )}
                     </div>
@@ -1588,10 +1598,10 @@ export default function Vacations() {
               </div>
               <div>
                 <p className="text-3xl font-bold text-blue-600">
-                  {Math.floor((balance.accrued || 0) - (balance.total_used || 0))}
+                  {Math.floor((balance.accrued || 0) - (balance.enjoyed || 0))}
                 </p>
                 <p className="text-sm text-blue-700 font-medium">Días por Contrato</p>
-                <p className="text-xs text-blue-500">Acumulados - Usados</p>
+                <p className="text-xs text-blue-500">Acumulados - Disfrutados</p>
               </div>
             </div>
           </CardContent>

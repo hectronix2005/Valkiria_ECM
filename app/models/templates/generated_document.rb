@@ -7,6 +7,7 @@ module Templates
     include UuidIdentifiable
     include AuditTrackable
     include IntegrityCheckable
+    include Agentable
 
     store_in collection: "generated_documents"
 
@@ -157,7 +158,7 @@ module Templates
     # signatory_type_code: optional - search by signatory type instead of user_id (for approvers)
     def sign!(user:, signature:, custom_position: nil, signatory_type_code: nil)
       sig_entry = if signatory_type_code.present?
-                    find_pending_signature_by_type(signatory_type_code)
+                    find_pending_signature_by_type(signatory_type_code, user: user)
                   else
                     find_pending_signature_for(user)
                   end
@@ -176,9 +177,18 @@ module Templates
         raise SignatureError, "Debe esperar las firmas de: #{waiting_names}"
       end
 
+      # Detect role-based substitution
+      if sig_entry["user_id"].present? && sig_entry["user_id"] != user.id.to_s
+        sig_entry["substituted"] = true
+        sig_entry["original_user_id"] = sig_entry["user_id"]
+        sig_entry["original_user_name"] = sig_entry["user_name"]
+      end
+
       sig_entry["signature_id"] = signature.uuid
       sig_entry["signed_at"] = Time.current.iso8601
       sig_entry["signed_by_name"] = user.full_name
+      sig_entry["user_id"] = user.id.to_s
+      sig_entry["user_name"] = user.full_name
       sig_entry["status"] = "signed"
 
       # Store custom position if provided
@@ -236,6 +246,17 @@ module Templates
 
         # Calculate which page the signature should go on based on absolute Y
         absolute_y = signatory.y_position.to_f
+
+        # Correct for preview scale mismatch: the frontend captures coordinates
+        # using a width-based coordScale, but the vertical layout in docx-preview
+        # (browser) differs from Gotenberg (PDF generator). Dividing Y by
+        # preview_scale corrects this vertical rendering difference.
+        preview_scale = template&.preview_scale
+        if preview_scale && preview_scale > 0 && (preview_scale - 1.0).abs > 0.01
+          absolute_y = absolute_y / preview_scale
+          Rails.logger.info "Preview scale correction: y=#{signatory.y_position} / #{preview_scale} = #{absolute_y.round(1)}"
+        end
+
         calculated_page = (absolute_y / page_height).floor + 1
         relative_y = absolute_y % page_height
 
@@ -247,6 +268,39 @@ module Templates
                      end
         page_index = [[page_index, 0].max, pdf.pages.count - 1].min
         target_page = pdf.pages[page_index]
+
+        # Dynamic anchor-based positioning: find actual underscore line positions
+        # in the generated PDF and adjust Y coordinate to match.
+        # When content reflows (e.g., template has 3 pages but generated has 1),
+        # signature coordinates captured on the template preview become invalid.
+        # This detects underscore anchor lines and repositions signatures above them.
+        anchors = find_signature_anchors(pdf_content, page_height, page_index)
+        if anchors.any?
+          anchor = match_anchor_for_signatory(signatory, anchors, page_height)
+          if anchor
+            anchor_y = anchor[:y_from_top]
+            raw_template_y = signatory.y_position.to_f % page_height # Use raw Y (before scale correction) for offset check
+            offset = (raw_template_y - anchor_y).abs
+            if offset > 10 # Only adjust if significant mismatch (>10 pts)
+              # Place signature box so its bottom edge aligns with the underscore line.
+              # This positions the signature image above the underscores with the label between.
+              adjusted_y = anchor_y - signatory.height.to_f
+              Rails.logger.info "Signature anchor adjustment: raw_template_y=#{raw_template_y} -> adjusted_y=#{adjusted_y} (anchor_line=#{anchor_y}, box_height=#{signatory.height}, offset=#{offset.round(1)}pts)"
+              relative_y = adjusted_y
+            end
+          end
+        else
+          # No underscore anchors — use text gap detection as fallback.
+          # Finds the largest vertical gap between text lines in the PDF
+          # (typically between "Atentamente," and the signer title).
+          gap = find_signature_text_gap(pdf_content, page_height)
+          if gap && (relative_y < gap[:gap_top] || relative_y + signatory.height.to_f > gap[:gap_bottom])
+            # Current position falls outside the signature gap — reposition
+            adjusted_y = gap[:gap_top] + (gap[:gap_size] - signatory.height.to_f) / 2.0
+            Rails.logger.info "Text gap adjustment: relative_y=#{relative_y.round(1)} -> #{adjusted_y.round(1)} (gap: #{gap[:gap_top]}-#{gap[:gap_bottom]}, #{gap[:gap_size]}pts)"
+            relative_y = adjusted_y
+          end
+        end
 
         Rails.logger.info "Signature placement: absoluteY=#{absolute_y}, pageHeight=#{page_height}, calculatedPage=#{calculated_page}, relativeY=#{relative_y}, pageIndex=#{page_index}"
 
@@ -412,6 +466,129 @@ module Templates
         Mongoid::GridFs.delete(draft_file_id)
       end
       update!(draft_file_id: pdf_file.id)
+    end
+
+    # Find signature anchor positions (underscore lines) in the generated PDF.
+    # Returns array of {x:, y_from_top:} for each detected underscore line.
+    def find_signature_anchors(pdf_bytes, page_height, target_page_index = 0)
+      require "zlib"
+
+      # Extract content streams from raw PDF bytes
+      streams = []
+      pdf_bytes.force_encoding("BINARY").scan(/stream\r?\n(.*?)\r?\nendstream/m) do |match|
+        raw = match[0]
+        begin
+          decompressed = Zlib::Inflate.inflate(raw)
+          streams << decompressed if decompressed.include?("BT")
+        rescue Zlib::DataError, Zlib::BufError
+          streams << raw if raw.include?("BT")
+        end
+      end
+
+      anchors = []
+      return anchors if streams.empty?
+
+      # Search ALL text streams for underscore anchors. After signature overlays
+      # are merged by CombinePDF, the original content stream may not be at index 0.
+      streams.each do |stream|
+        stream.scan(/BT\s*(.*?)\s*ET/m).each do |block|
+        content = block[0]
+
+        # Extract Td position (absolute text position)
+        td_match = content.match(/([\d.\-]+)\s+([\d.\-]+)\s+Td/)
+        next unless td_match
+
+        x = td_match[1].to_f
+        y_from_bottom = td_match[2].to_f
+        y_from_top = page_height - y_from_bottom
+
+        # Detect underscore-like patterns in TJ arrays:
+        # many repeated identical glyph codes (e.g., <30><30><30>...)
+        tj_match = content.match(/\[(.*?)\]\s*TJ/m)
+        next unless tj_match
+
+        glyphs = tj_match[1].scan(/<([0-9A-Fa-f]+)>/).flatten
+        next if glyphs.size < 10
+
+        glyph_freq = glyphs.tally
+        _most_common, count = glyph_freq.max_by { |_, v| v }
+        next unless count.to_f / glyphs.size >= 0.8
+
+        anchors << { x: x.round(1), y_from_top: y_from_top.round(1) }
+        end
+      end
+
+      anchors.uniq
+    rescue StandardError => e
+      Rails.logger.warn "Signature anchor detection failed: #{e.message}"
+      []
+    end
+
+    # Match a signatory to its corresponding underscore anchor line.
+    # Uses closest-to-template-Y matching: picks the anchor in the same
+    # X column whose Y position is closest to the signatory's template Y.
+    # This correctly skips name underscores (e.g., printed name lines) and
+    # matches the actual signature/Firma underscore line.
+    def match_anchor_for_signatory(signatory, anchors, page_height)
+      sig_x = signatory.x_position.to_f
+
+      # Group anchors by X proximity (within 30pts of signatory X)
+      x_matched = anchors.select { |a| (a[:x] - sig_x).abs < 30 }
+      return nil if x_matched.empty?
+
+      # Use template Y (modulo page height for multi-page templates) as reference
+      template_y = signatory.y_position.to_f % page_height
+
+      # Pick the anchor closest to the template coordinate
+      x_matched.min_by { |a| (a[:y_from_top] - template_y).abs }
+    end
+
+    # Find the largest text gap in the PDF suitable for a signature.
+    # Used as fallback when no underscore anchors are found (e.g., certifications).
+    # Scans text positions and finds the biggest vertical gap (>60pts) in the
+    # lower half of the page — typically the space between "Atentamente," and
+    # the signer's title (e.g., "HUMAN TALENT PARTNER").
+    def find_signature_text_gap(pdf_bytes, page_height)
+      require "zlib"
+
+      streams = []
+      pdf_bytes.force_encoding("BINARY").scan(/stream\r?\n(.*?)\r?\nendstream/m) do |match|
+        raw = match[0]
+        begin
+          decompressed = Zlib::Inflate.inflate(raw)
+          streams << decompressed if decompressed.include?("BT")
+        rescue Zlib::DataError, Zlib::BufError
+          # skip non-text streams
+        end
+      end
+
+      y_positions = []
+      streams.each do |stream|
+        stream.scan(/BT\s*(.*?)\s*ET/m).each do |block|
+          content = block[0]
+          td_match = content.match(/([\d.\-]+)\s+([\d.\-]+)\s+Td/)
+          next unless td_match
+          y_from_top = page_height - td_match[2].to_f
+          # Only consider bottom 60% of page (signature space is never in the top)
+          y_positions << y_from_top if y_from_top > page_height * 0.4
+        end
+      end
+
+      return nil if y_positions.size < 3
+
+      y_sorted = y_positions.uniq.sort
+      best_gap = nil
+      y_sorted.each_cons(2) do |a, b|
+        gap = b - a
+        if gap > 60 && (best_gap.nil? || gap > best_gap[:gap_size])
+          best_gap = { gap_top: a.round(1), gap_bottom: b.round(1), gap_size: gap.round(1) }
+        end
+      end
+
+      best_gap
+    rescue StandardError => e
+      Rails.logger.warn "Text gap detection failed: #{e.message}"
+      nil
     end
 
     # Save the original clean PDF before any signatures are applied
@@ -594,10 +771,17 @@ module Templates
 
       # Reset all signatures to pending
       signatures.each do |s|
+        if s["substituted"]
+          s["user_name"] = s["original_user_name"] if s["original_user_name"].present?
+          s["user_id"] = s["original_user_id"] if s["original_user_id"].present?
+        end
         s["status"] = "pending"
         s["signature_id"] = nil
         s["signed_at"] = nil
         s["signed_by_name"] = nil
+        s.delete("substituted")
+        s.delete("original_user_name")
+        s.delete("original_user_id")
       end
 
       self.status = PENDING_SIGNATURES
@@ -735,9 +919,14 @@ module Templates
         .reject(&:blank?)
     end
 
-    def find_pending_signature_by_type(signatory_type_code)
+    def find_pending_signature_by_type(signatory_type_code, user: nil)
       signatures.find do |s|
-        s["signatory_type_code"] == signatory_type_code && s["signed_at"].blank?
+        next false unless s["signatory_type_code"] == signatory_type_code && s["signed_at"].blank?
+        next true if user.nil?
+        next true if s["user_id"] == user.id.to_s
+        user_role_names = user.roles.pluck(:name)
+        acceptable_roles = roles_for_signatory_type(signatory_type_code)
+        (user_role_names & acceptable_roles).any?
       end
     end
 

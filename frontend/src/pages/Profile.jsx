@@ -33,7 +33,8 @@ import {
   Plus,
   Type,
   Power,
-  FileText
+  FileText,
+  Pencil
 } from 'lucide-react'
 
 function InfoRow({ icon: Icon, label, value }) {
@@ -305,6 +306,7 @@ function ChangePasswordModal({ isOpen, onClose }) {
 function SignatureSection() {
   const queryClient = useQueryClient()
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingSignature, setEditingSignature] = useState(null)
   const [signatureType, setSignatureType] = useState('drawn') // 'drawn' or 'styled'
   const [signatureName, setSignatureName] = useState('')
   const [drawnData, setDrawnData] = useState(null)
@@ -324,6 +326,17 @@ function SignatureSection() {
     },
     onError: (err) => {
       setError(err.response?.data?.error || 'Error al crear la firma')
+    }
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => signatureService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['signatures'] })
+      handleCloseModal()
+    },
+    onError: (err) => {
+      setError(err.response?.data?.error || 'Error al actualizar la firma')
     }
   })
 
@@ -361,6 +374,7 @@ function SignatureSection() {
 
   const handleCloseModal = () => {
     setShowCreateModal(false)
+    setEditingSignature(null)
     setSignatureType('drawn')
     setSignatureName('')
     setDrawnData(null)
@@ -368,13 +382,24 @@ function SignatureSection() {
     setError('')
   }
 
-  const handleCreateSignature = () => {
+  const handleOpenEdit = (sig) => {
+    setEditingSignature(sig)
+    setSignatureName(sig.name)
+    setSignatureType(sig.signature_type)
+    if (sig.signature_type === 'styled') {
+      setStyledData({ styled_text: sig.styled_text, font_family: sig.font_family, font_color: sig.font_color })
+    }
+    setDrawnData(null)
+    setError('')
+  }
+
+  const handleSaveSignature = () => {
     if (!signatureName.trim()) {
       setError('El nombre de la firma es requerido')
       return
     }
 
-    if (signatureType === 'drawn' && !drawnData) {
+    if (signatureType === 'drawn' && !drawnData && !editingSignature) {
       setError('Por favor dibuje su firma')
       return
     }
@@ -387,10 +412,15 @@ function SignatureSection() {
     const payload = {
       name: signatureName,
       signature_type: signatureType,
-      ...(signatureType === 'drawn' ? { image_data: drawnData } : styledData)
+      ...(signatureType === 'drawn' && drawnData ? { image_data: drawnData } : {}),
+      ...(signatureType === 'styled' ? styledData : {})
     }
 
-    createMutation.mutate(payload)
+    if (editingSignature) {
+      updateMutation.mutate({ id: editingSignature.id, data: payload })
+    } else {
+      createMutation.mutate(payload)
+    }
   }
 
   const signatures = signaturesData?.data?.data || []
@@ -474,15 +504,25 @@ function SignatureSection() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Toggle Active */}
+                  {/* Edit */}
                   <Button
                     size="sm"
                     variant="secondary"
+                    onClick={() => handleOpenEdit(sig)}
+                    title="Editar firma"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  {/* Toggle Active */}
+                  <Button
+                    size="sm"
+                    variant={sig.active ? 'secondary' : 'primary'}
                     onClick={() => toggleActiveMutation.mutate(sig.id)}
                     disabled={toggleActiveMutation.isPending}
                     title={sig.active ? 'Desactivar firma' : 'Activar firma'}
                   >
                     <Power className={`w-4 h-4 ${sig.active ? 'text-green-600' : 'text-gray-400'}`} />
+                    <span className="text-xs ml-1">{sig.active ? 'Desactivar' : 'Activar'}</span>
                   </Button>
                   {/* Set Default */}
                   {!sig.is_default && sig.active && (
@@ -496,7 +536,7 @@ function SignatureSection() {
                       <Star className="w-4 h-4" />
                     </Button>
                   )}
-                  {/* Delete - only if not in use */}
+                  {/* Delete */}
                   <Button
                     size="sm"
                     variant="danger"
@@ -509,7 +549,7 @@ function SignatureSection() {
                         deleteMutation.mutate(sig.id)
                       }
                     }}
-                    disabled={deleteMutation.isPending || sig.in_use}
+                    disabled={deleteMutation.isPending}
                     title={sig.in_use ? 'No se puede eliminar, está en uso' : 'Eliminar firma'}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -520,12 +560,12 @@ function SignatureSection() {
           </div>
         )}
 
-        {/* Create Signature Modal */}
-        {showCreateModal && (
+        {/* Create/Edit Signature Modal */}
+        {(showCreateModal || editingSignature) && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
-                <h3 className="text-lg font-semibold">Nueva Firma Digital</h3>
+                <h3 className="text-lg font-semibold">{editingSignature ? 'Editar Firma Digital' : 'Nueva Firma Digital'}</h3>
                 <button onClick={handleCloseModal} className="p-1 hover:bg-gray-100 rounded">
                   <X className="w-5 h-5" />
                 </button>
@@ -583,7 +623,7 @@ function SignatureSection() {
                 {signatureType === 'drawn' ? (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Dibuje su firma
+                      {editingSignature ? 'Redibujar firma (opcional - dejar vacío para mantener la actual)' : 'Dibuje su firma'}
                     </label>
                     <SignaturePad
                       onSave={setDrawnData}
@@ -594,6 +634,9 @@ function SignatureSection() {
                 ) : (
                   <StyledSignature
                     onChange={setStyledData}
+                    defaultText={editingSignature?.styled_text || ''}
+                    defaultFont={editingSignature?.font_family || 'Allura'}
+                    defaultColor={editingSignature?.font_color || '#000000'}
                   />
                 )}
 
@@ -602,11 +645,11 @@ function SignatureSection() {
                     Cancelar
                   </Button>
                   <Button
-                    onClick={handleCreateSignature}
-                    loading={createMutation.isPending}
+                    onClick={handleSaveSignature}
+                    loading={createMutation.isPending || updateMutation.isPending}
                   >
                     <Save className="w-4 h-4" />
-                    Guardar Firma
+                    {editingSignature ? 'Actualizar Firma' : 'Guardar Firma'}
                   </Button>
                 </div>
               </div>

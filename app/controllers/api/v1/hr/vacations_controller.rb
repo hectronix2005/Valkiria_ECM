@@ -163,34 +163,49 @@ module Api
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
 
-          # Get user's signature (use where().first to avoid Mongoid::Errors::DocumentNotFound)
+          # Get user's signature
           signature = current_user.signatures.where(is_default: true).first || current_user.signatures.first
           unless signature
-            return render json: { error: "No tienes una firma configurada. Ve a tu perfil para crear una." }, status: :unprocessable_content
+            return render json: {
+              error: "No tienes una firma configurada. Ve a tu perfil para crear una.",
+              action_required: { type: "configure_signature" }
+            }, status: :unprocessable_content
           end
 
-          # Find the employee signatory slot
-          employee_sig = generated_doc.signatures.find { |s| s["signatory_type_code"] == "employee" }
-          unless employee_sig
-            return render json: { error: "No hay espacio de firma para empleado en este documento" }, status: :unprocessable_content
+          # Find the next pending signature slot this user can sign
+          sig_slot = generated_doc.pending_signature_for(current_user)
+          unless sig_slot
+            return render json: { error: "No tienes firmas pendientes en este documento" }, status: :unprocessable_content
           end
 
-          # Verify current user is the assigned employee signer
-          unless employee_sig["user_id"] == current_user.id.to_s
-            return render json: { error: "Solo el empleado solicitante puede firmar este documento" }, status: :unprocessable_content
-          end
-
-          if employee_sig["signed_at"].present?
+          if sig_slot["signed_at"].present?
             return render json: { error: "Ya has firmado este documento" }, status: :unprocessable_content
           end
 
-          # Sign the document specifying the signatory type
-          generated_doc.sign!(user: current_user, signature: signature, signatory_type_code: "employee")
+          # Sign the document with the detected signatory type
+          generated_doc.sign!(user: current_user, signature: signature, signatory_type_code: sig_slot["signatory_type_code"])
+
+          # Auto-approve vacation when all signatures are complete and request is pending
+          auto_approved = false
+          if @vacation.pending? && generated_doc.reload.all_required_signed?
+            begin
+              @vacation.approve!(actor: current_employee, reason: "Aprobada automáticamente al completar todas las firmas")
+              NotificationService.vacation_approved(@vacation)
+              NotificationService.notify_document_signers(@vacation, @vacation.status, actor: current_employee)
+              auto_approved = true
+            rescue ::Hr::VacationRequest::InvalidStateError,
+                   ::Hr::VacationRequest::AuthorizationError,
+                   ::Hr::Employee::InsufficientBalanceError => e
+              Rails.logger.warn("Auto-approval failed for #{@vacation.request_number}: #{e.message}")
+            end
+          end
+
+          @vacation.reload
 
           render json: {
             data: vacation_json(@vacation, detailed: true),
             document: document_info,
-            message: "Documento firmado exitosamente"
+            message: auto_approved ? "Documento firmado y solicitud aprobada exitosamente" : "Documento firmado exitosamente"
           }
         rescue ::Templates::GeneratedDocument::SignatureError,
                Mongoid::Errors::Validations => e
@@ -260,8 +275,8 @@ module Api
           generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
           generated_doc = generator.generate!
 
-          # Link document to vacation request
-          @vacation.update!(document_uuid: generated_doc.uuid)
+          # Link document to vacation request (use set to skip model validations)
+          @vacation.set(document_uuid: generated_doc.uuid)
 
           render json: {
             data: vacation_json(@vacation, detailed: true),
@@ -348,13 +363,15 @@ module Api
         end
 
         def vacation_json(vacation, detailed: false) # rubocop:disable Metrics/MethodLength
-          # Check if document exists and needs employee signature FROM the current user
+          # Check if document exists and needs signature FROM the current user
           needs_signature = false
+          can_sign = false
           pdf_ready = false
           if vacation.document_uuid.present?
             doc = @preloaded_docs&.dig(vacation.document_uuid) ||
                   ::Templates::GeneratedDocument.where(uuid: vacation.document_uuid).first
             needs_signature = doc && current_user_is_employee_signer?(doc) && !employee_has_signed?(doc)
+            can_sign = doc&.pending_signature_for(current_user).present?
             pdf_ready = doc&.draft_file_id.present?
           end
 
@@ -375,6 +392,7 @@ module Api
             has_document: vacation.document_uuid.present?,
             pdf_ready: pdf_ready,
             needs_employee_signature: needs_signature,
+            can_sign: can_sign,
             can_delete: can_delete_for_user?(vacation),
             can_cancel: vacation_cancelable?(vacation)
           }
@@ -497,13 +515,9 @@ module Api
             user: current_user
           }
 
-          # skip_pdf: true — saves the DOCX immediately and enqueues a background job
-          # for PDF conversion via Gotenberg. This avoids blocking the request for
-          # 5-25s waiting on Gotenberg (cold start on Heroku).
-          # The frontend renders the DOCX via docx-preview and polls for the PDF.
           generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
-          generated_doc = generator.generate!(skip_pdf: true)
-          @vacation.update!(document_uuid: generated_doc.uuid)
+          generated_doc = generator.generate!
+          @vacation.set(document_uuid: generated_doc.uuid)
         rescue StandardError => e
           # Log but don't fail the create if document generation fails
           Rails.logger.error("Error auto-generating vacation document: #{e.class} - #{e.message}")
@@ -542,6 +556,8 @@ module Api
                 signed: sig["signed_at"].present?,
                 signed_at: sig["signed_at"],
                 signed_by: sig["signed_by_name"],
+                substituted: sig["substituted"] == true,
+                original_user_name: sig["original_user_name"],
                 can_sign_now: order_status[:can_sign_now],
                 waiting_for: order_status[:waiting_for],
                 eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"], doc: doc) : []

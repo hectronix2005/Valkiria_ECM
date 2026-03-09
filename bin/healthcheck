@@ -1,0 +1,277 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# =============================================================
+# Valkyria ECM — Standalone Health Check
+# Checks all services WITHOUT requiring Rails or Sidekiq.
+# Works even when the entire stack is down.
+#
+# Usage:
+#   bin/healthcheck          # Check all services
+#   bin/healthcheck --json   # Output as JSON
+#   bin/healthcheck --watch  # Re-check every 10 seconds
+# =============================================================
+
+require "net/http"
+require "socket"
+require "json"
+require "uri"
+
+SERVICES = {
+  "Redis" => {
+    type: :tcp,
+    host: "localhost",
+    port: 6379,
+    critical: true
+  },
+  "MongoDB" => {
+    type: :tcp,
+    host: "localhost",
+    port: 27017,
+    critical: true
+  },
+  "Rails API" => {
+    type: :http,
+    url: "http://localhost:3100/api/v1/health",
+    critical: true
+  },
+  "Sidekiq" => {
+    type: :sidekiq,
+    redis_url: ENV.fetch("REDIS_URL", "redis://localhost:6379/1"),
+    critical: true
+  },
+  "Vite Frontend" => {
+    type: :http,
+    url: "http://localhost:5173",
+    critical: false
+  },
+  "Gotenberg" => {
+    type: :http,
+    url: "http://localhost:3000/health",
+    critical: false
+  }
+}.freeze
+
+TIMEOUT = 3
+
+# --- Colors ---
+def colorize(text, code)
+  $stdout.tty? ? "\e[#{code}m#{text}\e[0m" : text
+end
+
+def green(text)  = colorize(text, 32)
+def red(text)    = colorize(text, 31)
+def yellow(text) = colorize(text, 33)
+def bold(text)   = colorize(text, 1)
+def dim(text)    = colorize(text, 2)
+
+# --- Checks ---
+def check_tcp(host, port)
+  start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  socket = Socket.tcp(host, port, connect_timeout: TIMEOUT)
+  latency = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round
+  socket.close
+  { ok: true, latency_ms: latency }
+rescue Errno::ECONNREFUSED
+  { ok: false, error: "Connection refused (port #{port})" }
+rescue Errno::ETIMEDOUT, Socket::ResolutionError => e
+  { ok: false, error: e.message }
+rescue StandardError => e
+  { ok: false, error: "#{e.class}: #{e.message}" }
+end
+
+def check_http(url)
+  uri = URI.parse(url)
+  start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = uri.scheme == "https"
+  http.open_timeout = TIMEOUT
+  http.read_timeout = TIMEOUT
+
+  response = http.request(Net::HTTP::Get.new(uri.request_uri))
+  latency = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round
+
+  if response.code.to_i < 500
+    { ok: true, status: response.code.to_i, latency_ms: latency }
+  else
+    { ok: false, status: response.code.to_i, error: "HTTP #{response.code}" }
+  end
+rescue Errno::ECONNREFUSED
+  { ok: false, error: "Connection refused" }
+rescue Net::OpenTimeout, Net::ReadTimeout
+  { ok: false, error: "Timeout (#{TIMEOUT}s)" }
+rescue StandardError => e
+  { ok: false, error: "#{e.class}: #{e.message}" }
+end
+
+def check_sidekiq(redis_url)
+  # Check if Sidekiq has registered processes by reading Redis directly
+  uri = URI.parse(redis_url)
+  host = uri.host || "localhost"
+  port = uri.port || 6379
+  db = (uri.path || "/1").delete("/")
+
+  tcp = check_tcp(host, port)
+  return { ok: false, error: "Redis not reachable: #{tcp[:error]}" } unless tcp[:ok]
+
+  # Try to query Sidekiq process set via Redis SMEMBERS
+  socket = Socket.tcp(host, port, connect_timeout: TIMEOUT)
+  socket.write("SELECT #{db}\r\n")
+  socket.gets # +OK
+  socket.write("SMEMBERS processes\r\n")
+  header = socket.gets&.strip
+
+  if header&.start_with?("*")
+    count = header[1..].to_i
+    # Read the member entries
+    count.times do
+      socket.gets # $len
+      socket.gets # value
+    end
+    socket.close
+    if count > 0
+      { ok: true, processes: count }
+    else
+      { ok: false, error: "No Sidekiq processes registered" }
+    end
+  else
+    socket.close
+    { ok: false, error: "Unexpected Redis response" }
+  end
+rescue StandardError => e
+  { ok: false, error: "#{e.class}: #{e.message}" }
+end
+
+def run_check(name, config)
+  case config[:type]
+  when :tcp
+    check_tcp(config[:host], config[:port])
+  when :http
+    check_http(config[:url])
+  when :sidekiq
+    check_sidekiq(config[:redis_url])
+  else
+    { ok: false, error: "Unknown check type: #{config[:type]}" }
+  end
+end
+
+def run_all_checks
+  results = {}
+  SERVICES.each do |name, config|
+    results[name] = run_check(name, config).merge(critical: config[:critical])
+  end
+  results
+end
+
+# --- Output ---
+def print_results(results)
+  puts ""
+  puts bold("  VALKYRIA ECM — Health Check")
+  puts dim("  #{Time.now.strftime("%Y-%m-%d %H:%M:%S")}")
+  puts ""
+
+  max_name = results.keys.map(&:length).max
+
+  results.each do |name, result|
+    status = if result[:ok]
+               green("OK")
+             elsif result[:critical]
+               red("FAIL")
+             else
+               yellow("WARN")
+             end
+
+    detail = if result[:ok]
+               parts = []
+               parts << "#{result[:latency_ms]}ms" if result[:latency_ms]
+               parts << "HTTP #{result[:status]}" if result[:status]
+               parts << "#{result[:processes]} process(es)" if result[:processes]
+               dim(parts.join(", "))
+             else
+               result[:critical] ? red(result[:error]) : yellow(result[:error])
+             end
+
+    severity = result[:critical] ? dim("[critical]") : dim("[optional]")
+    puts "  #{status}  #{name.ljust(max_name)}  #{detail}  #{severity}"
+  end
+
+  failed_critical = results.select { |_, r| !r[:ok] && r[:critical] }
+  failed_optional = results.select { |_, r| !r[:ok] && !r[:critical] }
+  all_ok = results.all? { |_, r| r[:ok] }
+
+  puts ""
+  if all_ok
+    puts green("  All services healthy!")
+  else
+    if failed_critical.any?
+      puts red("  #{failed_critical.size} critical service(s) DOWN: #{failed_critical.keys.join(", ")}")
+      puts ""
+      puts bold("  To fix:")
+      failed_critical.each do |name, result|
+        case name
+        when "Rails API"
+          puts "    #{name}: #{dim("bundle exec rails server -p 3100")}"
+        when "Redis"
+          puts "    #{name}: #{dim("brew services start redis")}"
+        when "MongoDB"
+          puts "    #{name}: #{dim("brew services start mongodb-community")}"
+        when "Sidekiq"
+          puts "    #{name}: #{dim("bundle exec sidekiq -C config/sidekiq.yml")}"
+        end
+      end
+    end
+    if failed_optional.any?
+      puts yellow("  #{failed_optional.size} optional service(s) down: #{failed_optional.keys.join(", ")}")
+      failed_optional.each do |name, _|
+        case name
+        when "Vite Frontend"
+          puts "    #{name}: #{dim("cd frontend && npm run dev")}"
+        when "Gotenberg"
+          puts "    #{name}: #{dim("docker-compose up gotenberg")}"
+        end
+      end
+    end
+  end
+  puts ""
+
+  failed_critical.empty? ? 0 : 1
+end
+
+def print_json(results)
+  output = {
+    timestamp: Time.now.iso8601,
+    services: results.transform_values { |r|
+      {
+        status: r[:ok] ? "up" : "down",
+        critical: r[:critical],
+        latency_ms: r[:latency_ms],
+        error: r[:error]
+      }.compact
+    },
+    healthy: results.all? { |_, r| r[:ok] },
+    critical_failures: results.select { |_, r| !r[:ok] && r[:critical] }.keys
+  }
+  puts JSON.pretty_generate(output)
+  output[:critical_failures].empty? ? 0 : 1
+end
+
+# --- Main ---
+json_mode = ARGV.include?("--json")
+watch_mode = ARGV.include?("--watch")
+
+if watch_mode
+  loop do
+    system("clear") || system("cls")
+    results = run_all_checks
+    print_results(results)
+    puts dim("  Refreshing every 10s... (Ctrl+C to stop)")
+    sleep 10
+  end
+elsif json_mode
+  results = run_all_checks
+  exit print_json(results)
+else
+  results = run_all_checks
+  exit print_results(results)
+end

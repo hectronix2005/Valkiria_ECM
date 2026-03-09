@@ -513,6 +513,8 @@ export default function Certifications() {
   const [previewDocxBlob, setPreviewDocxBlob] = useState(null)
   const previewDocxRef = useRef(null)
   const [previewingId, setPreviewingId] = useState(null)
+  const [previewCertification, setPreviewCertification] = useState(null)
+  const [docxMetrics, setDocxMetrics] = useState(null)
   const [initialType, setInitialType] = useState(null)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -703,6 +705,8 @@ export default function Certifications() {
       setPreviewingId(certification.id)
       setPreviewUrl(null)
       setPreviewDocxBlob(null)
+      setPreviewCertification(certification)
+      setDocxMetrics(null)
       const response = await certificationService.downloadDocument(certification.id)
       const blob = response.data
       // Detect DOCX by PK zip header
@@ -724,15 +728,69 @@ export default function Certifications() {
     }
   }
 
+  // Detect signature overlay position from rendered DOCX content.
+  // Uses text landmarks (e.g., "Atentamente,") instead of fixed template coordinates,
+  // because the generated document layout differs from the template.
+  const detectSignaturePosition = () => {
+    const section = previewDocxRef.current?.querySelector('section.docx')
+    if (!section) return null
+    const container = previewDocxRef.current
+    const containerRect = container.getBoundingClientRect()
+
+    const paragraphs = Array.from(section.querySelectorAll('p'))
+    const textBlocks = paragraphs
+      .map(p => ({ text: p.textContent?.trim() || '', rect: p.getBoundingClientRect() }))
+      .filter(b => b.rect.height > 0)
+
+    // Find closing phrase that precedes signature area
+    const closingPhrases = ['atentamente', 'cordialmente', 'sinceramente']
+    let anchorIdx = -1
+    for (let i = 0; i < textBlocks.length; i++) {
+      if (closingPhrases.some(ph => textBlocks[i].text.toLowerCase().includes(ph))) {
+        anchorIdx = i
+        break
+      }
+    }
+    if (anchorIdx < 0) return null
+
+    // Find next non-empty text after anchor (signer's title/name)
+    let nextTextIdx = -1
+    for (let i = anchorIdx + 1; i < textBlocks.length; i++) {
+      if (textBlocks[i].text.length > 2) { nextTextIdx = i; break }
+    }
+
+    const gapTop = textBlocks[anchorIdx].rect.bottom - containerRect.top + container.scrollTop + 4
+    const gapBottom = nextTextIdx >= 0
+      ? textBlocks[nextTextIdx].rect.top - containerRect.top + container.scrollTop - 4
+      : gapTop + 50
+
+    const sectionRect = section.getBoundingClientRect()
+    const sectionLeft = sectionRect.left - containerRect.left + container.scrollLeft
+
+    return {
+      x: sectionLeft + sectionRect.width * 0.08,
+      y: gapTop,
+      width: sectionRect.width * 0.25,
+      height: Math.max(gapBottom - gapTop, 30),
+    }
+  }
+
   // Render DOCX with docx-preview
   useEffect(() => {
     if (!previewDocxBlob || !previewDocxRef.current) return
+    let cancelled = false
     previewDocxRef.current.innerHTML = ''
+    setDocxMetrics(null)
     renderAsync(previewDocxBlob, previewDocxRef.current, null, {
       inWrapper: true, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
       breakPages: true, ignoreLastRenderedPageBreak: false, experimental: true,
       trimXmlDeclaration: true, useBase64URL: true,
-    }).catch(err => logger.error('Error rendering DOCX:', err))
+    }).then(() => {
+      if (cancelled) return
+      const metrics = detectSignaturePosition()
+      if (metrics) setDocxMetrics(metrics)
+    }).catch(err => { if (!cancelled) logger.error('Error rendering DOCX:', err) })
+    return () => { cancelled = true }
   }, [previewDocxBlob])
 
   const handleClosePreview = () => {
@@ -741,6 +799,8 @@ export default function Certifications() {
     }
     setPreviewUrl(null)
     setPreviewDocxBlob(null)
+    setPreviewCertification(null)
+    setDocxMetrics(null)
   }
 
   return (
@@ -1015,7 +1075,7 @@ export default function Certifications() {
                           className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
                           title="Ver detalle"
                         >
-                          <Eye className="w-4 h-4" />
+                          <FileText className="w-4 h-4" />
                         </button>
                         {/* Botón generar documento (HR/Admin, cuando está pending y no tiene documento) */}
                         {(isHR || isAdmin) && certification.status === 'pending' && !certification.document_uuid && (
@@ -1444,10 +1504,97 @@ export default function Certifications() {
               </div>
               <div className="relative max-h-[70vh] overflow-auto bg-white">
                 <div ref={previewDocxRef} style={{ position: 'relative' }} />
+                {docxMetrics && previewCertification?.document_info?.signatures?.filter(s => s.signed && s.signature_image).map((sig, idx) => (
+                    <div key={idx} style={{
+                      position: 'absolute',
+                      left: docxMetrics.x,
+                      top: docxMetrics.y,
+                      width: docxMetrics.width,
+                      height: docxMetrics.height,
+                      zIndex: 10,
+                      pointerEvents: 'none',
+                    }}>
+                      <img
+                        src={sig.signature_image.startsWith('data:') ? sig.signature_image : `data:image/png;base64,${sig.signature_image}`}
+                        alt={`Firma de ${sig.signed_by}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                ))}
               </div>
             </div>
           ) : null}
+          {/* Signature status & sign button */}
+          {previewCertification?.document_info?.signatures?.length > 0 && (
+            <div className="p-4 bg-gray-50 border rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                <PenTool className="w-4 h-4" />
+                Firmas del Documento
+              </h4>
+              <div className="space-y-2">
+                {previewCertification.document_info.signatures.map((sig, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-white rounded border">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                        sig.signed ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {sig.signed ? <CheckCircle className="w-4 h-4" /> : idx + 1}
+                      </div>
+                      <span className="text-sm font-medium">{sig.label || sig.signatory_type_code}</span>
+                    </div>
+                    <div className="text-sm">
+                      {sig.signed ? (
+                        <span className="text-green-600 flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {sig.signed_by} — {new Date(sig.signed_at).toLocaleDateString('es-ES')}
+                        </span>
+                      ) : (
+                        <span className="text-amber-600">Pendiente</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Sign button if there are pending signatures and user is HR/Admin */}
+              {previewCertification.document_info.pending_signatures?.length > 0 && (isHR || isAdmin) && (
+                <Button
+                  className="w-full mt-3"
+                  variant="primary"
+                  onClick={() => {
+                    setSigningId(previewCertification.id)
+                    signMutation.mutate(previewCertification.id)
+                    handleClosePreview()
+                  }}
+                  loading={signingId === previewCertification.id}
+                >
+                  <PenTool className="w-4 h-4" />
+                  Firmar Documento
+                </Button>
+              )}
+
+              {previewCertification.document_info.all_signed && (
+                <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-center">
+                  <span className="text-green-700 text-sm font-medium flex items-center justify-center gap-1">
+                    <CheckCircle className="w-4 h-4" />
+                    Documento completamente firmado
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-4 border-t">
+            {previewCertification?.document_info?.can_download && (
+              <Button
+                variant="secondary"
+                onClick={() => handleDownloadDocument(previewCertification)}
+                loading={downloadingId === previewCertification?.id}
+              >
+                <Download className="w-4 h-4" />
+                Descargar
+              </Button>
+            )}
             <Button variant="secondary" onClick={handleClosePreview}>
               <X className="w-4 h-4" />
               Cerrar

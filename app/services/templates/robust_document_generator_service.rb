@@ -233,10 +233,7 @@ module Templates
         # Try to convert to PDF (may be slow due to Gotenberg cold start)
         conversion_result = convert_to_pdf(output_file.path)
 
-        result = if conversion_result.is_a?(Hash) && conversion_result[:format] == :docx
-                   # macOS development: DOCX is already stored, nothing more to do
-                   generated_doc
-                 elsif conversion_result
+        result = if conversion_result
                    # PDF conversion successful - upgrade the document from DOCX to PDF
                    upgrade_document_to_pdf!(generated_doc, conversion_result)
                  else
@@ -579,15 +576,6 @@ module Templates
     end
 
     def convert_to_pdf(docx_path)
-      # In macOS development, skip PDF conversion — serve DOCX directly
-      # Frontend renders it with docx-preview for 100% original formatting
-      if Rails.env.development? && RbConfig::CONFIG["host_os"] =~ /darwin/i
-        Rails.logger.info "macOS development: skipping PDF conversion, serving DOCX directly"
-        return { content: File.binread(docx_path), format: :docx }
-      end
-
-      # Gotenberg is the only converter. If it fails, return nil
-      # so the caller creates a "pending" doc and enqueues a retry job.
       result = Templates::GotenbergConversionService.convert(docx_path)
       return result if result
 

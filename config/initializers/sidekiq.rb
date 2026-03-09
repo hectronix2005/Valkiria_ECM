@@ -17,6 +17,16 @@ end
 Sidekiq.configure_server do |config|
   config.redis = redis_config
   config.logger.level = Rails.env.production? ? Logger::INFO : Logger::DEBUG
+
+  # Load cron jobs from sidekiq_cron.yml
+  config.on(:startup) do
+    schedule_file = Rails.root.join("config", "sidekiq_cron.yml")
+    if File.exist?(schedule_file)
+      schedule = YAML.load_file(schedule_file)
+      Sidekiq::Cron::Job.load_from_hash(schedule)
+      Rails.logger.info("[SIDEKIQ] #{schedule.keys.size} cron jobs loaded")
+    end
+  end
 end
 
 Sidekiq.configure_client do |config|

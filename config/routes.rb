@@ -105,6 +105,18 @@ Rails.application.routes.draw do
           end
         end
 
+        # Agent alerts (guardian system)
+        resources :agent_alerts, only: [:index, :show] do
+          member do
+            post :resolve
+          end
+          collection do
+            post :resolve_all
+            get :summary
+            get :health
+          end
+        end
+
         # Users management
         resources :users do
           member do

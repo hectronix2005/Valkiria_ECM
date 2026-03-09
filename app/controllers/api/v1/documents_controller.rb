@@ -255,6 +255,8 @@ module Api
                 required: sig["required"],
                 signed_at: sig["signed_at"],
                 signed_by_name: sig["signed_by_name"],
+                substituted: sig["substituted"] == true,
+                original_user_name: sig["original_user_name"],
                 can_sign_now: order_status[:can_sign_now],
                 waiting_for: order_status[:waiting_for],
                 eligible_users: sig["signed_at"].blank? ? eligible_users_for_signatory_type(sig["signatory_type_code"], doc: document) : []

@@ -756,6 +756,9 @@ export default function Documents() {
                                     ? `Esperando: ${sig.waiting_for.join(', ')}`
                                     : sig.user_name || 'Pendiente'}
                               </p>
+                              {sig.substituted && (
+                                <p className="text-xs text-amber-600">(en sustitución de {sig.original_user_name})</p>
+                              )}
                             </div>
                           </div>
                           {sig.signed_at && (

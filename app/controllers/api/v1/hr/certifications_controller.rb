@@ -48,6 +48,10 @@ module Api
 
           if @certification.save
             NotificationService.certification_submitted(@certification)
+
+            # Auto-generate document if a matching template exists
+            auto_generate_document!
+
             render json: { data: certification_json(@certification) }, status: :created
           else
             render json: { errors: @certification.errors.full_messages }, status: :unprocessable_content
@@ -204,6 +208,11 @@ module Api
           # Aplicar la firma
           generated_doc.sign!(user: current_user, signature: signature)
 
+          # Auto-complete certification when all signatures are done
+          if generated_doc.all_required_signed? && !@certification.completed?
+            @certification.complete!(actor: current_employee, document_uuid: generated_doc.uuid)
+          end
+
           render json: {
             message: "Documento firmado exitosamente",
             document: {
@@ -270,6 +279,28 @@ module Api
 
         private
 
+        # Auto-generate document on creation if a template exists.
+        # Silently skips if no template is found or generation fails
+        # (HR can always regenerate manually later).
+        def auto_generate_document!
+          template = find_template_for_certification
+          return unless template
+
+          context = {
+            employee: @certification.employee,
+            organization: current_organization,
+            request: @certification,
+            user: current_user
+          }
+
+          generator = ::Templates::RobustDocumentGeneratorService.new(template, context)
+          generated_doc = generator.generate!
+
+          @certification.update!(document_uuid: generated_doc.uuid, status: "processing")
+        rescue StandardError => e
+          Rails.logger.warn("Auto-generate document failed for #{@certification.request_number}: #{e.message}")
+        end
+
         def set_certification
           @certification = ::Hr::EmploymentCertificationRequest.find_by!(uuid: params[:id])
         rescue Mongoid::Errors::DocumentNotFound
@@ -313,7 +344,33 @@ module Api
                 can_download: can_download_document?(generated_doc, certification) && generated_doc.pdf_ready?,
                 pending_signatures: generated_doc.pending_signatories.map { |s| s["signatory_label"] },
                 completed_signatures: generated_doc.signed_signatories.map { |s| s["signatory_label"] },
-                all_signed: generated_doc.all_required_signed?
+                all_signed: generated_doc.all_required_signed?,
+                signatures: generated_doc.signatures.map do |sig|
+                  sig_data = {
+                    signatory_type_code: sig["signatory_type_code"],
+                    label: sig["label"] || sig["signatory_label"],
+                    signed: sig["signed_at"].present?,
+                    signed_at: sig["signed_at"],
+                    signed_by: sig["signed_by_name"],
+                    substituted: sig["substituted"] == true,
+                    original_user_name: sig["original_user_name"]
+                  }
+                  if sig["signed_at"].present? && sig["signature_id"].present?
+                    user_sig = ::Identity::UserSignature.where(uuid: sig["signature_id"]).first
+                    sig_data[:signature_image] = user_sig&.to_image_data
+                  end
+                  if sig["signatory_id"].present?
+                    tmpl_sig = generated_doc.template&.signatories&.where(uuid: sig["signatory_id"])&.first
+                    if tmpl_sig
+                      sig_data[:position_box] = {
+                        x: tmpl_sig.x_position, y: tmpl_sig.y_position,
+                        width: tmpl_sig.width, height: tmpl_sig.height,
+                        page: tmpl_sig.page_number
+                      }
+                    end
+                  end
+                  sig_data
+                end
               }
             end
           end
