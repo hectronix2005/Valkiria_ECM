@@ -198,7 +198,6 @@ class AgentRule
         document_type: "system",
         rule_name: "gotenberg",
         rule_config: {
-          "url" => "http://localhost:3000/health",
           "timeout" => 5
         },
         severity: "warning",
@@ -210,7 +209,6 @@ class AgentRule
         rule_name: "vite_frontend",
         rule_config: {
           "enabled" => true,
-          "url" => "http://localhost:5173",
           "timeout" => 5,
           "environments" => %w[development]
         },
@@ -222,7 +220,6 @@ class AgentRule
         document_type: "system",
         rule_name: "rails_api",
         rule_config: {
-          "url" => "http://localhost:3100/api/v1/health",
           "timeout" => 5
         },
         severity: "critical",
