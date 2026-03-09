@@ -140,7 +140,8 @@ class ServiceHealthAgent < BaseAgent
   def check_rails_api
     rule = load_rule("rails_api")
     config = rule&.rule_config || {}
-    url = config.fetch("url", "http://localhost:3100/api/v1/health")
+    default_url = Rails.env.production? ? "https://#{ENV.fetch('APP_HOST', 'localhost')}/api/v1/health" : "http://localhost:3100/api/v1/health"
+    url = config.fetch("url", default_url)
     timeout = config.fetch("timeout", 5)
 
     reachable, details = http_reachable?(url, timeout)
@@ -150,7 +151,8 @@ class ServiceHealthAgent < BaseAgent
   def check_gotenberg
     rule = load_rule("gotenberg")
     config = rule&.rule_config || {}
-    url = config.fetch("url", "http://localhost:3000/health")
+    default_url = ENV.fetch("GOTENBERG_URL", "http://localhost:3200") + "/health"
+    url = config.fetch("url", default_url)
     timeout = config.fetch("timeout", 5)
 
     reachable, details = http_reachable?(url, timeout)

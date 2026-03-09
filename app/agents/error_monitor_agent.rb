@@ -33,10 +33,19 @@ class ErrorMonitorAgent < BaseAgent
   ].freeze
 
   # Servicios a verificar con HTTP ping
-  SERVICES = {
-    "rails_api"     => { url: "http://localhost:3100/api/v1/health", severity: :critical },
-    "vite_frontend" => { url: "http://localhost:5173",               severity: :warning }
-  }.freeze
+  def self.services
+    if Rails.env.production?
+      app_host = ENV.fetch("APP_HOST", "localhost:3100")
+      {
+        "rails_api" => { url: "https://#{app_host}/api/v1/health", severity: :critical }
+      }
+    else
+      {
+        "rails_api"     => { url: "http://localhost:3100/api/v1/health", severity: :critical },
+        "vite_frontend" => { url: "http://localhost:5173",               severity: :warning }
+      }
+    end
+  end
 
   CONNECTION_ERROR_PATTERNS = /ECONNREFUSED|Connection refused|Connection reset|connection timed out|No route to host/i
 
@@ -422,7 +431,7 @@ class ErrorMonitorAgent < BaseAgent
     conn_error_services = conn_errors.map { |e| e.request_path }.compact.uniq.first(5)
 
     # HTTP ping directo a cada servicio
-    SERVICES.each do |service_name, config|
+    self.class.services.each do |service_name, config|
       rule_config = load_service_config(service_name)
       url = rule_config.fetch("url", config[:url])
       timeout = rule_config.fetch("timeout", HTTP_TIMEOUT)
