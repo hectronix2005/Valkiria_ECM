@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": ">=18.0.0"
+    "node": "22.x"
   },
   "scripts": {
     "build": "echo 'No root build'",
-    "heroku-postbuild": "cd frontend && npm install && npm run build"
+    "heroku-postbuild": "cd frontend && npm install --include=dev && npm run build"
   }
 }
