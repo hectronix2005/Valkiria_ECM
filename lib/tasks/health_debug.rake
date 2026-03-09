@@ -13,12 +13,12 @@ namespace :agents do
       end
     end
 
-    checks = agent.instance_variable_get(:@checks) || {}
-    checks.each do |name, result|
+    checks = agent.results[:checks] || []
+    checks.each do |result|
       status = result[:passed] ? "PASS" : "FAIL"
-      puts "#{status} | #{name} | #{result[:details].inspect}"
+      puts "#{status} | #{result[:name]} | #{result[:details].inspect}"
     end
 
-    puts "\nTotal: #{checks.size} checks, #{checks.count { |_, r| !r[:passed] }} failures"
+    puts "\nTotal: #{checks.size} checks, #{checks.count { |r| !r[:passed] }} failures"
   end
 end
