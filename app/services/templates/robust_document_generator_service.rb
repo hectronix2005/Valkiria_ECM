@@ -576,7 +576,11 @@ module Templates
     end
 
     def convert_to_pdf(docx_path)
-      result = Templates::GotenbergConversionService.convert(docx_path)
+      # Pass template page dimensions so Gotenberg outputs matching page size
+      page_size = if template&.pdf_width && template&.pdf_height
+                    { width_pts: template.pdf_width, height_pts: template.pdf_height }
+                  end
+      result = Templates::GotenbergConversionService.convert(docx_path, page_size: page_size)
       return result if result
 
       Rails.logger.warn "Gotenberg unavailable — document will be created with pending PDF"

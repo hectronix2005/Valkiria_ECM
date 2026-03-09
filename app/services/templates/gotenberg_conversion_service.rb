@@ -19,18 +19,21 @@ module Templates
 
     # Quick conversion for web requests — single attempt, short timeouts.
     # Returns PDF bytes or nil (caller should create pending doc + enqueue job).
-    def self.convert(docx_path)
-      attempt_conversion(docx_path, attempts: 1, open_timeout: WEB_OPEN_TIMEOUT, read_timeout: WEB_READ_TIMEOUT)
+    # page_size: optional { width_pts:, height_pts: } to enforce specific page dimensions
+    def self.convert(docx_path, page_size: nil)
+      attempt_conversion(docx_path, attempts: 1, open_timeout: WEB_OPEN_TIMEOUT, read_timeout: WEB_READ_TIMEOUT,
+                                    page_size: page_size)
     end
 
     # Full conversion for async jobs — multiple retries, generous timeouts.
     # Returns PDF bytes or nil (job will re-raise to trigger Sidekiq retry).
-    def self.convert_with_retries(docx_path)
+    def self.convert_with_retries(docx_path, page_size: nil)
       attempt_conversion(docx_path, attempts: JOB_MAX_ATTEMPTS, backoffs: JOB_BACKOFF_SECONDS,
-                                    open_timeout: JOB_OPEN_TIMEOUT, read_timeout: JOB_READ_TIMEOUT)
+                                    open_timeout: JOB_OPEN_TIMEOUT, read_timeout: JOB_READ_TIMEOUT,
+                                    page_size: page_size)
     end
 
-    def self.attempt_conversion(docx_path, attempts:, open_timeout:, read_timeout:, backoffs: [0])
+    def self.attempt_conversion(docx_path, attempts:, open_timeout:, read_timeout:, backoffs: [0], page_size: nil)
       return nil unless ENV["GOTENBERG_URL"].present?
 
       gotenberg_url = ENV["GOTENBERG_URL"].chomp("/")
@@ -38,6 +41,14 @@ module Templates
 
       file_content = File.binread(docx_path)
       file_name = File.basename(docx_path)
+
+      # Convert page dimensions from points to inches for Gotenberg
+      paper_fields = {}
+      if page_size && page_size[:width_pts] && page_size[:height_pts]
+        paper_fields["paperWidth"] = (page_size[:width_pts] / 72.0).round(2).to_s
+        paper_fields["paperHeight"] = (page_size[:height_pts] / 72.0).round(2).to_s
+        Rails.logger.info "[GotenbergConversion] Using page size: #{paper_fields['paperWidth']}x#{paper_fields['paperHeight']} inches"
+      end
 
       # Wake up Gotenberg before the first conversion attempt
       GotenbergWarmupService.ping
@@ -48,7 +59,7 @@ module Templates
 
         begin
           boundary = "----GotenbergBoundary#{SecureRandom.hex(8)}"
-          body = build_multipart_body(boundary, file_name, file_content)
+          body = build_multipart_body(boundary, file_name, file_content, extra_fields: paper_fields)
 
           http = Net::HTTP.new(uri.host, uri.port)
           http.use_ssl = uri.scheme == "https"
@@ -82,8 +93,19 @@ module Templates
     end
     private_class_method :attempt_conversion
 
-    def self.build_multipart_body(boundary, file_name, file_content)
+    def self.build_multipart_body(boundary, file_name, file_content, extra_fields: {})
       body = String.new(encoding: "BINARY")
+
+      # Add extra form fields (e.g., paperWidth, paperHeight)
+      extra_fields.each do |name, value|
+        body << "--#{boundary}\r\n"
+        body << "Content-Disposition: form-data; name=\"#{name}\"\r\n"
+        body << "\r\n"
+        body << value.to_s
+        body << "\r\n"
+      end
+
+      # Add the DOCX file
       body << "--#{boundary}\r\n"
       body << "Content-Disposition: form-data; name=\"files\"; filename=\"#{file_name}\"\r\n"
       body << "Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n"

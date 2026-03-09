@@ -127,7 +127,7 @@ module Api
         end
 
         # Get user's default signature
-        signature = current_user.signatures.active.default_signature.first || current_user.signatures.active.first
+        signature = current_user.signatures.active.default_signature.first || current_user.signatures.active.order(updated_at: :desc).first
         unless signature
           return render json: { error: "No tienes una firma digital configurada. Configura tu firma en tu perfil." }, status: :unprocessable_entity
         end

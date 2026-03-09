@@ -153,8 +153,9 @@ module Api
             return render json: { error: "Documento no encontrado" }, status: :not_found
           end
 
-          # Get user's digital signature
-          signature = current_user.signatures.where(is_default: true).first || current_user.signatures.first
+          # Get user's digital signature (prefer default, then most recently updated)
+          signature = current_user.signatures.where(is_default: true).first ||
+                      current_user.signatures.where(active: true).order(updated_at: :desc).first
           unless signature
             return render json: {
               error: "No tienes una firma configurada. Ve a tu perfil para crear una.",
@@ -454,7 +455,7 @@ module Api
           return unless sig_slot
 
           user_signature = current_user.signatures.where(is_default: true).first ||
-                           current_user.signatures.first
+                           current_user.signatures.where(active: true).order(updated_at: :desc).first
           unless user_signature
             raise ::Templates::GeneratedDocument::SignatureError,
                   "Debes configurar tu firma digital antes de aprobar. Ve a tu perfil para crearla."

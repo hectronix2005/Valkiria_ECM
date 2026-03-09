@@ -282,10 +282,17 @@ module Templates
             raw_template_y = signatory.y_position.to_f % page_height # Use raw Y (before scale correction) for offset check
             offset = (raw_template_y - anchor_y).abs
             if offset > 10 # Only adjust if significant mismatch (>10 pts)
-              # Place signature box so its bottom edge aligns with the underscore line.
-              # This positions the signature image above the underscores with the label between.
-              adjusted_y = anchor_y - signatory.height.to_f
-              Rails.logger.info "Signature anchor adjustment: raw_template_y=#{raw_template_y} -> adjusted_y=#{adjusted_y} (anchor_line=#{anchor_y}, box_height=#{signatory.height}, offset=#{offset.round(1)}pts)"
+              # Calculate signature image height (excluding text space for label/name)
+              text_lines = 0
+              text_lines += 1 if signatory.show_label != false
+              text_lines += 1 if signatory.show_signer_name
+              text_space = text_lines * 10
+              sig_image_height = signatory.height.to_f - text_space
+
+              # Place signature image so its bottom edge aligns with the underscore line.
+              # Label/name text will render below the underscore line.
+              adjusted_y = anchor_y - sig_image_height
+              Rails.logger.info "Signature anchor adjustment: raw_template_y=#{raw_template_y} -> adjusted_y=#{adjusted_y} (anchor_line=#{anchor_y}, sig_image_h=#{sig_image_height}, text_space=#{text_space}, offset=#{offset.round(1)}pts)"
               relative_y = adjusted_y
             end
           end
