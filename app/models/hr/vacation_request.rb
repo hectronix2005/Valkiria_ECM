@@ -109,7 +109,7 @@ module Hr
     scope :decided, -> { where(:status.in => [STATUS_APPROVED, STATUS_REJECTED]) }
     scope :scheduled, -> { approved.where(:start_date.gt => Date.current) }  # Programadas (futuras)
     scope :in_progress, -> { approved.where(:start_date.lte => Date.current, :end_date.gte => Date.current) }
-    scope :system, -> { where(status: STATUS_SYSTEM) }
+    scope :system_adjustment, -> { where(status: STATUS_SYSTEM) }
     scope :used, -> { where(:status.in => [STATUS_APPROVED, STATUS_ENJOYED, STATUS_SYSTEM]) }  # Consumen balance
     scope :for_approval_by, ->(employee) { pending.where(approver_id: employee.id) }
     scope :upcoming, -> { approved.where(:start_date.gte => Date.current) }

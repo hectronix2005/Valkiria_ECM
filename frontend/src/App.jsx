@@ -16,6 +16,17 @@ class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    // Auto-reload on stale chunk errors (deploy invalidated cached assets)
+    const isChunkError = error?.message?.includes('Failed to fetch dynamically imported module')
+      || error?.message?.includes('Loading chunk')
+      || error?.message?.includes('Loading CSS chunk')
+    if (isChunkError && !sessionStorage.getItem('chunk_reload')) {
+      sessionStorage.setItem('chunk_reload', '1')
+      window.location.reload()
+      return
+    }
+    sessionStorage.removeItem('chunk_reload')
+
     reportFrontendError({
       message: error?.message || 'React render crash',
       error_class: error?.name || 'ReactError',

@@ -108,8 +108,8 @@ module Hr
 
     # Indexes
     index({ uuid: 1 }, { unique: true })
-    index({ employee_number: 1 }, { unique: true, sparse: true })
-    index({ user_id: 1 }, { unique: true, sparse: true })
+    index({ employee_number: 1 }, { unique: true, partial_filter_expression: { employee_number: { "$type" => "string" } } })
+    index({ user_id: 1 }, { unique: true, partial_filter_expression: { user_id: { "$exists" => true } } })
     index({ supervisor_id: 1 })
     index({ organization_id: 1 })
     index({ employment_status: 1 })
@@ -312,7 +312,7 @@ module Hr
       return unless excess >= 1
 
       # Skip if there's already a system adjustment this year
-      return if vacation_requests.system
+      return if vacation_requests.system_adjustment
                   .where(:created_at.gte => Date.current.beginning_of_year)
                   .exists?
 

@@ -64,7 +64,7 @@ module Identity
     before_validation :generate_slug, on: :create
 
     # Scopes
-    scope :active, -> { where(active: true) }
+    scope :enabled, -> { where(active: true) }
 
     def activate!
       update!(active: true)

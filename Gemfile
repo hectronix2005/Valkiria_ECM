@@ -20,6 +20,7 @@ gem "devise-jwt", "~> 0.12"
 gem "pundit", "~> 2.4"
 
 # Background Jobs
+gem "connection_pool", "~> 2.4"  # Pin < 3.0 — incompatible with sidekiq 7.3.x scheduler
 gem "redis", ">= 4.0.1"
 gem "sidekiq", "~> 7.3"
 gem "sidekiq-cron", "~> 1.12"
