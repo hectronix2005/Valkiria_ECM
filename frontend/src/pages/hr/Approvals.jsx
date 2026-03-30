@@ -552,6 +552,7 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
   const [signError, setSignError] = useState('')
   const [expandedSigs, setExpandedSigs] = useState({})
   const [autoGenTriggered, setAutoGenTriggered] = useState(false)
+  const [customValues, setCustomValues] = useState({})
   const queryClient = useQueryClient()
   const documentInfo = request.document
 
@@ -893,16 +894,41 @@ function CertificationDetailWithDocument({ request, onClose, onApprove, onReject
               <p className="text-gray-500 text-sm mt-1">Esto puede tomar unos segundos</p>
             </div>
           ) : generateError ? (
-            <div className="border rounded-lg p-6 text-center bg-red-50 border-red-200">
-              <AlertCircle className="w-8 h-8 mx-auto text-red-500 mb-2" />
-              <p className="text-red-700 font-medium">Error al generar documento</p>
-              <p className="text-red-600 text-sm mt-1 mb-4">{generateError}</p>
+            <div className="border rounded-lg p-6 bg-red-50 border-red-200">
+              <div className="text-center mb-4">
+                <AlertCircle className="w-8 h-8 mx-auto text-red-500 mb-2" />
+                <p className="text-red-700 font-medium">Error al generar documento</p>
+                <p className="text-red-600 text-sm mt-1">{generateError?.error || 'Error al generar documento'}</p>
+              </div>
+              {generateError?.error_type === 'missing_variables' &&
+                (generateError?.missing_data?.by_source?.custom || []).length > 0 && (
+                <div className="mb-4 space-y-3 bg-white p-3 rounded-lg border border-red-100">
+                  <p className="text-sm font-medium text-gray-700">Completa los siguientes campos para continuar:</p>
+                  {(generateError.missing_data.by_source.custom).map(entry => {
+                    const key = `custom.${entry.field}`
+                    const label = entry.field_label || entry.variable
+                    return (
+                      <div key={entry.field}>
+                        <label className="block text-xs text-gray-500 mb-1">{label}</label>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          value={customValues[key] || ''}
+                          onChange={e => setCustomValues(prev => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={`Ingresa ${label}`}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
               {onGenerateDocument && (
                 <Button
-                  onClick={() => onGenerateDocument(request.id)}
+                  onClick={() => onGenerateDocument(request.id, customValues)}
+                  className="w-full"
                 >
                   <FileText className="w-4 h-4" />
-                  Reintentar
+                  {generateError?.error_type === 'missing_variables' ? 'Generar Documento' : 'Reintentar'}
                 </Button>
               )}
             </div>
@@ -1025,7 +1051,7 @@ export default function Approvals() {
   })
 
   const generateDocMutation = useMutation({
-    mutationFn: (id) => certificationService.generateDocument(id),
+    mutationFn: ({ id, customValues = {} }) => certificationService.generateDocument(id, customValues),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['approvals'] })
       queryClient.invalidateQueries({ queryKey: ['approval-detail'] })
@@ -1360,9 +1386,9 @@ export default function Approvals() {
             onClose={() => setShowDetailModal(false)}
             onApprove={(req) => { setShowDetailModal(false); handleApprove(req, 'certification') }}
             onReject={(req) => { setShowDetailModal(false); handleReject(req, 'certification') }}
-            onGenerateDocument={(id) => generateDocMutation.mutate(id)}
+            onGenerateDocument={(id, customValues) => generateDocMutation.mutate({ id, customValues })}
             isGenerating={generateDocMutation.isPending}
-            generateError={generateDocMutation.isError ? (generateDocMutation.error?.response?.data?.error || 'Error al generar documento') : null}
+            generateError={generateDocMutation.isError ? generateDocMutation.error?.response?.data : null}
           />
         ) : null}
       </Modal>

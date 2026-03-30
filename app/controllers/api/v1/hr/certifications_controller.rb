@@ -115,11 +115,14 @@ module Api
           end
 
           # Build context for variable resolution
+          # custom_values allows callers to supply values for custom.* variables inline
+          custom_values = params[:custom_values]&.to_unsafe_h || {}
           context = {
             employee: @certification.employee,
             organization: current_organization,
             request: @certification,
-            user: current_user
+            user: current_user,
+            custom_values: custom_values
           }
 
           # Generate document using robust service for better formatting

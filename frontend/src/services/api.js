@@ -145,7 +145,7 @@ export const certificationService = {
   update: (id, data) => api.patch(`/hr/certifications/${id}`, { certification: data }),
   cancel: (id) => api.post(`/hr/certifications/${id}/cancel`),
   delete: (id) => api.delete(`/hr/certifications/${id}`),
-  generateDocument: (id) => api.post(`/hr/certifications/${id}/generate_document`),
+  generateDocument: (id, customValues = {}) => api.post(`/hr/certifications/${id}/generate_document`, Object.keys(customValues).length ? { custom_values: customValues } : {}),
   signDocument: (id) => api.post(`/hr/certifications/${id}/sign_document`),
   downloadDocument: (id) => api.get(`/hr/certifications/${id}/download_document`, { responseType: 'blob' }),
   getAvailableTypes: () => api.get('/hr/certifications/available_types'),
