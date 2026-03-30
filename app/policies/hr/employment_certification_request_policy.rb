@@ -38,21 +38,13 @@ module Hr
 
     class Scope < ApplicationPolicy::Scope
       def resolve
-        if !employee_mode? && (user_employee.hr_staff? || user_employee.hr_manager?)
-          scope.where(organization_id: user.organization_id)
-        else
-          scope.where(employee_id: user_employee.id)
-        end
-      end
+        # /hr/certifications is the "My Requests" endpoint — always scoped to
+        # the current employee's own records regardless of admin/employee mode.
+        # HR staff manages all requests via /hr/approvals.
+        employee = ::Hr::Employee.for_user(user)
+        return scope.none unless employee
 
-      private
-
-      def user_employee
-        @user_employee ||= ::Hr::Employee.for_user(user)
-      end
-
-      def employee_mode?
-        Thread.current[:employee_mode] == true
+        scope.where(employee_id: employee.id)
       end
     end
 

@@ -12,9 +12,6 @@ module Api
           @certifications = policy_scope(::Hr::EmploymentCertificationRequest)
             .order(created_at: :desc)
 
-          # In employee mode, force scope to only own requests
-          @certifications = @certifications.where(employee_id: current_employee.id) if employee_mode? && current_employee
-
           @certifications = apply_filters(@certifications)
           @certifications = paginate(@certifications)
 
