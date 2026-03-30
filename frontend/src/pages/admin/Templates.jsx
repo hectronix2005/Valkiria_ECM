@@ -26,7 +26,8 @@ import {
   Download,
   Users,
   Building2,
-  Briefcase
+  Briefcase,
+  Variable
 } from 'lucide-react'
 
 const STATUS_LABELS = {
@@ -839,6 +840,12 @@ export default function Templates({ module = 'legal' }) {
             <Button variant="secondary">
               <Users className="w-4 h-4" />
               Tipos de Firmantes
+            </Button>
+          </Link>
+          <Link to="/admin/variable-mappings">
+            <Button variant="secondary">
+              <Variable className="w-4 h-4" />
+              Variables
             </Button>
           </Link>
           <Button onClick={() => setShowCreateModal(true)}>

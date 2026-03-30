@@ -171,6 +171,14 @@ module Templates
     def activate!
       raise InvalidStateError, "Template debe tener archivo adjunto para activar" unless file_id
 
+      if variables.present?
+        unassigned = variables.reject { |v| variable_mappings[v].present? }
+        if unassigned.any?
+          raise InvalidStateError,
+            "No se puede activar: #{unassigned.size} variable(s) sin asignar: #{unassigned.join(', ')}"
+        end
+      end
+
       update!(status: ACTIVE)
     end
 

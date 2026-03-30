@@ -456,10 +456,10 @@ module Api
         end
 
         def ensure_admin_or_hr
-          return if admin? || current_user.has_role?("hr")
+          return if admin_access? || current_user.has_role?("hr")
 
           render json: {
-            error: "Acceso denegado. Se requieren privilegios de administrador o HR."
+            error: "Acceso denegado. Se requieren privilegios de administrador, legal o HR."
           }, status: :forbidden
         end
 

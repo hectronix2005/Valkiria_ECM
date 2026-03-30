@@ -64,6 +64,7 @@ const hrAdminNavigation = [
   { name: 'Empleados', href: '/hr/employees', icon: Users },
   { name: 'Documentacion', href: '/hr/documents', icon: FileCheck },
   { name: 'Plantillas HR', href: '/admin/templates/hr', icon: FileText },
+  { name: 'Variables', href: '/admin/variable-mappings', icon: Variable },
   { name: 'Dashboard HR', href: '/hr/dashboard', icon: BarChart3 },
 ]
 
