@@ -278,6 +278,7 @@ export const templateService = {
   update: (id, data) => api.patch(`/admin/templates/${id}`, data),
   delete: (id) => api.delete(`/admin/templates/${id}`),
   activate: (id) => api.post(`/admin/templates/${id}/activate`),
+  deactivate: (id) => api.post(`/admin/templates/${id}/deactivate`),
   archive: (id) => api.post(`/admin/templates/${id}/archive`),
   duplicate: (id) => api.post(`/admin/templates/${id}/duplicate`),
   newVersion: (id) => api.post(`/admin/templates/${id}/new_version`),

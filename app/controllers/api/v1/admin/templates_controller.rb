@@ -5,7 +5,7 @@ module Api
     module Admin
       class TemplatesController < BaseController
         before_action :ensure_admin_or_hr
-        before_action :set_template, only: [:show, :update, :destroy, :activate, :archive, :duplicate, :new_version, :reassign_mappings, :download, :preview]
+        before_action :set_template, only: [:show, :update, :destroy, :activate, :deactivate, :archive, :duplicate, :new_version, :reassign_mappings, :download, :preview]
 
         # GET /api/v1/admin/templates
         def index
@@ -127,6 +127,17 @@ module Api
           render json: {
             data: template_json(@template),
             message: "Template activado exitosamente"
+          }
+        rescue ::Templates::Template::InvalidStateError => e
+          render json: { error: e.message }, status: :unprocessable_content
+        end
+
+        # POST /api/v1/admin/templates/:id/deactivate
+        def deactivate
+          @template.deactivate!
+          render json: {
+            data: template_json(@template),
+            message: "Template vuelto a Borrador"
           }
         rescue ::Templates::Template::InvalidStateError => e
           render json: { error: e.message }, status: :unprocessable_content

@@ -1270,6 +1270,13 @@ export default function TemplateEdit() {
     }
   })
 
+  const deactivateMutation = useMutation({
+    mutationFn: () => templateService.deactivate(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['template', id] })
+    }
+  })
+
   const deleteSignatoryMutation = useMutation({
     mutationFn: (sigId) => templateService.deleteSignatory(id, sigId),
     onSuccess: () => {
@@ -1415,6 +1422,17 @@ export default function TemplateEdit() {
           <Button onClick={() => activateMutation.mutate()} loading={activateMutation.isPending}>
             <CheckCircle className="w-4 h-4" />
             Activar Template
+          </Button>
+        )}
+        {template.status === 'active' && (
+          <Button
+            variant="secondary"
+            onClick={() => deactivateMutation.mutate()}
+            loading={deactivateMutation.isPending}
+            title="Vuelve el template a Borrador para editarlo"
+          >
+            <Archive className="w-4 h-4" />
+            Desactivar
           </Button>
         )}
       </div>

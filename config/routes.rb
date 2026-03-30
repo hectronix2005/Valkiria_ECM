@@ -173,6 +173,7 @@ Rails.application.routes.draw do
         resources :templates do
           member do
             post :activate
+            post :deactivate
             post :archive
             post :duplicate
             post :new_version

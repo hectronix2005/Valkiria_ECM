@@ -186,6 +186,12 @@ module Templates
       update!(status: ARCHIVED)
     end
 
+    def deactivate!
+      raise InvalidStateError, "Solo se pueden desactivar templates activos" unless active?
+
+      update!(status: DRAFT)
+    end
+
     def reactivate!
       update!(status: ACTIVE)
     end
