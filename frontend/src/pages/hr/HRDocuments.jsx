@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import logger from '../../utils/logger'
 import { generatedDocumentService, variableMappingService, signatureService } from '../../services/api'
@@ -498,22 +498,42 @@ export default function HRDocuments() {
   const [signPreviewUrl, setSignPreviewUrl] = useState(null)
   const [loadingSignPreview, setLoadingSignPreview] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [sortColumn, setSortColumn] = useState('created_at')
   const [sortDirection, setSortDirection] = useState('desc')
+  const debounceTimer = useRef(null)
+
+  // Debounce search: only fire API after 400ms idle
+  const handleSearchChange = (e) => {
+    const value = e.target.value
+    setSearchQuery(value)
+    clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedSearch(value)
+      setPage(1)
+    }, 400)
+  }
+
+  // Reset page when non-search filters change
+  useEffect(() => { setPage(1) }, [statusFilter, categoryFilter])
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => () => clearTimeout(debounceTimer.current), [])
 
   // Fetch HR documents (filtered by module=hr)
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['hr-documents', page, statusFilter, categoryFilter, searchQuery],
+  const { data, isLoading, isFetching, isError } = useQuery({
+    queryKey: ['hr-documents', page, statusFilter, categoryFilter, debouncedSearch],
     queryFn: () => generatedDocumentService.list({
       page,
       per_page: 20,
       module: 'hr',
       status: statusFilter || undefined,
       category: categoryFilter || undefined,
-      q: searchQuery || undefined
-    })
+      q: debouncedSearch || undefined
+    }),
+    placeholderData: keepPreviousData
   })
 
   // Fetch user's digital signatures
@@ -603,7 +623,9 @@ export default function HRDocuments() {
   }
 
   const clearFilters = () => {
+    clearTimeout(debounceTimer.current)
     setSearchQuery('')
+    setDebouncedSearch('')
     setStatusFilter('')
     setCategoryFilter('')
     setPage(1)
@@ -764,7 +786,7 @@ export default function HRDocuments() {
     draft: documentsRaw.filter(d => d.status === 'draft').length
   }
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -891,14 +913,14 @@ export default function HRDocuments() {
                   type="text"
                   placeholder="Buscar por empleado, documento..."
                   value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
+                  onChange={handleSearchChange}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             </div>
             <select
               value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+              onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="">Todos los estados</option>
@@ -909,7 +931,7 @@ export default function HRDocuments() {
             </select>
             <select
               value={categoryFilter}
-              onChange={(e) => { setCategoryFilter(e.target.value); setPage(1) }}
+              onChange={(e) => setCategoryFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="">Tipo de documento</option>
@@ -928,11 +950,16 @@ export default function HRDocuments() {
               </button>
             )}
           </div>
-          {!isLoading && (
-            <div className="mt-3 text-sm text-gray-500">
-              Mostrando <strong>{documents.length}</strong> de <strong>{meta.total_count || 0}</strong> documentos
-            </div>
-          )}
+          <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
+            {isFetching ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                <span>Buscando...</span>
+              </>
+            ) : (
+              <span>Mostrando <strong>{documents.length}</strong> de <strong>{meta.total_count || 0}</strong> documentos</span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
