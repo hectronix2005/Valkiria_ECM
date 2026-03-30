@@ -34,15 +34,21 @@ module Templates
           scope.where(organization_id: user.organization_id)
         else
           # Employee mode or regular users: only see their own documents
-          # 1. Requested by them
-          # 2. They are the employee on the document
-          # 3. They have a signature on it (pending or signed)
+          # 1. They are the employee on the document (subject of the document)
+          # 2. They have a signature on it (pending or signed)
+          # NOTE: requested_by_id is intentionally excluded — HR staff who
+          # generate documents for others would otherwise see those docs in
+          # employee mode.
           employee = ::Hr::Employee.for_user(user)
           employee_id = employee&.id
 
-          conditions = [{ requested_by_id: user.id }]
+          conditions = []
           conditions << { employee_id: employee_id } if employee_id
           conditions << { "signatures.user_id" => user.id.to_s }
+
+          # If no employee record exists, fall back to requested_by_id so the
+          # user can still see documents they personally requested for themselves.
+          conditions << { requested_by_id: user.id } if conditions.empty?
 
           scope.where(organization_id: user.organization_id).any_of(*conditions)
         end
