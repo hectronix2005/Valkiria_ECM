@@ -1419,10 +1419,17 @@ export default function TemplateEdit() {
         </div>
 
         {template.status === 'draft' && template.file_name && (
-          <Button onClick={() => activateMutation.mutate()} loading={activateMutation.isPending}>
-            <CheckCircle className="w-4 h-4" />
-            Activar Template
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button onClick={() => activateMutation.mutate()} loading={activateMutation.isPending}>
+              <CheckCircle className="w-4 h-4" />
+              Activar Template
+            </Button>
+            {activateMutation.error && (
+              <p className="text-xs text-red-600 max-w-xs text-right">
+                {activateMutation.error.response?.data?.error || 'Error al activar'}
+              </p>
+            )}
+          </div>
         )}
         {template.status === 'active' && (
           <Button
