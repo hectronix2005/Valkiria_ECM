@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import logger from '../../utils/logger'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -28,7 +28,10 @@ import {
   Move,
   Eye,
   PenTool,
-  Download
+  Download,
+  ChevronDown,
+  Search,
+  CheckCircle2
 } from 'lucide-react'
 
 // Default PDF dimensions (Letter size) in points (72 DPI)
@@ -968,6 +971,144 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
   )
 }
 
+const CATEGORY_LABELS_MAP = {
+  employee: 'Empleado',
+  organization: 'Organización',
+  system: 'Sistema',
+  request: 'Solicitud',
+  third_party: 'Tercero',
+  contract: 'Contrato',
+  custom: 'Personalizado'
+}
+
+// Searchable combobox for variable mapping selection
+function SearchableMappingSelect({ value, onChange, groupedMappings }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const wrapperRef = useRef(null)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false)
+        setSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) inputRef.current.focus()
+  }, [isOpen])
+
+  const allItems = useMemo(
+    () => Object.values(groupedMappings).flat(),
+    [groupedMappings]
+  )
+  const currentMapping = useMemo(
+    () => allItems.find(m => m.key === value),
+    [allItems, value]
+  )
+
+  const filteredGroups = useMemo(() => {
+    if (!search.trim()) return groupedMappings
+    const q = search.toLowerCase()
+    const result = {}
+    Object.entries(groupedMappings).forEach(([cat, items]) => {
+      const matched = items.filter(m =>
+        m.name.toLowerCase().includes(q) ||
+        m.key.toLowerCase().includes(q) ||
+        m.description?.toLowerCase().includes(q)
+      )
+      if (matched.length) result[cat] = matched
+    })
+    return result
+  }, [groupedMappings, search])
+
+  const handleSelect = (key) => {
+    onChange(key)
+    setIsOpen(false)
+    setSearch('')
+  }
+
+  const isMapped = Boolean(value)
+
+  return (
+    <div ref={wrapperRef} className="relative flex-1 min-w-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen(o => !o)}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 border rounded-lg text-sm text-left transition-colors
+          ${isMapped
+            ? 'border-green-300 bg-green-50 hover:border-green-400'
+            : 'border-amber-300 bg-amber-50 hover:border-amber-400'}`}
+      >
+        <span className={`truncate ${isMapped ? 'text-gray-800' : 'text-amber-600 italic'}`}>
+          {currentMapping ? currentMapping.name : 'Sin asignar — click para seleccionar'}
+        </span>
+        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''} ${isMapped ? 'text-green-500' : 'text-amber-400'}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col"
+          style={{ maxHeight: 300 }}>
+          <div className="p-2 border-b flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Buscar variable del sistema..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="flex-1 text-sm outline-none"
+            />
+          </div>
+          <div className="overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => handleSelect('')}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 border-b"
+            >
+              — Sin asignar —
+            </button>
+            {Object.entries(filteredGroups).map(([cat, items]) => (
+              <div key={cat}>
+                <div className="px-3 py-1 text-xs font-semibold text-gray-500 bg-gray-50 uppercase tracking-wide sticky top-0">
+                  {CATEGORY_LABELS_MAP[cat] || cat}
+                </div>
+                {items.map(m => (
+                  <button
+                    key={m.id || m.key}
+                    type="button"
+                    onClick={() => handleSelect(m.key)}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-50 transition-colors
+                      ${value === m.key ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-700'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span>{m.name}</span>
+                      {value === m.key && <CheckCircle2 className="w-3.5 h-3.5 text-primary-500 flex-shrink-0" />}
+                    </div>
+                    {m.description && (
+                      <span className="text-xs text-gray-400 block truncate">{m.description}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {Object.keys(filteredGroups).length === 0 && (
+              <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                Sin resultados para "{search}"
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TemplateEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -978,6 +1119,7 @@ export default function TemplateEdit() {
   const [editingSignatory, setEditingSignatory] = useState(null)
   const [editingMappings, setEditingMappings] = useState({})
   const [isSavingMappings, setIsSavingMappings] = useState(false)
+  const [reassignStats, setReassignStats] = useState(null) // { matched, unmatched: [] }
   const [selectedSignatoryId, setSelectedSignatoryId] = useState(null)
   const [localSignatories, setLocalSignatories] = useState([])
   const [hasPositionChanges, setHasPositionChanges] = useState(false)
@@ -1117,9 +1259,10 @@ export default function TemplateEdit() {
 
   const reassignMutation = useMutation({
     mutationFn: () => templateService.reassignMappings(id),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['template', id] })
       setEditingMappings({})
+      if (response.data?.stats) setReassignStats(response.data.stats)
     }
   })
 
@@ -1224,16 +1367,9 @@ export default function TemplateEdit() {
   }
 
   const mappings = { ...template.variable_mappings, ...editingMappings }
-  const availableMappings = template.available_mappings || {}
   const groupedMappings = mappingsData?.data?.data || {}
 
-  const CATEGORY_LABELS = {
-    employee: 'Empleado',
-    organization: 'Organizacion',
-    system: 'Sistema',
-    request: 'Solicitud',
-    custom: 'Personalizado'
-  }
+  const unmappedCount = (template.variables || []).filter(v => !mappings[v]).length
 
   return (
     <div className="space-y-6">
@@ -1401,14 +1537,26 @@ export default function TemplateEdit() {
                   <CardTitle className="flex items-center gap-2">
                     <Variable className="w-5 h-5" />
                     Variables Detectadas ({template.variables.length})
+                    {unmappedCount > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                        <AlertCircle className="w-3 h-3" />
+                        {unmappedCount} sin asignar
+                      </span>
+                    )}
+                    {unmappedCount === 0 && template.variables.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Todas asignadas
+                      </span>
+                    )}
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => reassignMutation.mutate()}
+                      onClick={() => { setReassignStats(null); reassignMutation.mutate() }}
                       loading={reassignMutation.isPending}
-                      title="Reasignar automaticamente desde variables del sistema"
+                      title="Reasignar automáticamente desde variables del sistema (incluye aliases)"
                     >
                       <RefreshCw className="w-4 h-4" />
                       Auto-asignar
@@ -1426,71 +1574,62 @@ export default function TemplateEdit() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {template.variables.map((variable) => (
-                    <div key={variable} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                      <code className="px-2 py-1 bg-white border rounded text-sm flex-shrink-0">
-                        {`{{${variable}}}`}
-                      </code>
-                      <span className="text-gray-400">=</span>
-                      <select
-                        value={mappings[variable] || ''}
-                        onChange={(e) => setEditingMappings({
-                          ...editingMappings,
-                          [variable]: e.target.value
-                        })}
-                        className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="">-- Seleccionar mapeo --</option>
-                        {Object.keys(groupedMappings).length > 0 ? (
-                          // Use grouped mappings from API
-                          Object.entries(groupedMappings).map(([category, items]) => (
-                            <optgroup key={category} label={CATEGORY_LABELS[category] || category}>
-                              {items.map((m, idx) => (
-                                <option key={m.id || `${category}-${idx}`} value={m.key}>{m.name}</option>
-                              ))}
-                            </optgroup>
-                          ))
-                        ) : (
-                          // Fallback to template's available mappings
-                          <>
-                            <optgroup label="Empleado">
-                              {Object.entries(availableMappings)
-                                .filter(([, path]) => path.startsWith('employee.'))
-                                .map(([label, path], idx) => (
-                                  <option key={`employee-${idx}-${path}`} value={path}>{label}</option>
-                                ))
-                              }
-                            </optgroup>
-                            <optgroup label="Organizacion">
-                              {Object.entries(availableMappings)
-                                .filter(([, path]) => path.startsWith('organization.'))
-                                .map(([label, path], idx) => (
-                                  <option key={`organization-${idx}-${path}`} value={path}>{label}</option>
-                                ))
-                              }
-                            </optgroup>
-                            <optgroup label="Sistema">
-                              {Object.entries(availableMappings)
-                                .filter(([, path]) => path.startsWith('system.'))
-                                .map(([label, path], idx) => (
-                                  <option key={`system-${idx}-${path}`} value={path}>{label}</option>
-                                ))
-                              }
-                            </optgroup>
-                            <optgroup label="Solicitud">
-                              {Object.entries(availableMappings)
-                                .filter(([, path]) => path.startsWith('request.'))
-                                .map(([label, path], idx) => (
-                                  <option key={`request-${idx}-${path}`} value={path}>{label}</option>
-                                ))
-                              }
-                            </optgroup>
-                          </>
-                        )}
-                      </select>
+                {/* Auto-assign result banner */}
+                {reassignStats && (
+                  <div className={`mb-4 p-3 rounded-lg border flex items-start gap-3 ${
+                    reassignStats.unmatched.length === 0
+                      ? 'bg-green-50 border-green-200'
+                      : 'bg-amber-50 border-amber-200'
+                  }`}>
+                    {reassignStats.unmatched.length === 0 ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 text-sm">
+                      <p className={reassignStats.unmatched.length === 0 ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
+                        {reassignStats.matched} de {reassignStats.total} variables asignadas automáticamente
+                      </p>
+                      {reassignStats.unmatched.length > 0 && (
+                        <p className="text-amber-600 mt-0.5">
+                          Sin mapeo: {reassignStats.unmatched.join(', ')}. Asígnalas manualmente usando el selector de abajo.
+                        </p>
+                      )}
                     </div>
-                  ))}
+                    <button type="button" onClick={() => setReassignStats(null)} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {template.variables.map((variable) => {
+                    const isMapped = Boolean(mappings[variable])
+                    return (
+                      <div
+                        key={variable}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                          isMapped
+                            ? 'bg-green-50 border-green-100'
+                            : 'bg-amber-50 border-amber-200'
+                        }`}
+                      >
+                        {isMapped
+                          ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                          : <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                        }
+                        <code className="px-2 py-0.5 bg-white border rounded text-xs flex-shrink-0 font-mono">
+                          {`{{${variable}}}`}
+                        </code>
+                        <span className="text-gray-400 flex-shrink-0">=</span>
+                        <SearchableMappingSelect
+                          value={mappings[variable] || ''}
+                          onChange={(val) => setEditingMappings({ ...editingMappings, [variable]: val })}
+                          groupedMappings={groupedMappings}
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>

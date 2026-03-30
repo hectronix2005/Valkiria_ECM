@@ -54,6 +54,7 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
   const [category, setCategory] = useState('other')
   const [certificationType, setCertificationType] = useState('')
   const [error, setError] = useState('')
+  const [conflictData, setConflictData] = useState(null) // { message, existing_template }
 
   const { data: categoriesData } = useQuery({
     queryKey: ['template-categories'],
@@ -68,7 +69,27 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
       handleClose()
     },
     onError: (err) => {
-      setError(err.response?.data?.error || 'Error al crear template')
+      if (err.response?.status === 409 && err.response?.data?.error === 'name_conflict') {
+        setConflictData({
+          message: err.response.data.message,
+          existing_template: err.response.data.existing_template
+        })
+      } else {
+        setError(err.response?.data?.error || 'Error al crear template')
+      }
+    }
+  })
+
+  const newVersionMutation = useMutation({
+    mutationFn: (id) => templateService.newVersion(id),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
+      onSuccess(response.data.data)
+      handleClose()
+    },
+    onError: (err) => {
+      setError(err.response?.data?.error || 'Error al crear nueva versión')
+      setConflictData(null)
     }
   })
 
@@ -80,6 +101,7 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
     setCategory('other')
     setCertificationType('')
     setError('')
+    setConflictData(null)
     onClose()
   }
 
@@ -89,12 +111,16 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
       setError('El nombre es requerido')
       return
     }
+    setConflictData(null)
     const data = { name, description, module_type: moduleType, main_category: mainCategory, category }
-    // Include certification_type only for certification templates
     if (category === 'certification' && certificationType) {
       data.certification_type = certificationType
     }
     createMutation.mutate(data)
+  }
+
+  const handleCreateNewVersion = () => {
+    newVersionMutation.mutate(conflictData.existing_template.id)
   }
 
   const modules = categoriesData?.data?.modules || []
@@ -103,34 +129,26 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
   const grouped = categoriesData?.data?.grouped || {}
   const filteredSubcategories = grouped[mainCategory] || []
 
-  // Handle module change - auto-select matching main category
   const handleModuleChange = (value) => {
     setModuleType(value)
-    // Find matching main category
     const matchingCategory = Object.entries(categoryToModule).find(([cat, mod]) => mod === value)
     if (matchingCategory) {
       setMainCategory(matchingCategory[0])
       const subs = grouped[matchingCategory[0]] || []
-      if (subs.length > 0) {
-        setCategory(subs[0].value)
-      }
+      if (subs.length > 0) setCategory(subs[0].value)
     }
   }
 
-  // Auto-select first subcategory when main category changes
   const handleMainCategoryChange = (value) => {
     setMainCategory(value)
-    // Update module based on category
-    if (categoryToModule[value]) {
-      setModuleType(categoryToModule[value])
-    }
+    if (categoryToModule[value]) setModuleType(categoryToModule[value])
     const subs = grouped[value] || []
-    if (subs.length > 0) {
-      setCategory(subs[0].value)
-    }
+    if (subs.length > 0) setCategory(subs[0].value)
   }
 
   if (!isOpen) return null
+
+  const STATUS_ES = { draft: 'Borrador', active: 'Activo', archived: 'Archivado' }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -142,122 +160,160 @@ function CreateTemplateModal({ isOpen, onClose, onSuccess }) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-4 h-4" />
-              <span className="text-sm">{error}</span>
-            </div>
-          )}
-
-          <Input
-            label="Nombre del Template"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ej: Certificacion Laboral Estandar"
-            required
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Módulo
-            </label>
-            <select
-              value={moduleType}
-              onChange={(e) => handleModuleChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              {modules.map((mod) => (
-                <option key={mod.value} value={mod.value}>
-                  {mod.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">Define a qué módulo del sistema pertenece este template</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoría
-              </label>
-              <select
-                value={mainCategory}
-                onChange={(e) => handleMainCategoryChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {mainCategories.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
+        {/* Name conflict — offer versioning */}
+        {conflictData ? (
+          <div className="p-5 space-y-4">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-amber-800 text-sm">Nombre duplicado</p>
+                  <p className="text-amber-700 text-sm mt-1">{conflictData.message}</p>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Subcategoría
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {filteredSubcategories.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Certification type - only shown for certification templates */}
-          {category === 'certification' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tipo de Certificación
-              </label>
-              <select
-                value={certificationType}
-                onChange={(e) => setCertificationType(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {CERTIFICATION_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Solo los tipos de certificación con template aparecerán en el selector de solicitudes
+            <div className="p-3 bg-gray-50 rounded-lg border text-sm text-gray-700 space-y-1">
+              <p className="font-medium truncate">{conflictData.existing_template.name}</p>
+              <p className="text-gray-500">
+                Versión actual: <span className="font-medium">v{conflictData.existing_template.version}</span>
+                {' · '}
+                {STATUS_ES[conflictData.existing_template.status] || conflictData.existing_template.status}
               </p>
             </div>
-          )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripcion (opcional)
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descripcion del proposito del template..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            <p className="text-sm text-gray-600">
+              Al crear una nueva versión, el template original y sus documentos firmados quedan
+              intactos. La nueva versión (v{(conflictData.existing_template.version || 1) + 1})
+              se crea en estado Borrador para que puedas subir el nuevo archivo.
+            </p>
+
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setConflictData(null)}>
+                Elegir otro nombre
+              </Button>
+              <Button
+                type="button"
+                onClick={handleCreateNewVersion}
+                loading={newVersionMutation.isPending}
+              >
+                <Plus className="w-4 h-4" />
+                Crear v{(conflictData.existing_template.version || 1) + 1}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-sm">{error}</span>
+              </div>
+            )}
+
+            <Input
+              label="Nombre del Template"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej: Certificacion Laboral Estandar"
+              required
             />
-          </div>
 
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="secondary" onClick={handleClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" loading={createMutation.isPending}>
-              <Plus className="w-4 h-4" />
-              Crear Template
-            </Button>
-          </div>
-        </form>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Módulo
+              </label>
+              <select
+                value={moduleType}
+                onChange={(e) => handleModuleChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {modules.map((mod) => (
+                  <option key={mod.value} value={mod.value}>{mod.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Define a qué módulo del sistema pertenece este template</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                <select
+                  value={mainCategory}
+                  onChange={(e) => handleMainCategoryChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {mainCategories.map((cat) => (
+                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subcategoría</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {filteredSubcategories.map((cat) => (
+                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {category === 'certification' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Certificación
+                </label>
+                <select
+                  value={certificationType}
+                  onChange={(e) => setCertificationType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {CERTIFICATION_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Solo los tipos de certificación con template aparecerán en el selector de solicitudes
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripcion (opcional)
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Descripcion del proposito del template..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="secondary" onClick={handleClose}>
+                Cancelar
+              </Button>
+              <Button type="submit" loading={createMutation.isPending}>
+                <Plus className="w-4 h-4" />
+                Crear Template
+              </Button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )
@@ -940,9 +996,16 @@ export default function Templates({ module = 'legal' }) {
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium text-gray-900 text-sm truncate" title={template.name}>
-                              {template.name}
-                            </p>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className="font-medium text-gray-900 text-sm truncate" title={template.name}>
+                                {template.name}
+                              </p>
+                              {template.version > 1 && (
+                                <span className="flex-shrink-0 inline-flex px-1.5 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-700">
+                                  v{template.version}
+                                </span>
+                              )}
+                            </div>
                             {template.file_name && (
                               <p className="text-xs text-gray-400 truncate" title={template.file_name}>
                                 {template.file_name}

@@ -29,7 +29,8 @@ import {
   AlertTriangle,
   Lock,
   History,
-  Activity
+  Activity,
+  Variable
 } from 'lucide-react'
 
 function formatTimeAgo(dateString) {
@@ -80,6 +81,7 @@ const adminNavigation = [
   { name: 'Áreas', href: '/admin/departments', icon: Building2 },
   { name: 'Compañías', href: '/admin/companies', icon: Building2 },
   { name: 'Templates', href: '/admin/templates', icon: FileText },
+  { name: 'Variables', href: '/admin/variable-mappings', icon: Variable },
   { name: 'Permisos', href: '/admin/permissions', icon: Lock },
   { name: 'Auditoría', href: '/admin/audit-logs', icon: History },
   { name: 'Error Logs', href: '/admin/error-logs', icon: AlertTriangle },

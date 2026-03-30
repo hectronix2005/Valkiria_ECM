@@ -175,6 +175,7 @@ Rails.application.routes.draw do
             post :activate
             post :archive
             post :duplicate
+            post :new_version
             post :upload
             post :reassign_mappings
             get :download

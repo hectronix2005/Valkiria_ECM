@@ -107,6 +107,9 @@ module Templates
     # Each signatory can only sign after all previous signatories have signed
     field :sequential_signing, type: Boolean, default: true
 
+    # Versioning: links a new version to the root (v1) template of the family
+    field :parent_template_id, type: BSON::ObjectId
+
     # Associations
     belongs_to :organization, class_name: "Identity::Organization"
     belongs_to :created_by, class_name: "Identity::User", optional: true
@@ -122,6 +125,7 @@ module Templates
     index({ name: 1 })
     index({ organization_id: 1, module_type: 1, main_category: 1, category: 1, status: 1 })
     index({ organization_id: 1, category: 1, certification_type: 1, status: 1 })
+    index({ parent_template_id: 1 })
 
     # Validations
     validates :name, presence: true, length: { maximum: 200 }
@@ -181,6 +185,7 @@ module Templates
         new_template.status = DRAFT
         new_template.version = 1
         new_template.uuid = nil
+        new_template.parent_template_id = nil
         new_template.save!
 
         # Duplicate signatories
@@ -191,6 +196,51 @@ module Templates
           new_sig.save!
         end
       end
+    end
+
+    # Creates a new draft version of this template (v+1).
+    # The new version shares the same name and copies signatories from the latest
+    # version in the family. Original signed documents continue referencing old versions.
+    def new_version!
+      family_root_id = parent_template_id || id
+      latest = ::Templates::Template
+        .where(:organization_id => organization_id)
+        .any_of({ _id: family_root_id }, { parent_template_id: family_root_id })
+        .order(version: :desc)
+        .first || self
+
+      next_version = latest.version + 1
+
+      latest.dup.tap do |t|
+        t.status = DRAFT
+        t.version = next_version
+        t.parent_template_id = family_root_id
+        t.uuid = nil
+        t.file_id = nil
+        t.file_name = nil
+        t.file_content_type = nil
+        t.file_size = nil
+        t.preview_file_id = nil
+        t.variables = []
+        t.variable_mappings = {}
+        t.save!
+
+        latest.signatories.each do |sig|
+          new_sig = sig.dup
+          new_sig.template = t
+          new_sig.uuid = nil
+          new_sig.save!
+        end
+      end
+    end
+
+    # Returns all templates in the same version family, ordered by version
+    def version_family
+      family_root_id = parent_template_id || id
+      ::Templates::Template
+        .where(:organization_id => organization_id)
+        .any_of({ _id: family_root_id }, { parent_template_id: family_root_id })
+        .order(version: :asc)
     end
 
     def module_type_label
@@ -559,40 +609,40 @@ module Templates
         # Skip if already mapped
         next if variable_mappings[variable].present?
 
-        # Find matching system mapping using VariableNormalizer.equivalent?
-        matching_mapping = available_mappings.find do |vm|
-          VariableNormalizer.equivalent?(variable, vm.name)
-        end
+        # Find matching mapping by primary name OR any alias
+        matching_mapping = available_mappings.find { |vm| vm.matches_name?(variable) }
 
-        if matching_mapping
-          variable_mappings[variable] = matching_mapping.key
-        end
+        variable_mappings[variable] = matching_mapping.key if matching_mapping
       end
 
       save if changed?
     end
 
-    # Re-assign all mappings (even existing ones) from system variables
+    # Re-assign all mappings (even existing ones) from system variables.
+    # Uses primary name AND aliases for matching. Returns stats hash.
     def reassign_all_mappings!
-      return if variables.blank?
+      return { matched: 0, unmatched: [] } if variables.blank?
 
       available_mappings = VariableMapping.for_organization(organization).active.to_a
       new_mappings = {}
+      unmatched = []
 
       variables.each do |variable|
-        matching_mapping = available_mappings.find do |vm|
-          VariableNormalizer.equivalent?(variable, vm.name)
-        end
+        # Match by primary name or any registered alias
+        matching_mapping = available_mappings.find { |vm| vm.matches_name?(variable) }
 
         if matching_mapping
           new_mappings[variable] = matching_mapping.key
         elsif variable_mappings[variable].present?
           # Keep existing custom mapping
           new_mappings[variable] = variable_mappings[variable]
+        else
+          unmatched << variable
         end
       end
 
       update!(variable_mappings: new_mappings)
+      { matched: variables.length - unmatched.length, unmatched: unmatched }
     end
 
     # Get available variable mappings from database

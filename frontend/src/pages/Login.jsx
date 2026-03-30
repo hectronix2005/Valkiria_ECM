@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import Button from '../components/ui/Button'
@@ -6,14 +6,15 @@ import Input from '../components/ui/Input'
 import { FileText, AlertCircle, Users, Eye, EyeOff, Clock, Star, TrendingUp, Shield, UserCheck, Briefcase } from 'lucide-react'
 
 // Dev-only quick access — credentials must match your local seed data
-// WARNING: Never include real passwords or personal emails here
+// Password is read from VITE_SEED_PASSWORD (must match SEED_PASSWORD in db/seeds.rb)
+const DEV_PASSWORD = import.meta.env.VITE_SEED_PASSWORD || 'Admin123!'
 const ALL_USERS = import.meta.env.DEV ? [
-  { email: 'admin@valkyria.com', password: '', role: 'Admin', color: 'bg-red-100 text-red-700', description: 'Administrador', category: 'admin' },
-  { email: 'hr.manager@valkyria.com', password: '', role: 'Gerente RRHH', color: 'bg-purple-100 text-purple-700', description: 'Gerente de RRHH', category: 'hr' },
-  { email: 'hr.staff@valkyria.com', password: '', role: 'Staff RRHH', color: 'bg-indigo-100 text-indigo-700', description: 'Staff de RRHH', category: 'hr' },
-  { email: 'legal@valkyria.com', password: '', role: 'Legal', color: 'bg-amber-100 text-amber-700', description: 'Legal', category: 'legal' },
-  { email: 'supervisor@valkyria.com', password: '', role: 'Supervisor', color: 'bg-blue-100 text-blue-700', description: 'Supervisor', category: 'supervisor' },
-  { email: 'employee1@valkyria.com', password: '', role: 'Empleado', color: 'bg-green-100 text-green-700', description: 'Empleado', category: 'employee' },
+  { email: 'admin@valkyria.com', password: DEV_PASSWORD, role: 'Admin', color: 'bg-red-100 text-red-700', description: 'Administrador', category: 'admin' },
+  { email: 'hr.manager@valkyria.com', password: DEV_PASSWORD, role: 'Gerente RRHH', color: 'bg-purple-100 text-purple-700', description: 'Gerente de RRHH', category: 'hr' },
+  { email: 'hr.staff@valkyria.com', password: DEV_PASSWORD, role: 'Staff RRHH', color: 'bg-indigo-100 text-indigo-700', description: 'Staff de RRHH', category: 'hr' },
+  { email: 'legal@valkyria.com', password: DEV_PASSWORD, role: 'Legal', color: 'bg-amber-100 text-amber-700', description: 'Legal', category: 'legal' },
+  { email: 'supervisor@valkyria.com', password: DEV_PASSWORD, role: 'Supervisor', color: 'bg-blue-100 text-blue-700', description: 'Supervisor', category: 'supervisor' },
+  { email: 'employee1@valkyria.com', password: DEV_PASSWORD, role: 'Empleado', color: 'bg-green-100 text-green-700', description: 'Empleado', category: 'employee' },
 ] : []
 
 const STORAGE_KEY = 'valkyria_login_history'
@@ -116,8 +117,8 @@ function UserCard({ user, usageData, onSelect, isRecent, isMostUsed }) {
 }
 
 export default function Login() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const emailRef = useRef(null)
+  const passwordRef = useRef(null)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -178,8 +179,8 @@ export default function Login() {
   const displayedUsers = showAllUsers ? usersWithMostUsed : usersWithMostUsed.slice(0, 8)
 
   const fillTestUser = (testUser) => {
-    setEmail(testUser.email)
-    setPassword(testUser.password)
+    if (emailRef.current) emailRef.current.value = testUser.email
+    if (passwordRef.current) passwordRef.current.value = testUser.password
     setError('')
   }
 
@@ -188,12 +189,15 @@ export default function Login() {
     setError('')
     setLoading(true)
 
+    const formEmail = emailRef.current?.value || ''
+    const formPassword = passwordRef.current?.value || ''
+
     try {
       // Registrar uso antes del login
-      recordLogin(email)
+      recordLogin(formEmail)
       setLoginHistory(getLoginHistory())
 
-      const userData = await login(email, password)
+      const userData = await login(formEmail, formPassword)
       if (userData.must_change_password) {
         navigate('/change-password', { replace: true })
       } else {
@@ -233,12 +237,14 @@ export default function Login() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form autoComplete="on" onSubmit={handleSubmit} className="space-y-4">
             <Input
+              ref={emailRef}
               label="Correo Electrónico"
+              id="email"
+              name="email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               placeholder="tu@email.com"
               required
               autoFocus
@@ -246,10 +252,12 @@ export default function Login() {
 
             <div className="relative">
               <Input
+                ref={passwordRef}
                 label="Contraseña"
+                id="password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 placeholder="••••••••"
                 required
               />

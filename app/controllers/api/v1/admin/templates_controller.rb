@@ -5,7 +5,7 @@ module Api
     module Admin
       class TemplatesController < BaseController
         before_action :ensure_admin_or_hr
-        before_action :set_template, only: [:show, :update, :destroy, :activate, :archive, :duplicate, :reassign_mappings, :download, :preview]
+        before_action :set_template, only: [:show, :update, :destroy, :activate, :archive, :duplicate, :new_version, :reassign_mappings, :download, :preview]
 
         # GET /api/v1/admin/templates
         def index
@@ -49,6 +49,24 @@ module Api
 
         # POST /api/v1/admin/templates
         def create
+          requested_name = template_params[:name]&.strip
+          if requested_name.present?
+            existing = ::Templates::Template
+              .for_organization(current_organization)
+              .where(name: /\A#{Regexp.escape(requested_name)}\z/i)
+              .where(:status.nin => [::Templates::Template::ARCHIVED])
+              .order(version: :desc)
+              .first
+
+            if existing
+              return render json: {
+                error: "name_conflict",
+                message: "Ya existe un template con este nombre (v#{existing.version}, #{existing.status}). Puedes crear una nueva versión en su lugar.",
+                existing_template: template_json(existing)
+              }, status: :conflict
+            end
+          end
+
           @template = ::Templates::Template.new(template_params)
           @template.organization = current_organization
           @template.created_by = current_user
@@ -120,6 +138,17 @@ module Api
             data: template_json(new_template),
             message: "Template duplicado exitosamente"
           }, status: :created
+        end
+
+        # POST /api/v1/admin/templates/:id/new_version
+        def new_version
+          new_t = @template.new_version!
+          render json: {
+            data: template_json(new_t),
+            message: "Versión #{new_t.version} creada exitosamente"
+          }, status: :created
+        rescue StandardError => e
+          render json: { error: e.message }, status: :unprocessable_content
         end
 
         # GET /api/v1/admin/templates/categories
@@ -203,11 +232,22 @@ module Api
 
         # POST /api/v1/admin/templates/:id/reassign_mappings
         def reassign_mappings
-          @template.reassign_all_mappings!
+          stats = @template.reassign_all_mappings!
+
+          matched   = stats[:matched]
+          unmatched = stats[:unmatched]
+          total     = @template.variables.length
+
+          message = if unmatched.empty?
+                      "#{matched} de #{total} variables asignadas correctamente."
+                    else
+                      "#{matched} de #{total} variables asignadas. #{unmatched.size} sin mapeo: #{unmatched.join(', ')}"
+                    end
 
           render json: {
             data: template_json(@template, detailed: true),
-            message: "Mappings reasignados exitosamente"
+            message: message,
+            stats: { matched: matched, unmatched: unmatched, total: total }
           }
         end
 
@@ -373,6 +413,7 @@ module Api
             category_label: template.category_label,
             status: template.status,
             version: template.version,
+            parent_template_id: template.parent_template_id&.to_s,
             file_name: template.file_name,
             file_size: template.file_size,
             variables: template.variables,

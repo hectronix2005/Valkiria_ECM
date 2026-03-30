@@ -112,6 +112,7 @@ const Templates = lazy(() => import('./pages/admin/Templates'))
 const TemplateEdit = lazy(() => import('./pages/admin/TemplateEdit'))
 const Companies = lazy(() => import('./pages/admin/Companies'))
 const SignatoryTypes = lazy(() => import('./pages/admin/SignatoryTypes'))
+const VariableMappings = lazy(() => import('./pages/admin/VariableMappings'))
 const Settings = lazy(() => import('./pages/admin/Settings'))
 const Departments = lazy(() => import('./pages/admin/Departments'))
 const AdminUsers = lazy(() => import('./pages/admin/Users'))
@@ -412,6 +413,16 @@ export default function App() {
         element={
           <ProtectedRoute requireAdmin>
             <SignatoryTypes />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin - Variable Mappings */}
+      <Route
+        path="/admin/variable-mappings"
+        element={
+          <ProtectedRoute requireAdmin>
+            <VariableMappings />
           </ProtectedRoute>
         }
       />

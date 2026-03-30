@@ -280,6 +280,7 @@ export const templateService = {
   activate: (id) => api.post(`/admin/templates/${id}/activate`),
   archive: (id) => api.post(`/admin/templates/${id}/archive`),
   duplicate: (id) => api.post(`/admin/templates/${id}/duplicate`),
+  newVersion: (id) => api.post(`/admin/templates/${id}/new_version`),
   upload: (id, file) => {
     const formData = new FormData()
     formData.append('file', file)
