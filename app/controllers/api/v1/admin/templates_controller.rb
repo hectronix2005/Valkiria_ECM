@@ -42,6 +42,16 @@ module Api
 
         # GET /api/v1/admin/templates/:id
         def show
+          # Lazy-extract variable contexts the first time a template is viewed
+          if @template.file_id.present? && @template.variables.present? && @template.variable_contexts.blank?
+            begin
+              @template.extract_variables!
+              @template.save!(validate: false)
+            rescue StandardError => e
+              Rails.logger.warn "Context extraction failed for template #{@template.uuid}: #{e.message}"
+            end
+          end
+
           render json: {
             data: template_json(@template, detailed: true)
           }
@@ -436,6 +446,7 @@ module Api
 
           if detailed
             json[:variable_mappings] = template.variable_mappings
+            json[:variable_contexts] = template.variable_contexts || {}
             json[:signatories] = template.signatories.by_position.map { |s| signatory_json(s) }
             json[:available_mappings] = ::Templates::Template.available_variable_mappings(current_organization)
             json[:required_third_party_fields] = template.required_third_party_fields

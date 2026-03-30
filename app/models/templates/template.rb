@@ -79,6 +79,9 @@ module Templates
     # Variable mappings: { "Nombre Empleado" => "employee.full_name", ... }
     field :variable_mappings, type: Hash, default: {}
 
+    # Paragraph context for each variable: { "Nombre Empleado" => ["...paragraph text..."] }
+    field :variable_contexts, type: Hash, default: {}
+
     # Default third party type for this template (provider, client, contractor, partner, other)
     field :default_third_party_type, type: String
 
@@ -327,10 +330,10 @@ module Templates
       content = file_content
       return unless content
 
-      # Use TemplateParserService to extract variables
-      self.variables = TemplateParserService.new(content).extract_variables
+      result = TemplateParserService.new(content).extract_with_context
+      self.variables = result[:variables]
+      self.variable_contexts = result[:contexts]
 
-      # Auto-assign mappings from system variables
       auto_assign_mappings!
     end
 

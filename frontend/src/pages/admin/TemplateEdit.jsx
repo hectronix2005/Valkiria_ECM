@@ -31,7 +31,8 @@ import {
   Download,
   ChevronDown,
   Search,
-  CheckCircle2
+  CheckCircle2,
+  HelpCircle
 } from 'lucide-react'
 
 // Default PDF dimensions (Letter size) in points (72 DPI)
@@ -971,6 +972,24 @@ function AddSignatoryModal({ isOpen, onClose, templateId, onSuccess, pdfWidth = 
   )
 }
 
+// Highlights all {{...}} patterns inside a paragraph snippet
+function ContextHighlight({ text }) {
+  const parts = text.split(/(\{\{[^}]+\}\})/g)
+  return (
+    <>
+      {parts.map((part, i) =>
+        /^\{\{[^}]+\}\}$/.test(part) ? (
+          <mark key={i} className="bg-yellow-200 text-yellow-900 rounded px-0.5 font-mono font-semibold not-italic">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  )
+}
+
 const CATEGORY_LABELS_MAP = {
   employee: 'Empleado',
   organization: 'Organización',
@@ -1120,6 +1139,7 @@ export default function TemplateEdit() {
   const [editingMappings, setEditingMappings] = useState({})
   const [isSavingMappings, setIsSavingMappings] = useState(false)
   const [reassignStats, setReassignStats] = useState(null) // { matched, unmatched: [] }
+  const [showContextFor, setShowContextFor] = useState(null)
   const [selectedSignatoryId, setSelectedSignatoryId] = useState(null)
   const [localSignatories, setLocalSignatories] = useState([])
   const [hasPositionChanges, setHasPositionChanges] = useState(false)
@@ -1368,6 +1388,7 @@ export default function TemplateEdit() {
 
   const mappings = { ...template.variable_mappings, ...editingMappings }
   const groupedMappings = mappingsData?.data?.data || {}
+  const variableContexts = template.variable_contexts || {}
 
   const unmappedCount = (template.variables || []).filter(v => !mappings[v]).length
 
@@ -1605,28 +1626,67 @@ export default function TemplateEdit() {
                 <div className="space-y-2">
                   {template.variables.map((variable) => {
                     const isMapped = Boolean(mappings[variable])
+                    const contexts = variableContexts[variable] || []
+                    const isShowingContext = showContextFor === variable
                     return (
                       <div
                         key={variable}
-                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                        className={`rounded-lg border transition-colors ${
                           isMapped
                             ? 'bg-green-50 border-green-100'
                             : 'bg-amber-50 border-amber-200'
                         }`}
                       >
-                        {isMapped
-                          ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          : <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                        }
-                        <code className="px-2 py-0.5 bg-white border rounded text-xs flex-shrink-0 font-mono">
-                          {`{{${variable}}}`}
-                        </code>
-                        <span className="text-gray-400 flex-shrink-0">=</span>
-                        <SearchableMappingSelect
-                          value={mappings[variable] || ''}
-                          onChange={(val) => setEditingMappings({ ...editingMappings, [variable]: val })}
-                          groupedMappings={groupedMappings}
-                        />
+                        <div className="flex items-center gap-3 p-3">
+                          {isMapped
+                            ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                            : <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                          }
+                          <code className="px-2 py-0.5 bg-white border rounded text-xs flex-shrink-0 font-mono">
+                            {`{{${variable}}}`}
+                          </code>
+                          <span className="text-gray-400 flex-shrink-0">=</span>
+                          <SearchableMappingSelect
+                            value={mappings[variable] || ''}
+                            onChange={(val) => setEditingMappings({ ...editingMappings, [variable]: val })}
+                            groupedMappings={groupedMappings}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowContextFor(isShowingContext ? null : variable)}
+                            title="Ver dónde aparece en el documento"
+                            className={`flex-shrink-0 p-1 rounded transition-colors ${
+                              isShowingContext
+                                ? 'text-blue-600 bg-blue-100'
+                                : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'
+                            }`}
+                          >
+                            <HelpCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {isShowingContext && (
+                          <div className="px-3 pb-3">
+                            <div className="border-t border-black/5 pt-2">
+                              <p className="text-xs font-medium text-gray-500 mb-2">
+                                Aparece en el documento:
+                              </p>
+                              {contexts.length > 0 ? (
+                                <div className="space-y-1.5">
+                                  {contexts.map((snippet, i) => (
+                                    <div key={i} className="text-xs bg-white border rounded p-2.5 text-gray-700 leading-relaxed">
+                                      <ContextHighlight text={snippet} />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-gray-400 italic">
+                                  Contexto no disponible. Vuelve a subir el archivo para extraerlo.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
