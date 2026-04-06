@@ -90,4 +90,13 @@ Rails.application.configure do
   config.hosts = allowed_hosts.compact
   # Skip DNS rebinding protection for health checks
   config.host_authorization = { exclude: ->(request) { request.path == "/up" || request.path == "/api/v1/health" } }
+
+  # Security headers
+  config.action_dispatch.default_headers = {
+    'X-Frame-Options' => 'DENY',
+    'X-Content-Type-Options' => 'nosniff',
+    'X-XSS-Protection' => '1; mode=block',
+    'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+    'Referrer-Policy' => 'strict-origin-when-cross-origin'
+  }
 end

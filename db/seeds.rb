@@ -6,6 +6,11 @@
 # Run with: bundle exec rails runner db/seeds.rb
 #           or: bundle exec rails db:seed (requires rake task)
 
+# Guard: prevent accidental execution in production
+if Rails.env.production?
+  abort "ERROR: Seeds cannot be run in production. Set ALLOW_SEEDS=1 to override." unless ENV["ALLOW_SEEDS"] == "1"
+end
+
 # In production, use SEED_ADMIN_PASSWORD env var. In development, use defaults.
 SEED_PASSWORD = ENV.fetch("SEED_PASSWORD") { Rails.env.production? ? SecureRandom.hex(16) : "Admin123!" }
 
